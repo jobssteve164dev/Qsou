@@ -66,37 +66,48 @@ graph TD
 
 ## 🚀 快速开始
 
-### 环境要求
-- Docker >= 20.x
-- Docker Compose >= 2.x
-- 可用内存 >= 8GB
-- 可用存储 >= 50GB
-
-### 一键部署
+### ⚡ 一键快速启动
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd investment-intelligence-engine
+cd Qsou
 
-# 配置环境变量
-cp .env.example .env
-# 编辑.env文件，配置必要参数
+# 运行快速启动脚本
+python scripts/quick_start.py
+```
+📖 **详细指南**: [QUICK_START.md](QUICK_START.md)
 
-# 启动所有服务
-docker-compose up -d
+### 环境要求
+- Python 3.8+
+- Java 11+ (Elasticsearch需要)
+- PostgreSQL
+- Redis  
+- Elasticsearch 8.x (含IK中文分词器)
+- Qdrant向量数据库
+- 可用内存 >= 8GB
+- 可用存储 >= 20GB
 
-# 初始化搜索索引
-docker-compose exec api python scripts/init_elasticsearch.py
+### 开发环境搭建
+```bash
+# 完整环境搭建
+make dev-setup
 
-# 启动数据采集
-docker-compose exec api python scripts/start_crawlers.py
+# 验证环境
+make verify
+
+# 初始化数据存储
+make init
+
+# 启动开发服务
+make dev-api        # API服务 (端口8000)
+make dev-frontend   # 前端服务 (端口3000)
 ```
 
 ### 验证部署
 - 前端界面: http://localhost:3000
 - API文档: http://localhost:8000/docs  
 - Elasticsearch: http://localhost:9200
-- 监控面板: http://localhost:3001
+- Qdrant Dashboard: http://localhost:6333/dashboard
 
 ## 📊 实施计划
 

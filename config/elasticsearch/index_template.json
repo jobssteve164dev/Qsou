@@ -1,0 +1,133 @@
+{
+  "index_patterns": ["qsou_*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "ik_smart_analyzer": {
+            "type": "ik_smart"
+          },
+          "ik_max_word_analyzer": {
+            "type": "ik_max_word"
+          },
+          "financial_analyzer": {
+            "tokenizer": "ik_max_word",
+            "filter": [
+              "lowercase",
+              "financial_synonym"
+            ]
+          }
+        },
+        "filter": {
+          "financial_synonym": {
+            "type": "synonym",
+            "synonyms": [
+              "股票,证券,equity",
+              "债券,bond",
+              "基金,fund",
+              "期货,futures",
+              "外汇,forex,fx",
+              "A股,沪深股市",
+              "港股,恒生指数",
+              "美股,纳斯达克,道琼斯",
+              "涨停,涨停板,daily_limit_up",
+              "跌停,跌停板,daily_limit_down",
+              "买入,做多,long",
+              "卖出,做空,short"
+            ]
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "title": {
+          "type": "text",
+          "analyzer": "ik_smart_analyzer",
+          "search_analyzer": "ik_smart_analyzer",
+          "fields": {
+            "raw": {
+              "type": "keyword"
+            }
+          }
+        },
+        "content": {
+          "type": "text",
+          "analyzer": "financial_analyzer",
+          "search_analyzer": "ik_smart_analyzer"
+        },
+        "summary": {
+          "type": "text",
+          "analyzer": "ik_smart_analyzer"
+        },
+        "url": {
+          "type": "keyword",
+          "index": false
+        },
+        "source": {
+          "type": "keyword"
+        },
+        "category": {
+          "type": "keyword"
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "entities": {
+          "type": "nested",
+          "properties": {
+            "name": {
+              "type": "keyword"
+            },
+            "type": {
+              "type": "keyword"
+            },
+            "confidence": {
+              "type": "float"
+            }
+          }
+        },
+        "sentiment_score": {
+          "type": "float"
+        },
+        "sentiment_label": {
+          "type": "keyword"
+        },
+        "publish_time": {
+          "type": "date",
+          "format": "yyyy-MM-dd HH:mm:ss||yyyy-MM-dd||epoch_millis"
+        },
+        "crawl_time": {
+          "type": "date",
+          "format": "yyyy-MM-dd HH:mm:ss||epoch_millis"
+        },
+        "content_hash": {
+          "type": "keyword",
+          "index": false
+        },
+        "word_count": {
+          "type": "integer"
+        },
+        "reading_time": {
+          "type": "integer"
+        },
+        "importance_score": {
+          "type": "float"
+        },
+        "vector_id": {
+          "type": "keyword",
+          "index": false
+        }
+      }
+    }
+  },
+  "priority": 100,
+  "version": 1,
+  "_meta": {
+    "description": "Qsou投资情报搜索引擎索引模板",
+    "created_by": "Qsou Intelligence Engine",
+    "created_date": "2025-01-27"
+  }
+}

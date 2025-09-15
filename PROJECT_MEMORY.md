@@ -46,11 +46,15 @@
 
 ## 4. 标准工作流与命令 (Standard Workflows & Commands)
 
-*   **启动完整系统**: `docker-compose up -d`
-*   **启动开发环境**: `make dev-start`
-*   **运行爬虫任务**: `scrapy crawl financial_news -s JOBDIR=jobs/financial_news`
-*   **构建搜索索引**: `python scripts/build_index.py`
-*   **生成向量嵌入**: `python scripts/generate_embeddings.py`
+*   **快速启动**: `python scripts/quick_start.py`
+*   **开发环境搭建**: `make dev-setup`
+*   **验证环境**: `make verify`
+*   **初始化数据存储**: `make init`
+*   **启动API服务**: `make dev-api`
+*   **启动前端服务**: `make dev-frontend`
+*   **启动任务队列**: `make dev-celery`
+*   **检查服务状态**: `make status`
+*   **运行爬虫任务**: `make crawl-news`
 
 ---
 
