@@ -1,0 +1,62 @@
+# Qdrant 配置文件
+# 用于本地开发环境的Qdrant向量数据库配置
+
+service:
+  # HTTP API 端口
+  http_port: 6333
+  # gRPC API 端口  
+  grpc_port: 6334
+  # 启用CORS
+  enable_cors: true
+  # 最大请求大小 (MB)
+  max_request_size_mb: 32
+
+storage:
+  # 存储路径
+  storage_path: "./qdrant_storage"
+  # 快照路径
+  snapshots_path: "./qdrant_storage/snapshots"
+  # 临时快照路径
+  temp_path: "./qdrant_storage/temp"
+  # 性能配置
+  performance:
+    # 最大优化线程数
+    max_optimization_threads: 2
+    # 最大索引线程数
+    max_indexing_threads: 2
+
+cluster:
+  # 禁用集群模式（单机部署）
+  enabled: false
+
+# 日志配置
+log_level: INFO
+
+# 禁用遥测
+telemetry_disabled: true
+
+# 性能优化配置
+hnsw_config:
+  # 每个节点的最大连接数
+  m: 16
+  # 构建时的搜索宽度
+  ef_construct: 100
+  # 全扫描阈值
+  full_scan_threshold: 10000
+  # 最大索引线程数
+  max_indexing_threads: 2
+
+# 优化器配置
+optimizer_config:
+  # 默认段数
+  default_segment_number: 2
+  # 最大段大小 (KB)
+  max_segment_size_kb: 20000
+  # 内存映射阈值 (KB)
+  memmap_threshold_kb: 50000
+  # 索引阈值 (KB)
+  indexing_threshold_kb: 20000
+  # 刷新间隔 (秒)
+  flush_interval_sec: 30
+  # 最大优化线程数
+  max_optimization_threads: 2

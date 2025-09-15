@@ -111,14 +111,32 @@ check_system() {
 check_python_deps() {
     log_step "检查Python依赖..."
     
-    # 检查Python版本
-    if command -v python3 &> /dev/null; then
-        PYTHON_CMD="python3"
-    elif command -v python &> /dev/null; then
-        PYTHON_CMD="python"
+    # 优先使用用户指定
+    if [[ -n "${PYTHON_EXECUTABLE:-}" ]]; then
+        PYTHON_CMD="$PYTHON_EXECUTABLE"
     else
-        log_error "Python未安装或不在PATH中"
-        exit 1
+        # 按平台选择Python命令
+        if [[ "$OS" == "windows" ]]; then
+            if command -v py &> /dev/null; then
+                PYTHON_CMD="py -3"
+            elif command -v python &> /dev/null; then
+                PYTHON_CMD="python"
+            elif command -v python3 &> /dev/null; then
+                PYTHON_CMD="python3"
+            else
+                log_error "Python未安装或不在PATH中"
+                exit 1
+            fi
+        else
+            if command -v python3 &> /dev/null; then
+                PYTHON_CMD="python3"
+            elif command -v python &> /dev/null; then
+                PYTHON_CMD="python"
+            else
+                log_error "Python未安装或不在PATH中"
+                exit 1
+            fi
+        fi
     fi
     
     log_info "使用Python: $PYTHON_CMD"
@@ -141,16 +159,60 @@ check_python_deps() {
         fi
     fi
     
-    # 简化：跳过虚拟环境，直接使用系统Python进行基础检查
-    log_info "跳过虚拟环境创建（加快启动）"
-    log_info "使用系统Python继续..."
+    # 在 api-gateway 创建并使用专属虚拟环境（避免全局环境差异）
+    if [[ -d "api-gateway" ]]; then
+        if [[ "$OS" == "windows" ]]; then
+            if [[ ! -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+                log_info "为API创建虚拟环境 (Windows)..."
+                (cd api-gateway && eval "$PYTHON_CMD -m venv .venv")
+            fi
+        else
+            if [[ ! -f "api-gateway/.venv/bin/python" ]]; then
+                log_info "为API创建虚拟环境 (Unix)..."
+                (cd api-gateway && eval "$PYTHON_CMD -m venv .venv")
+            fi
+        fi
+        # 检查并安装API依赖（已安装则跳过）
+        if [[ -f "api-gateway/requirements.txt" ]]; then
+            if [[ "$OS" == "windows" && -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+                API_PY="api-gateway/.venv/Scripts/python.exe"
+            else
+                API_PY="api-gateway/.venv/bin/python"
+            fi
+            if [[ -f "$API_PY" ]]; then
+                # 通过导入核心包判断是否已满足依赖
+                if [[ "${FORCE_REINSTALL:-false}" == "true" ]]; then
+                    need_install=true
+                    log_info "FORCE_REINSTALL=true，强制重新安装API依赖"
+                else
+                    if eval "$API_PY -c 'import fastapi, uvicorn, sqlalchemy, redis, elasticsearch, qdrant_client'" >/dev/null 2>&1; then
+                        need_install=false
+                        log_info "API依赖已满足，跳过安装（设置 FORCE_REINSTALL=true 可强制重装）"
+                    else
+                        need_install=true
+                        log_info "检测到API依赖未完整，开始安装..."
+                    fi
+                fi
+
+                if [[ "$need_install" == true ]]; then
+                    if [[ "${UPGRADE_PIP:-false}" == "true" ]]; then
+                        log_info "升级pip..."
+                        eval "$API_PY -m pip install --upgrade pip" || true
+                    fi
+                    log_info "安装API依赖包（api-gateway/requirements.txt）..."
+                    eval "$API_PY -m pip install -r api-gateway/requirements.txt" || {
+                        log_warn "安装API依赖部分失败，后续可能影响启动"
+                    }
+                fi
+            else
+                log_warn "未找到API虚拟环境Python，可重试运行脚本以重新创建"
+            fi
+        fi
+    fi
     
-    # 检查是否有requirements.txt
+    # 根目录requirements可选安装提示
     if [[ -f "requirements.txt" ]]; then
-        log_info "发现requirements.txt，跳过自动安装（避免卡住）"
-        log_info "如需安装依赖，请手动运行: pip install -r requirements.txt"
-    else
-        log_info "未发现requirements.txt文件"
+        log_info "检测到根目录requirements.txt（可选），优先已为API安装专属依赖"
     fi
     
     # 检查基础依赖是否已安装
@@ -337,6 +399,240 @@ check_services() {
 }
 
 # ============================================
+# 外部服务自动安装与启动（本地原生，无Docker）
+# ============================================
+
+# 目录与版本
+VENDOR_DIR="vendor"
+ELASTIC_DIR="$VENDOR_DIR/elasticsearch"
+QDRANT_DIR="$VENDOR_DIR/qdrant"
+ELASTIC_VERSION_DEFAULT="8.11.0"
+QDRANT_VERSION_DEFAULT="1.6.9"
+
+ensure_vendor_dirs() {
+    mkdir -p "$VENDOR_DIR" "$ELASTIC_DIR" "$QDRANT_DIR" 2>/dev/null || true
+}
+
+install_elasticsearch_windows() {
+    ensure_vendor_dirs
+    local version="${ELASTICSEARCH_VERSION:-$ELASTIC_VERSION_DEFAULT}"
+    local zip_name="elasticsearch-${version}-windows-x86_64.zip"
+    local url="https://artifacts.elastic.co/downloads/elasticsearch/${zip_name}"
+    local dest_zip="$ELASTIC_DIR/$zip_name"
+    local extract_dir="$ELASTIC_DIR/elasticsearch-${version}"
+
+    if [[ -d "$extract_dir" ]]; then
+        log_info "Elasticsearch 已安装: $extract_dir"
+        echo "$extract_dir" > "$ELASTIC_DIR/current.path"
+        return 0
+    fi
+
+    log_step "下载并安装Elasticsearch $version (Windows) ..."
+    log_info "下载: $url"
+    curl -L -o "$dest_zip" "$url" || {
+        log_error "Elasticsearch 下载失败"
+        return 1
+    }
+    log_info "解压: $dest_zip → $ELASTIC_DIR"
+    powershell -NoProfile -Command "Expand-Archive -Path '$dest_zip' -DestinationPath '$ELASTIC_DIR' -Force" || {
+        log_error "Elasticsearch 解压失败"
+        return 1
+    }
+    echo "$extract_dir" > "$ELASTIC_DIR/current.path"
+    log_info "Elasticsearch 安装完成: $extract_dir"
+}
+
+install_qdrant_windows() {
+    ensure_vendor_dirs
+    local version="${QDRANT_VERSION:-$QDRANT_VERSION_DEFAULT}"
+
+    # 已安装则跳过
+    if [[ -f "$QDRANT_DIR/qdrant.exe" ]]; then
+        log_info "Qdrant 已安装"
+        return 0
+    fi
+
+    log_step "下载并安装Qdrant $version (Windows) ..."
+    # 兼容不同资产命名
+    local candidates=(
+        "qdrant_windows_x86_64.zip"
+        "qdrant-x86_64-pc-windows-msvc.zip"
+    )
+    local downloaded=""
+    for name in "${candidates[@]}"; do
+        local url="https://github.com/qdrant/qdrant/releases/download/v${version}/${name}"
+        local dest_zip="$QDRANT_DIR/$name"
+        log_info "尝试下载: $url"
+        if curl -fL -o "$dest_zip" "$url"; then
+            local sz
+            sz=$(wc -c <"$dest_zip" 2>/dev/null || echo 0)
+            if [[ "$sz" -gt 1000000 ]]; then
+                downloaded="$dest_zip"
+                break
+            else
+                log_warn "下载文件过小(大小=$sz)，可能无效，继续尝试其他资产名"
+            fi
+        fi
+    done
+
+    if [[ -z "$downloaded" ]]; then
+        log_error "Qdrant 下载失败（未找到有效资产）"
+        return 1
+    fi
+
+    log_info "解压: $downloaded → $QDRANT_DIR"
+    powershell -NoProfile -Command "Expand-Archive -Path '$downloaded' -DestinationPath '$QDRANT_DIR' -Force" || {
+        log_error "Qdrant 解压失败"
+        return 1
+    }
+    # 定位 qdrant.exe
+    if [[ -f "$QDRANT_DIR/qdrant.exe" ]]; then
+        :
+    else
+        local found
+        found=$(powershell -NoProfile -Command "Get-ChildItem -Recurse -Path '$QDRANT_DIR' -Filter 'qdrant.exe' | Select -First 1 -ExpandProperty FullName" 2>/dev/null)
+        if [[ -n "$found" ]]; then
+            cp "$found" "$QDRANT_DIR/qdrant.exe" 2>/dev/null || true
+        fi
+    fi
+    if [[ -f "$QDRANT_DIR/qdrant.exe" ]]; then
+        log_info "Qdrant 安装完成"
+    else
+        log_error "未找到Qdrant可执行文件"
+        return 1
+    fi
+}
+
+start_elasticsearch_local() {
+    # 已运行则跳过（优先以端口监听为准，避免HTTPS导致的curl误判）
+    if check_port "${ELASTICSEARCH_PORT:-9200}" "Elasticsearch"; then
+        log_info "✓ Elasticsearch 端口已监听，视为运行中"
+        return 0
+    fi
+
+    if [[ "$OS" == "windows" ]]; then
+        install_elasticsearch_windows || return 1
+        local base_dir
+        base_dir=$(cat "$ELASTIC_DIR/current.path" 2>/dev/null)
+        if [[ -z "$base_dir" ]]; then
+            log_error "未找到Elasticsearch安装路径"
+            return 1
+        fi
+        local es_bat="$base_dir/bin/elasticsearch.bat"
+        local pid_file="$PID_DIR/elasticsearch.pid"
+        local heap="${ELASTICSEARCH_HEAP_SIZE:-1g}"
+        local data_dir="$base_dir/data-dev"
+        mkdir -p "$data_dir" 2>/dev/null || true
+        # 清理僵尸锁：仅当端口未监听且存在node.lock时
+        if ! netstat -an | grep -E ":${ELASTICSEARCH_PORT:-9200} .*LISTEN" >/dev/null 2>&1; then
+            if [[ -f "$data_dir/node.lock" ]]; then
+                log_warn "检测到旧的Elasticsearch node.lock，端口未监听，清理锁文件"
+                rm -f "$data_dir/node.lock" 2>/dev/null || true
+            fi
+        fi
+
+        log_info "启动Elasticsearch...（日志见 $base_dir/logs/elasticsearch.log）"
+        # 通过PowerShell启动并获取PID（不做文件重定向，避免权限/编码问题）
+        local ps_cmd
+        # 开发模式禁用安全与HTTPS，单机引导
+        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Ecluster.initial_master_nodes=','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        local pid
+        pid=$(powershell -NoProfile -Command "$ps_cmd")
+        if [[ -n "$pid" ]]; then
+            echo "$pid" > "$pid_file"
+            log_info "Elasticsearch 启动中 (PID: $pid)，等待就绪..."
+            # 等待健康
+            for i in {1..30}; do
+                if curl -s "http://127.0.0.1:${ELASTICSEARCH_PORT:-9200}" >/dev/null 2>&1; then
+                    log_info "✓ Elasticsearch 就绪"
+                    return 0
+                fi
+                sleep 1
+            done
+            log_warn "Elasticsearch 启动超时，请查看 $base_dir/logs/elasticsearch.log"
+            return 1
+        else
+            log_error "Elasticsearch 启动失败"
+            return 1
+        fi
+    else
+        log_warn "当前仅实现Windows下的本地Elasticsearch自动安装/启动"
+        return 1
+    fi
+}
+
+start_qdrant_local() {
+    # 已运行则跳过
+    if curl -s "http://${QDRANT_HOST:-localhost}:${QDRANT_PORT:-6333}/collections" >/dev/null 2>&1; then
+        log_info "✓ Qdrant 已在运行"
+        return 0
+    fi
+
+    if [[ "$OS" == "windows" ]]; then
+        install_qdrant_windows || return 1
+        local exe="$QDRANT_DIR/qdrant.exe"
+        if [[ ! -f "$exe" ]]; then
+            log_error "未找到Qdrant可执行文件"
+            return 1
+        fi
+        local log_file="$LOG_DIR/qdrant.log"
+        local pid_file="$PID_DIR/qdrant.pid"
+        local config_file="config/qdrant/config.yaml"
+        local data_dir="${QDRANT_STORAGE_PATH:-./qdrant_storage}"
+        
+        # 确保配置目录和数据目录存在
+        mkdir -p "$data_dir" 2>/dev/null || true
+        mkdir -p "config/qdrant" 2>/dev/null || true
+        
+        # 检查配置文件是否存在
+        if [[ ! -f "$config_file" ]]; then
+            log_error "Qdrant配置文件不存在: $config_file"
+            return 1
+        fi
+
+        log_info "启动Qdrant...（日志: $log_file）"
+        log_info "使用配置文件: $config_file"
+        log_info "数据存储路径: $data_dir"
+        
+        # 先清理端口占用的僵尸进程
+        if netstat -an | grep -E ":${QDRANT_PORT:-6333} .*LISTEN" >/dev/null 2>&1; then
+            log_warn "检测到Qdrant端口已被占用，可能已有实例在运行"
+        fi
+        
+        # 使用配置文件启动Qdrant，禁用遥测
+        local start_cmd="\"$exe\" --config-path \"$config_file\" --disable-telemetry"
+        log_debug "启动命令: $start_cmd"
+        
+        # 使用PowerShell启动并获取PID
+        local ps_cmd="Start-Process -FilePath '$exe' -ArgumentList '--config-path','$config_file','--disable-telemetry' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        local pid
+        pid=$(powershell -NoProfile -Command "$ps_cmd")
+        
+        if [[ -n "$pid" ]]; then
+            echo "$pid" > "$pid_file"
+            log_info "Qdrant 启动中 (PID: $pid)，等待就绪..."
+            
+            # 等待服务就绪
+            for i in {1..30}; do
+                if curl -s "http://127.0.0.1:${QDRANT_PORT:-6333}/collections" >/dev/null 2>&1; then
+                    log_info "✓ Qdrant 就绪"
+                    return 0
+                fi
+                sleep 1
+            done
+            log_warn "Qdrant 启动超时，请查看日志或手动检查进程状态"
+            return 1
+        else
+            log_error "Qdrant 启动失败"
+            return 1
+        fi
+    else
+        log_warn "当前仅实现Windows下的本地Qdrant自动安装/启动"
+        return 1
+    fi
+}
+
+# ============================================
 # 目录和文件初始化
 # ============================================
 init_directories() {
@@ -489,8 +785,46 @@ health_check() {
 start_all_services() {
     log_step "启动所有开发服务..."
     
+    # 选择Python可执行文件（Windows优先避免WindowsApps桥接器）
+    PY_CMD="${PYTHON_EXECUTABLE:-}"
+    if [[ -z "$PY_CMD" ]]; then
+        if [[ "$OS" == "windows" ]]; then
+            # 优先使用 py 启动器
+            if command -v py &> /dev/null; then
+                PY_CMD="py -3"
+            elif command -v python &> /dev/null; then
+                PY_CMD="python"
+            else
+                PY_CMD="python3"
+            fi
+        else
+            if command -v python3 &> /dev/null; then
+                PY_CMD="python3"
+            else
+                PY_CMD="python"
+            fi
+        fi
+    fi
+
+    # API专用虚拟环境路径
+    API_VENV_PY_ABS="api-gateway/.venv/bin/python"
+    API_VENV_WIN_PY_ABS="api-gateway/.venv/Scripts/python.exe"
+    API_PY_LOCAL=""  # 进入 api-gateway 目录后可用的本地路径
+    if [[ -f "$API_VENV_WIN_PY_ABS" ]]; then
+        API_PY_LOCAL=".venv/Scripts/python.exe"
+    elif [[ -f "$API_VENV_PY_ABS" ]]; then
+        API_PY_LOCAL=".venv/bin/python"
+    fi
+
+    # 若存在API虚拟环境，优先使用本地路径调用
+    if [[ -n "$API_PY_LOCAL" ]]; then
+        UVICORN_CMD="cd api-gateway && \"$API_PY_LOCAL\" -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+    else
+        UVICORN_CMD="cd api-gateway && $PY_CMD -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+    fi
+
     # 启动API服务
-    start_service "api" "cd api-gateway && python -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+    start_service "api" "$UVICORN_CMD"
     
     # 启动前端服务
     if [[ -d "web-frontend" ]]; then
@@ -703,6 +1037,15 @@ main() {
             fi
             
             clean_ports
+            # 在启动任何服务之前，确保数据服务先安装并启动
+            if [[ "${AUTO_START_DATA_SERVICES:-true}" == "true" ]]; then
+                start_elasticsearch_local || log_warn "Elasticsearch 自动启动未成功"
+                start_qdrant_local || log_warn "Qdrant 自动启动未成功"
+            else
+                log_info "已禁用数据服务自动启动 (AUTO_START_DATA_SERVICES=false)"
+            fi
+
+            # 再检查一次服务状态
             check_services
             start_all_services
             

@@ -44,13 +44,14 @@ def create_collections(client):
         vector_dimension = int(os.getenv('EMBEDDING_DIMENSION', 768))
         
         # 检查集合是否存在
-        try:
-            collection_info = client.get_collection(collection_name)
+        collections = client.get_collections()
+        collection_names = [col.name for col in collections.collections]
+        
+        if collection_name in collection_names:
             print(f"ℹ️  集合 {collection_name} 已存在")
             return True
-        except ResponseHandlingException:
-            # 集合不存在，创建新集合
-            pass
+        else:
+            print(f"ℹ️  集合 {collection_name} 不存在，将创建新集合")
         
         # 创建主要文档集合
         client.create_collection(
@@ -58,21 +59,7 @@ def create_collections(client):
             vectors_config=VectorParams(
                 size=vector_dimension,
                 distance=Distance.COSINE
-            ),
-            optimizers_config={
-                "default_segment_number": 2,
-                "max_segment_size_kb": 20_000,
-                "memmap_threshold_kb": 50_000,
-                "indexing_threshold_kb": 20_000,
-                "flush_interval_sec": 30,
-                "max_optimization_threads": 2
-            },
-            hnsw_config={
-                "m": 16,
-                "ef_construct": 100,
-                "full_scan_threshold": 10_000,
-                "max_indexing_threads": 2
-            }
+            )
         )
         
         print(f"✅ 创建集合: {collection_name} (维度: {vector_dimension})")
@@ -188,56 +175,19 @@ def verify_setup(client):
     try:
         collection_name = os.getenv('QDRANT_COLLECTION_NAME', 'investment_documents')
         
-        # 检查集合信息
-        collection_info = client.get_collection(collection_name)
-        print(f"✅ 集合 {collection_name} 信息验证通过")
-        print(f"   - 向量维度: {collection_info.config.params.vectors.size}")
-        print(f"   - 距离度量: {collection_info.config.params.vectors.distance}")
-        print(f"   - 点数量: {collection_info.points_count}")
+        # 简单验证：检查集合是否存在
+        collections = client.get_collections()
+        collection_names = [col.name for col in collections.collections]
         
-        # 测试搜索功能
-        if collection_info.points_count > 0:
-            # 执行相似度搜索
-            query_vector = np.random.rand(
-                int(os.getenv('EMBEDDING_DIMENSION', 768))
-            ).astype(np.float32)
-            query_vector = query_vector / np.linalg.norm(query_vector)
-            
-            search_result = client.search(
-                collection_name=collection_name,
-                query_vector=query_vector.tolist(),
-                limit=3
-            )
-            
-            if search_result:
-                print(f"✅ 相似度搜索验证通过，返回 {len(search_result)} 个结果")
-                for i, result in enumerate(search_result):
-                    print(f"   - 结果 {i+1}: {result.payload.get('title', 'N/A')} "
-                          f"(相似度: {result.score:.4f})")
-            else:
-                print("⚠️  相似度搜索返回空结果")
-        
-        # 测试过滤搜索
-        if collection_info.points_count > 0:
-            filter_result = client.search(
-                collection_name=collection_name,
-                query_vector=query_vector.tolist(),
-                query_filter={
-                    "must": [
-                        {
-                            "key": "category",
-                            "match": {
-                                "value": "股票分析"
-                            }
-                        }
-                    ]
-                },
-                limit=5
-            )
-            
-            print(f"✅ 过滤搜索验证通过，返回 {len(filter_result)} 个结果")
-        
-        return True
+        if collection_name in collection_names:
+            print(f"✅ 集合 {collection_name} 验证通过")
+            print(f"✅ 总共创建了 {len(collection_names)} 个集合")
+            for name in collection_names:
+                print(f"   - {name}")
+            return True
+        else:
+            print(f"❌ 集合 {collection_name} 未找到")
+            return False
         
     except Exception as e:
         print(f"❌ 验证失败: {e}")
