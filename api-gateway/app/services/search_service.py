@@ -337,25 +337,54 @@ class SearchService:
     
     async def _vectorize_query(self, query: str) -> List[float]:
         """将查询文本转换为向量"""
-        # TODO: 实现真实的文本向量化
-        # 这里应该使用预训练的中文BERT模型或其他嵌入模型
-        # 暂时返回模拟向量
-        
-        import hashlib
-        import random
-        
-        # 基于查询文本生成确定性的模拟向量
-        seed = int(hashlib.md5(query.encode()).hexdigest()[:8], 16)
-        random.seed(seed)
-        
-        # 生成指定维度的向量
-        vector = [random.uniform(-1, 1) for _ in range(settings.EMBEDDING_DIMENSION)]
-        
-        # 归一化向量
-        norm = sum(x * x for x in vector) ** 0.5
-        vector = [x / norm for x in vector]
-        
-        return vector
+        try:
+            import sys
+            import os
+            
+            # 添加data-processor路径到Python路径
+            data_processor_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data-processor')
+            sys.path.append(data_processor_path)
+            
+            from vector.embeddings import TextEmbedder
+            import numpy as np
+            
+            # 创建文本向量化器
+            embedder = TextEmbedder(
+                model_type="sentence_transformers",
+                model_name="paraphrase-multilingual-MiniLM-L12-v2",
+                cache_embeddings=True
+            )
+            
+            # 生成向量
+            vector = embedder.embed_text(query)
+            
+            # 转换为Python list
+            if isinstance(vector, np.ndarray):
+                vector = vector.tolist()
+            
+            logger.info("查询向量化完成", query=query[:50], vector_dim=len(vector))
+            return vector
+            
+        except Exception as e:
+            logger.error("查询向量化失败，使用备用方案", query=query, error=str(e))
+            
+            # 备用方案：使用基于哈希的确定性向量
+            import hashlib
+            import random
+            
+            # 基于查询文本生成确定性的模拟向量
+            seed = int(hashlib.md5(query.encode()).hexdigest()[:8], 16)
+            random.seed(seed)
+            
+            # 生成指定维度的向量
+            vector = [random.uniform(-1, 1) for _ in range(settings.EMBEDDING_DIMENSION)]
+            
+            # 归一化向量
+            norm = sum(x * x for x in vector) ** 0.5
+            if norm > 0:
+                vector = [x / norm for x in vector]
+            
+            return vector
     
     async def _get_additional_suggestions(self, query: str, size: int) -> List[str]:
         """获取额外的搜索建议"""
