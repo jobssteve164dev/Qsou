@@ -5,7 +5,8 @@
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     
     # 数据库配置
     DATABASE_URL: str = Field(
-        default="postgresql://qsou:your_password@localhost:5432/qsou_investment_intel", 
+        default="sqlite:///./qsou_dev.db", 
         env="DATABASE_URL"
     )
     
@@ -57,7 +58,8 @@ class Settings(BaseSettings):
         env="CORS_ORIGINS"
     )
     
-    @validator("CORS_ORIGINS", pre=True)
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
     def assemble_cors_origins(cls, v):
         if isinstance(v, str):
             return [i.strip() for i in v.split(",")]

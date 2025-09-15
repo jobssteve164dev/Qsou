@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 def create_database_url(sync: bool = False) -> str:
     """创建数据库URL"""
     url = settings.DATABASE_URL
-    if not sync and not url.startswith("postgresql+asyncpg"):
+    if url.startswith("sqlite"):
+        # SQLite不需要异步驱动修改
+        return url
+    elif not sync and not url.startswith("postgresql+asyncpg"):
         # 对于异步操作，使用asyncpg驱动
         url = url.replace("postgresql://", "postgresql+asyncpg://")
     return url

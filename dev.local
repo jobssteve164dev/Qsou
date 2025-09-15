@@ -31,16 +31,16 @@ DB_PORT=5432
 DB_NAME=qsou_investment_intel
 DB_USER=qsou
 DB_PASSWORD=your_password
-DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+DATABASE_URL="sqlite:///./qsou_dev.db"
 
 # Redis配置
 REDIS_HOST=localhost
 REDIS_DB_CACHE=0
 REDIS_DB_CELERY_BROKER=1
 REDIS_DB_CELERY_RESULT=2
-REDIS_URL="redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB_CACHE}"
-CELERY_BROKER_URL="redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB_CELERY_BROKER}"
-CELERY_RESULT_BACKEND="redis://${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB_CELERY_RESULT}"
+REDIS_URL="redis://localhost:6379/0"
+CELERY_BROKER_URL="redis://localhost:6379/1"
+CELERY_RESULT_BACKEND="redis://localhost:6379/2"
 
 # ============================================
 # 搜索引擎配置
@@ -104,7 +104,7 @@ CORS_ORIGINS='["http://localhost:3000", "http://127.0.0.1:3000"]'
 # 日志配置
 # ============================================
 LOG_DIR="logs"
-LOG_FILE="${LOG_DIR}/app.log"
+LOG_FILE="logs/app.log"
 MAX_LOG_SIZE_MB=50
 LOG_BACKUP_COUNT=5
 LOG_FORMAT="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

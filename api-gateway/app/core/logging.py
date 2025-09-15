@@ -17,8 +17,11 @@ def setup_logging():
     """设置结构化日志"""
     
     # 确保日志目录存在
-    log_dir = Path(settings.LOG_DIR)
+    log_dir = Path("../logs")
     log_dir.mkdir(exist_ok=True)
+    
+    # 暂时硬编码日志路径以避免环境变量解析问题
+    log_file_path = "../logs/app.log"
     
     # 配置标准库日志
     logging.basicConfig(
@@ -27,7 +30,7 @@ def setup_logging():
         handlers=[
             logging.StreamHandler(sys.stdout),
             logging.handlers.RotatingFileHandler(
-                settings.LOG_FILE,
+                log_file_path,
                 maxBytes=50 * 1024 * 1024,  # 50MB
                 backupCount=5,
                 encoding="utf-8"

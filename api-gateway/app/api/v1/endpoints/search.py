@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import structlog
 
+from app.services.search_service import search_service
+
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 
@@ -63,29 +65,34 @@ async def search_documents(search_query: SearchQuery):
     )
     
     try:
-        # TODO: 实现真实的搜索逻辑
-        # 这里应该连接到Elasticsearch和Qdrant进行实际搜索
+        # 使用真实的搜索服务
+        search_result = await search_service.search(
+            query=search_query.query,
+            search_type=search_query.search_type,
+            filters=search_query.filters,
+            page=search_query.page,
+            page_size=search_query.page_size,
+            sort_by=search_query.sort_by
+        )
         
-        # 模拟搜索结果 - 在实际实现中会被真实的搜索引擎替代
-        mock_results = await _perform_search(search_query)
-        
-        search_time = int((datetime.now() - start_time).total_seconds() * 1000)
+        # 获取搜索建议
+        suggestions = await search_service.get_suggestions(search_query.query)
         
         response = SearchResponse(
             query=search_query.query,
-            total_count=len(mock_results),
+            total_count=search_result["total_count"],
             page=search_query.page,
             page_size=search_query.page_size,
-            results=mock_results,
-            search_time_ms=search_time,
-            suggestions=await _get_search_suggestions(search_query.query)
+            results=search_result["results"],
+            search_time_ms=search_result["search_time_ms"],
+            suggestions=suggestions
         )
         
         logger.info(
             "搜索完成",
             query=search_query.query,
             total_results=response.total_count,
-            search_time_ms=search_time
+            search_time_ms=response.search_time_ms
         )
         
         return response
@@ -109,7 +116,7 @@ async def get_search_suggestions(
     logger.info("获取搜索建议", query=q)
     
     try:
-        suggestions = await _get_search_suggestions(q)
+        suggestions = await search_service.get_suggestions(q)
         return {"query": q, "suggestions": suggestions}
         
     except Exception as e:
@@ -141,60 +148,31 @@ async def get_trending_searches():
         raise HTTPException(status_code=500, detail="无法获取热门搜索")
 
 
-# 内部辅助函数
-async def _perform_search(search_query: SearchQuery) -> List[SearchResult]:
+@router.get("/similar/{document_id}")
+async def get_similar_documents(
+    document_id: str,
+    limit: int = Query(default=10, description="返回结果数量", ge=1, le=50)
+):
     """
-    执行实际搜索操作
-    注意：这是临时实现，实际项目中会连接到Elasticsearch和Qdrant
+    获取相似文档
+    基于向量相似度查找与指定文档相似的其他文档
     """
+    logger.info("查找相似文档", document_id=document_id, limit=limit)
     
-    # 在实际实现中，这里会：
-    # 1. 连接到Elasticsearch执行全文搜索
-    # 2. 如果是语义搜索，会连接到Qdrant执行向量搜索
-    # 3. 如果是混合搜索，会合并两种搜索结果
-    
-    # 临时返回结构化的搜索结果
-    return [
-        SearchResult(
-            id="doc_001",
-            title=f"关于{search_query.query}的最新市场分析报告",
-            content=f"本报告深入分析了{search_query.query}相关的市场趋势、投资机会和风险评估...",
-            source="东方财富",
-            url="https://example.com/doc1",
-            published_at=datetime.now(),
-            relevance_score=0.95,
-            tags=["市场分析", "投资报告"]
-        ),
-        SearchResult(
-            id="doc_002", 
-            title=f"{search_query.query}行业发展前景展望",
-            content=f"随着技术不断进步，{search_query.query}行业正迎来新的发展机遇...",
-            source="新浪财经",
-            url="https://example.com/doc2",
-            published_at=datetime.now(),
-            relevance_score=0.87,
-            tags=["行业分析", "前景展望"]
+    try:
+        similar_docs = await search_service.find_similar_documents(
+            document_id=document_id,
+            limit=limit
         )
-    ]
+        
+        return {
+            "document_id": document_id,
+            "similar_documents": similar_docs,
+            "count": len(similar_docs)
+        }
+        
+    except Exception as e:
+        logger.error("查找相似文档失败", document_id=document_id, error=str(e))
+        raise HTTPException(status_code=500, detail="无法查找相似文档")
 
 
-async def _get_search_suggestions(query: str) -> List[str]:
-    """
-    获取搜索建议
-    实际实现中会基于历史搜索数据和热门关键词生成建议
-    """
-    
-    # 实际实现会：
-    # 1. 从搜索历史中获取相关建议
-    # 2. 从热门关键词中匹配
-    # 3. 使用NLP模型生成相关建议
-    
-    base_suggestions = [
-        f"{query}市场分析",
-        f"{query}投资机会", 
-        f"{query}行业报告",
-        f"{query}最新动态",
-        f"{query}技术趋势"
-    ]
-    
-    return base_suggestions[:3]  # 返回前3个建议

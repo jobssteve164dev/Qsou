@@ -13,11 +13,12 @@ import os
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.database import engine, create_tables
+# from app.core.database import engine, create_tables
 from app.core.logging import setup_logging
 from app.api.v1.router import api_router
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.metrics import MetricsMiddleware
+from app.services.search_service import search_service
 
 # 设置日志
 setup_logging()
@@ -32,13 +33,20 @@ async def lifespan(app: FastAPI):
     logger.info(f"🔧 环境: {settings.ENVIRONMENT}")
     logger.info(f"🐛 调试模式: {settings.DEBUG}")
     
-    # 创建数据库表
-    await create_tables()
-    logger.info("📊 数据库表初始化完成")
+    # 创建数据库表 - 暂时禁用
+    # await create_tables()
+    # logger.info("📊 数据库表初始化完成")
     
     # 连接外部服务
     try:
-        # TODO: 在这里初始化Redis, Elasticsearch, Qdrant连接
+        # 初始化搜索服务（Elasticsearch + Qdrant）
+        search_initialized = await search_service.initialize()
+        if search_initialized:
+            logger.info("🔍 搜索服务初始化成功")
+        else:
+            logger.warning("⚠️  搜索服务初始化失败，部分功能可能不可用")
+        
+        # TODO: 在这里初始化Redis连接
         logger.info("🔗 外部服务连接检查完成")
     except Exception as e:
         logger.error(f"❌ 外部服务连接失败: {e}")
@@ -47,6 +55,9 @@ async def lifespan(app: FastAPI):
     
     # 关闭时执行
     logger.info("🛑 正在关闭 API Gateway...")
+    
+    # 关闭搜索服务
+    await search_service.shutdown()
 
 
 # 创建FastAPI应用
@@ -100,17 +111,22 @@ async def root():
 async def health_check():
     """健康检查端点"""
     try:
+        # 检查搜索服务
+        search_health = await search_service.health_check()
+        
         # 检查数据库连接
-        # TODO: 添加Redis, Elasticsearch, Qdrant连接检查
+        # TODO: 添加Redis连接检查
+        
+        # 判断整体健康状态
+        overall_status = "healthy" if search_health.get("status") == "healthy" else "unhealthy"
         
         return {
-            "status": "healthy",
+            "status": overall_status,
             "timestamp": datetime.utcnow().isoformat(),
             "services": {
                 "database": "connected",
                 "redis": "checking...",
-                "elasticsearch": "checking...",
-                "qdrant": "checking..."
+                "search_engine": search_health
             }
         }
     except Exception as e:
