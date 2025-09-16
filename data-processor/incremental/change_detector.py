@@ -21,7 +21,7 @@ except ImportError:
     REDIS_AVAILABLE = False
     logger.warning("redis未安装，将使用文件存储")
 
-from ..config import config
+from config import config
 
 
 class ChangeDetector:

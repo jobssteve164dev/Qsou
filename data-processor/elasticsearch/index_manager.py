@@ -20,7 +20,7 @@ except ImportError:
     ES_AVAILABLE = False
     logger.warning("elasticsearch未安装，索引管理功能不可用")
 
-from ..config import config
+from config import config
 
 
 class IndexManager:

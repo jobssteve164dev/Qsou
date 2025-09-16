@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Search, BarChart3, Settings, User, LogOut } from 'lucide-react';
 import { Button } from './ui/Button';
+import { useAuth } from './auth/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
   const currentPath = router.pathname;
+  const { user, logout, hasRole } = useAuth();
 
   const navigation = [
     {
@@ -25,17 +27,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: BarChart3,
       current: currentPath.startsWith('/intelligence'),
     },
-    {
+    ...(hasRole('admin') ? [{
       name: '系统监控',
       href: '/monitor',
       icon: Settings,
       current: currentPath.startsWith('/monitor'),
-    },
+    }] : []),
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    router.push('/login');
+    logout();
   };
 
   return (
@@ -80,13 +81,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
             {/* 右侧 - 用户菜单 */}
             <div className="flex items-center space-x-4">
+              {user && (
+                <div className="text-sm text-gray-700">
+                  欢迎, <span className="font-medium">{user.username}</span>
+                  {user.role === 'admin' && (
+                    <span className="ml-1 px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded-full">
+                      管理员
+                    </span>
+                  )}
+                </div>
+              )}
+              
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
                 className="text-gray-500 hover:text-gray-700"
               >
-                <User className="h-4 w-4 mr-2" />
+                <LogOut className="h-4 w-4 mr-2" />
                 退出登录
               </Button>
             </div>

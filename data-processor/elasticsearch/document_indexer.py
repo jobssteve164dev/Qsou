@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 文档索引器
 
@@ -24,7 +25,14 @@ except ImportError:
     ES_AVAILABLE = False
     logger.warning("elasticsearch未安装，文档索引功能不可用")
 
-from ..config import config
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from config import config
 
 
 class DocumentIndexer:

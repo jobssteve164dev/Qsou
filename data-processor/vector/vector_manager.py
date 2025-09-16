@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .embeddings import TextEmbedder
 from .vector_store import VectorStore
 from .similarity_search import SimilaritySearcher
-from ..config import config
+from config import config
 
 
 class VectorManager:

@@ -8,14 +8,20 @@ NLP处理器统一接口
 - 文本分类
 - 关键词提取
 """
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from loguru import logger
 from datetime import datetime
 
-from .segmentation import ChineseSegmenter
-from .entity_recognition import EntityRecognizer
-from .sentiment_analysis import SentimentAnalyzer
-from .text_classifier import TextClassifier
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from segmentation import ChineseSegmenter
+from entity_recognition import EntityRecognizer
+from sentiment_analysis import SentimentAnalyzer
+from text_classifier import TextClassifier
 
 
 class NLPProcessor:

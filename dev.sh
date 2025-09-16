@@ -210,6 +210,22 @@ check_python_deps() {
         fi
     fi
     
+    # 复用同一虚拟环境为 data-processor 安装依赖，确保 Celery 与 API 在同一环境
+    if [[ -f "data-processor/requirements.txt" ]]; then
+        if [[ -n "$API_PY" ]]; then
+            if eval "$API_PY -c 'import elasticsearch, qdrant_client, redis, celery'" >/dev/null 2>&1; then
+                log_info "data-processor 核心依赖已满足（复用 API 虚拟环境）"
+            else
+                log_info "为 data-processor 安装依赖到 API 虚拟环境..."
+                eval "$API_PY -m pip install -r data-processor/requirements.txt" || {
+                    log_warn "安装 data-processor 依赖失败，后续可能影响 Celery/向量/ES 功能"
+                }
+            fi
+        else
+            log_warn "未找到 API 虚拟环境 Python，跳过 data-processor 依赖安装"
+        fi
+    fi
+    
     # 根目录requirements可选安装提示
     if [[ -f "requirements.txt" ]]; then
         log_info "检测到根目录requirements.txt（可选），优先已为API安装专属依赖"
@@ -242,12 +258,35 @@ check_node_deps() {
     # 检查前端依赖
     if [[ -d "web-frontend" && -f "web-frontend/package.json" ]]; then
         cd web-frontend
+        # 计算依赖哈希（package.json + package-lock.json），用于判断是否需要安装
+        local deps_hash
+        deps_hash=$(node -e "const fs=require('fs');const crypto=require('crypto');const files=['package-lock.json','package.json'];let s='';for(const f of files){if(fs.existsSync(f)){s+=crypto.createHash('sha1').update(fs.readFileSync(f)).digest('hex')}};process.stdout.write(s)")
+        local hash_file=".deps_hash"
+
+        if [[ -d "node_modules" && -f "$hash_file" ]]; then
+            local last_hash
+            last_hash=$(cat "$hash_file" 2>/dev/null || echo "")
+            if [[ -n "$deps_hash" && "$deps_hash" == "$last_hash" ]]; then
+                log_info "前端依赖未变化，跳过安装"
+                cd ..
+                return
+            fi
+        fi
+
         if [[ ! -d "node_modules" ]]; then
-            log_info "安装前端依赖..."
-            npm install
+            log_info "首次安装前端依赖 (npm ci)..."
+            npm ci || {
+                log_warn "npm ci 失败，尝试使用 npm install 作为回退...";
+                npm install || log_warn "npm install 也失败，请关闭占用 node_modules 的进程/杀软或以管理员权限重试";
+            }
         else
-            log_info "前端依赖已存在，检查更新..."
-            npm ci
+            log_info "依赖定义有变化，增量安装更新 (npm install)..."
+            npm install || log_warn "npm install 失败，请关闭占用 node_modules 的进程/杀软或以管理员权限重试"
+        fi
+
+        # 安装成功后记录当前哈希
+        if [[ -n "$deps_hash" ]]; then
+            echo "$deps_hash" > "$hash_file" 2>/dev/null || true
         fi
         cd ..
     fi
@@ -266,8 +305,9 @@ check_port() {
             return 0  # 端口被占用
         fi
     elif [[ "$OS" == "windows" ]]; then
-        # Windows with netstat
-        if netstat -an | findstr ":$port " | findstr LISTENING >/dev/null 2>&1; then
+        # Windows: 使用 PowerShell 更可靠（避免本地化/解析问题）
+        local ps_cmd="Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1"
+        if powershell -NoProfile -Command "$ps_cmd" | grep -qi "LocalPort" >/dev/null 2>&1; then
             return 0  # 端口被占用
         fi
     elif command -v netstat &> /dev/null; then
@@ -304,13 +344,23 @@ kill_port() {
             fi
         fi
     elif [[ "$OS" == "windows" ]]; then
-        # Windows with netstat and taskkill
+        # Windows: 使用 PowerShell 获取占用PID并强制结束进程树
         local pids
-        pids=$(netstat -ano | findstr ":$port " | findstr LISTENING | awk '{print $5}' | sort -u)
+        pids=$(powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -Expand OwningProcess) | Sort-Object -Unique" 2>/dev/null | tr -d '\r')
         if [[ -n "$pids" ]]; then
             for pid in $pids; do
-                taskkill /PID $pid /F 2>/dev/null || true
+                taskkill /T /F /PID $pid 2>/dev/null || true
             done
+        fi
+        # 回退方案：再尝试通过 netstat 抓取PID
+        if check_port $port "$service_name"; then
+            local npids
+            npids=$(netstat -ano | tr -s ' ' | grep ":$port " | awk '{print $5}' | sort -u 2>/dev/null)
+            if [[ -n "$npids" ]]; then
+                for pid in $npids; do
+                    taskkill /T /F /PID $pid 2>/dev/null || true
+                done
+            fi
         fi
     elif command -v fuser &> /dev/null; then
         # Linux with fuser
@@ -325,6 +375,20 @@ kill_port() {
         log_info "端口 $port 已释放"
         return 0
     fi
+}
+
+find_free_port() {
+    local start_port=$1
+    local range=${2:-100}
+    local end_port=$((start_port + range))
+    local p
+    for ((p=start_port; p<end_port; p++)); do
+        if ! check_port "$p" "probe"; then
+            echo "$p"
+            return 0
+        fi
+    done
+    return 1
 }
 
 clean_ports() {
@@ -348,7 +412,7 @@ clean_ports() {
                 log_info "✓ $service_name 正在运行 (端口 $port)"
             else
                 if [[ "${AUTO_KILL_PORTS:-true}" == "true" ]]; then
-                    kill_port "$port" "$service_name"
+                    kill_port "$port" "$service_name" || true
                 else
                     log_warn "端口 $port 被占用 ($service_name)，请手动处理或设置 AUTO_KILL_PORTS=true"
                 fi
@@ -523,11 +587,20 @@ start_elasticsearch_local() {
         local heap="${ELASTICSEARCH_HEAP_SIZE:-1g}"
         local data_dir="$base_dir/data-dev"
         mkdir -p "$data_dir" 2>/dev/null || true
-        # 清理僵尸锁：仅当端口未监听且存在node.lock时
+        # 清理僵尸锁和PID文件：仅当端口未监听且存在lock时
         if ! netstat -an | grep -E ":${ELASTICSEARCH_PORT:-9200} .*LISTEN" >/dev/null 2>&1; then
             if [[ -f "$data_dir/node.lock" ]]; then
                 log_warn "检测到旧的Elasticsearch node.lock，端口未监听，清理锁文件"
                 rm -f "$data_dir/node.lock" 2>/dev/null || true
+            fi
+            # 同时清理可能的僵尸PID文件
+            if [[ -f "$pid_file" ]]; then
+                local old_pid
+                old_pid=$(cat "$pid_file" 2>/dev/null)
+                if [[ -n "$old_pid" ]] && ! tasklist //FI "PID eq $old_pid" 2>/dev/null | grep -q "elasticsearch"; then
+                    log_warn "清理无效的Elasticsearch PID文件"
+                    rm -f "$pid_file" 2>/dev/null || true
+                fi
             fi
         fi
 
@@ -535,7 +608,7 @@ start_elasticsearch_local() {
         # 通过PowerShell启动并获取PID（不做文件重定向，避免权限/编码问题）
         local ps_cmd
         # 开发模式禁用安全与HTTPS，单机引导
-        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Ecluster.initial_master_nodes=','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false' -WindowStyle Hidden -PassThru | Select -Expand Id"
         local pid
         pid=$(powershell -NoProfile -Command "$ps_cmd")
         if [[ -n "$pid" ]]; then
@@ -633,6 +706,289 @@ start_qdrant_local() {
 }
 
 # ============================================
+# 统一日志收集机制
+# ============================================
+UNIFIED_LOG_FILE="${LOG_DIR}/unified.log"
+UNIFIED_LOG_MAX_LINES="${UNIFIED_LOG_MAX_LINES:-50000}"
+LOG_COLLECTOR_PID_FILE="${PID_DIR}/log-collector.pid"
+
+# 日志收集器主进程
+start_log_collector() {
+    local pid_file="$LOG_COLLECTOR_PID_FILE"
+    
+    # 检查是否已经在运行
+    if [[ -f "$pid_file" ]]; then
+        local existing_pid
+        existing_pid=$(cat "$pid_file")
+        if kill -0 "$existing_pid" 2>/dev/null; then
+            log_info "日志收集器已在运行 (PID: $existing_pid)"
+            return 0
+        else
+            rm -f "$pid_file"
+        fi
+    fi
+    
+    log_info "启动统一日志收集器..."
+    
+    # 启动日志收集器后台进程
+    {
+        # 要监控的日志文件列表
+        local log_files=(
+            "${LOG_DIR}/api.log"
+            "${LOG_DIR}/frontend.log"
+            "${LOG_DIR}/celery-worker.log"
+            "${LOG_DIR}/celery-flower.log"
+            "${LOG_DIR}/elasticsearch.log"
+            "${LOG_DIR}/qdrant.log"
+        )
+        
+        # 添加额外的日志源（如果存在）
+        # Python/FastAPI uvicorn日志
+        if [[ -f "api-gateway/logs/uvicorn.log" ]]; then
+            log_files+=("api-gateway/logs/uvicorn.log")
+        fi
+        
+        # Next.js构建日志
+        if [[ -f "web-frontend/.next/trace" ]]; then
+            log_files+=("web-frontend/.next/trace")
+        fi
+        
+        # Celery详细日志
+        if [[ -f "data-processor/logs/celery.log" ]]; then
+            log_files+=("data-processor/logs/celery.log")
+        fi
+        
+        # 添加timestamp和来源标记的函数
+        add_log_prefix() {
+            local source=$1
+            while IFS= read -r line; do
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$source] $line"
+            done
+        }
+        
+        # 日志轮转函数
+        rotate_log_if_needed() {
+            if [[ -f "$UNIFIED_LOG_FILE" ]]; then
+                local line_count
+                line_count=$(wc -l < "$UNIFIED_LOG_FILE" 2>/dev/null || echo 0)
+                if [[ $line_count -gt $UNIFIED_LOG_MAX_LINES ]]; then
+                    # 保留最后的80%内容（避免频繁轮转）
+                    local keep_lines=$((UNIFIED_LOG_MAX_LINES * 8 / 10))
+                    local temp_file="${UNIFIED_LOG_FILE}.tmp"
+                    tail -n "$keep_lines" "$UNIFIED_LOG_FILE" > "$temp_file"
+                    mv "$temp_file" "$UNIFIED_LOG_FILE"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [LOG-COLLECTOR] 日志轮转完成，保留最近 $keep_lines 行" >> "$UNIFIED_LOG_FILE"
+                fi
+            fi
+        }
+        
+        # 主循环：监控所有日志文件
+        while true; do
+            # 检查并轮转日志
+            rotate_log_if_needed
+            
+            # 使用tail监控所有存在的日志文件
+            for log_file in "${log_files[@]}"; do
+                if [[ -f "$log_file" ]]; then
+                    # 从文件名提取服务名
+                    local service_name
+                    service_name=$(basename "$log_file" .log)
+                    # 使用非阻塞方式读取新行
+                    tail -n 0 -F "$log_file" 2>/dev/null | add_log_prefix "$service_name" >> "$UNIFIED_LOG_FILE" &
+                fi
+            done
+            
+            # 监控系统服务日志（如果可用）
+            if [[ "$OS" == "windows" ]]; then
+                # Windows: 监控Elasticsearch目录日志
+                if [[ -f "$ELASTIC_DIR/current.path" ]]; then
+                    local es_base
+                    es_base=$(cat "$ELASTIC_DIR/current.path" 2>/dev/null)
+                    if [[ -n "$es_base" && -d "$es_base/logs" ]]; then
+                        tail -n 0 -F "$es_base/logs/elasticsearch.log" 2>/dev/null | add_log_prefix "ES-NATIVE" >> "$UNIFIED_LOG_FILE" &
+                    fi
+                fi
+            fi
+            
+            # 等待一段时间后重新检查（处理新创建的日志文件）
+            sleep "${LOG_COLLECTOR_REFRESH_INTERVAL:-30}"
+            
+            # 清理已经结束的tail进程
+            jobs -p | while read -r pid; do
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    wait "$pid" 2>/dev/null
+                fi
+            done
+        done
+    } &
+    
+    local collector_pid=$!
+    echo "$collector_pid" > "$pid_file"
+    
+    log_info "✓ 日志收集器已启动 (PID: $collector_pid)"
+    log_info "统一日志文件: $UNIFIED_LOG_FILE"
+    log_info "最大行数限制: $UNIFIED_LOG_MAX_LINES"
+    
+    return 0
+}
+
+stop_log_collector() {
+    local pid_file="$LOG_COLLECTOR_PID_FILE"
+    
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(cat "$pid_file")
+        
+        if kill -0 "$pid" 2>/dev/null; then
+            log_info "停止日志收集器 (PID: $pid)..."
+            
+            # 停止主进程和所有子进程
+            if [[ "$OS" == "windows" ]]; then
+                # Windows: 杀死进程树
+                taskkill /T /F /PID "$pid" 2>/dev/null || true
+            else
+                # Unix: 杀死进程组
+                kill -TERM -"$pid" 2>/dev/null || true
+                sleep 2
+                kill -KILL -"$pid" 2>/dev/null || true
+            fi
+            
+            log_info "✓ 日志收集器已停止"
+        fi
+        
+        rm -f "$pid_file"
+    fi
+}
+
+# 清理统一日志文件
+clean_unified_log() {
+    if [[ -f "$UNIFIED_LOG_FILE" ]]; then
+        log_info "清理统一日志文件: $UNIFIED_LOG_FILE"
+        > "$UNIFIED_LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SYSTEM] ========== 开发环境启动 - 日志已清理 ==========" >> "$UNIFIED_LOG_FILE"
+    fi
+}
+
+# 实时查看统一日志
+show_unified_log() {
+    if [[ -f "$UNIFIED_LOG_FILE" ]]; then
+        log_info "显示统一日志 (按 Ctrl+C 退出):"
+        echo ""
+        tail -f "$UNIFIED_LOG_FILE"
+    else
+        log_error "统一日志文件不存在: $UNIFIED_LOG_FILE"
+        return 1
+    fi
+}
+
+# 获取日志统计信息
+log_statistics() {
+    if [[ -f "$UNIFIED_LOG_FILE" ]]; then
+        local total_lines
+        total_lines=$(wc -l < "$UNIFIED_LOG_FILE" 2>/dev/null || echo 0)
+        local file_size
+        file_size=$(du -h "$UNIFIED_LOG_FILE" 2>/dev/null | cut -f1)
+        
+        log_info "日志统计信息:"
+        log_info "  - 总行数: $total_lines / $UNIFIED_LOG_MAX_LINES"
+        log_info "  - 文件大小: $file_size"
+        
+        # 统计各服务日志行数
+        log_info "  - 各服务日志分布:"
+        for service in api frontend celery-worker celery-flower elasticsearch qdrant ES-NATIVE LOG-COLLECTOR SYSTEM; do
+            local count
+            count=$(grep -c "\[$service\]" "$UNIFIED_LOG_FILE" 2>/dev/null || echo 0)
+            if [[ $count -gt 0 ]]; then
+                log_info "    * $service: $count 行"
+            fi
+        done
+        
+        # 统计错误和警告
+        local error_count
+        error_count=$(grep -iE "(error|exception|failed|fatal)" "$UNIFIED_LOG_FILE" 2>/dev/null | wc -l || echo 0)
+        local warn_count
+        warn_count=$(grep -iE "(warn|warning)" "$UNIFIED_LOG_FILE" 2>/dev/null | wc -l || echo 0)
+        
+        log_info "  - 错误数量: $error_count"
+        log_info "  - 警告数量: $warn_count"
+        
+        # 显示最近的错误
+        if [[ $error_count -gt 0 ]]; then
+            log_info ""
+            log_info "最近的错误（最多显示5条）:"
+            grep -iE "(error|exception|failed|fatal)" "$UNIFIED_LOG_FILE" | tail -n 5 | while IFS= read -r line; do
+                echo "    $line"
+            done
+        fi
+    else
+        log_warn "统一日志文件不存在"
+    fi
+}
+
+# 搜索统一日志
+search_unified_log() {
+    local pattern=${1:-}
+    local service=${2:-}
+    
+    if [[ ! -f "$UNIFIED_LOG_FILE" ]]; then
+        log_error "统一日志文件不存在"
+        return 1
+    fi
+    
+    if [[ -z "$pattern" ]]; then
+        log_error "请提供搜索模式"
+        log_info "用法: $0 log-search <pattern> [service]"
+        log_info "示例: $0 log-search error api"
+        return 1
+    fi
+    
+    log_info "搜索日志..."
+    log_info "  - 模式: $pattern"
+    if [[ -n "$service" ]]; then
+        log_info "  - 服务: $service"
+    fi
+    echo ""
+    
+    if [[ -n "$service" ]]; then
+        grep "\[$service\]" "$UNIFIED_LOG_FILE" | grep -iE "$pattern" || log_warn "未找到匹配的日志"
+    else
+        grep -iE "$pattern" "$UNIFIED_LOG_FILE" || log_warn "未找到匹配的日志"
+    fi
+}
+
+# 显示特定级别的日志
+show_log_level() {
+    local level=${1:-ERROR}
+    
+    if [[ ! -f "$UNIFIED_LOG_FILE" ]]; then
+        log_error "统一日志文件不存在"
+        return 1
+    fi
+    
+    log_info "显示 $level 级别的日志..."
+    echo ""
+    
+    case "$level" in
+        ERROR|error)
+            grep -iE "(error|exception|failed|fatal)" "$UNIFIED_LOG_FILE" || log_info "未找到错误日志"
+            ;;
+        WARN|warn|WARNING|warning)
+            grep -iE "(warn|warning)" "$UNIFIED_LOG_FILE" || log_info "未找到警告日志"
+            ;;
+        INFO|info)
+            grep -iE "(info|information)" "$UNIFIED_LOG_FILE" || log_info "未找到信息日志"
+            ;;
+        DEBUG|debug)
+            grep -iE "(debug|trace)" "$UNIFIED_LOG_FILE" || log_info "未找到调试日志"
+            ;;
+        *)
+            log_error "未知的日志级别: $level"
+            log_info "支持的级别: ERROR, WARN, INFO, DEBUG"
+            ;;
+    esac
+}
+
+# ============================================
 # 目录和文件初始化
 # ============================================
 init_directories() {
@@ -657,6 +1013,11 @@ init_directories() {
     if [[ ! -f ".env" && -f "env.example" ]]; then
         cp env.example .env
         log_info "已创建 .env 文件，请根据需要修改配置"
+    fi
+    
+    # 初始化统一日志文件
+    if [[ "${ENABLE_UNIFIED_LOG:-true}" == "true" ]]; then
+        clean_unified_log
     fi
 }
 
@@ -762,6 +1123,7 @@ health_check() {
     local delay=${HEALTH_CHECK_DELAY:-2}
     
     log_debug "健康检查: $service_name"
+    log_debug "$service_name 健康检查URL: $url"
     
     for ((i=1; i<=retries; i++)); do
         if curl -s --max-time 5 "$url" >/dev/null 2>&1; then
@@ -784,6 +1146,11 @@ health_check() {
 # ============================================
 start_all_services() {
     log_step "启动所有开发服务..."
+    
+    # 启动统一日志收集器（如果启用）
+    if [[ "${ENABLE_UNIFIED_LOG:-true}" == "true" ]]; then
+        start_log_collector
+    fi
     
     # 选择Python可执行文件（Windows优先避免WindowsApps桥接器）
     PY_CMD="${PYTHON_EXECUTABLE:-}"
@@ -826,37 +1193,73 @@ start_all_services() {
     # 启动API服务
     start_service "api" "$UVICORN_CMD"
     
-    # 启动前端服务
+    # 启动前端服务（注入 API 地址）
     if [[ -d "web-frontend" ]]; then
-        start_service "frontend" "npm run dev -- --port ${FRONTEND_PORT:-3000}"
+        local api_base="http://localhost:${API_PORT:-8000}/api/v1"
+        start_service "frontend" "NEXT_PUBLIC_API_URL=$api_base npm run dev -- --port ${FRONTEND_PORT:-3000}"
     fi
     
-    # 启动Celery工作进程
-    start_service "celery-worker" "celery -A data-processor.tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+    # 启动Celery工作进程（使用API虚拟环境）
+    if [[ "$OS" == "windows" ]]; then
+        start_service "celery-worker" "cd data-processor && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+    else
+        start_service "celery-worker" "cd data-processor && ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+    fi
     
-    # 启动Celery监控
-    start_service "celery-flower" "celery -A data-processor.tasks flower --port=${CELERY_FLOWER_PORT:-5555}"
+    # 启动Celery监控（可选）
+    if [[ "$OS" == "windows" ]]; then
+        start_service "celery-flower" "cd data-processor && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555}"
+    else
+        start_service "celery-flower" "cd data-processor && ../api-gateway/.venv/bin/python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555}"
+    fi
     
     # 等待服务完全启动
     log_info "等待服务完全启动..."
-    sleep 5
+    sleep "${HEALTH_CHECK_INITIAL_WAIT:-10}"
     
-    # 健康检查
-    health_check "API服务" "http://localhost:${API_PORT:-8000}/health"
+    # 健康检查（API/前端）
+    health_check "API服务" "http://localhost:${API_PORT:-8000}/health" || log_warn "API服务健康检查失败，继续运行"
     if [[ -d "web-frontend" ]]; then
-        health_check "前端服务" "http://localhost:${FRONTEND_PORT:-3000}"
+        health_check "前端服务" "http://localhost:${FRONTEND_PORT:-3000}" || log_warn "前端服务健康检查失败，继续运行"
     fi
-    health_check "Celery监控" "http://localhost:${CELERY_FLOWER_PORT:-5555}"
+
+    # Celery worker 就绪检查（使用 inspect ping）
+    log_info "检查 Celery worker 就绪..."
+    local celery_py
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        celery_py="api-gateway/.venv/Scripts/python.exe"
+    else
+        celery_py="api-gateway/.venv/bin/python"
+    fi
+    if [[ -f "$celery_py" ]]; then
+        # 给 worker 一些时间完成加载
+        sleep 2
+        if (cd data-processor && "$celery_py" -m celery -A tasks inspect ping) >/dev/null 2>&1; then
+            log_info "✓ Celery worker 就绪"
+        else
+            log_warn "Celery worker 未响应 ping，但进程已启动，可能仍在初始化（可稍后重试或查看 logs/celery-worker.log）"
+        fi
+    else
+        log_warn "未找到 Celery Python 解释器，跳过 worker 就绪检查"
+    fi
+
+    # Flower 健康检查仅做提示
+    health_check "Celery监控" "http://localhost:${CELERY_FLOWER_PORT:-5555}" || log_warn "Celery监控页面暂不可达（不影响 worker 工作），可稍后再试"
 }
 
 stop_all_services() {
     log_step "停止所有开发服务..."
     
-    local services=("celery-flower" "celery-worker" "frontend" "api")
+    local services=("celery-flower" "celery-worker" "frontend" "api" "elasticsearch" "qdrant")
     
     for service in "${services[@]}"; do
         stop_service "$service"
     done
+    
+    # 停止日志收集器
+    if [[ "${ENABLE_UNIFIED_LOG:-true}" == "true" ]]; then
+        stop_log_collector
+    fi
 }
 
 # ============================================
@@ -919,30 +1322,41 @@ Qsou 投资情报搜索引擎 - 开发环境启动脚本
     restart         重启所有开发服务
     status          显示服务状态
     logs [service]  查看服务日志
+    unified-log     实时查看统一日志
+    log-stats       显示日志统计信息
+    log-search <pattern> [service]  搜索日志
+    log-level <level>  显示特定级别日志 (ERROR/WARN/INFO/DEBUG)
     clean           清理临时文件和日志
     health          执行健康检查
     help            显示此帮助信息
 
 环境变量:
-    DEBUG=true      启用调试模式
-    AUTO_KILL_PORTS=true    自动杀死占用端口的进程
+    DEBUG=true                  启用调试模式
+    AUTO_KILL_PORTS=true        自动杀死占用端口的进程
+    ENABLE_UNIFIED_LOG=true     启用统一日志收集（默认启用）
+    UNIFIED_LOG_MAX_LINES=50000 统一日志最大行数（默认50000）
 
 示例:
     $0 start        # 启动开发环境
     $0 stop         # 停止开发环境
     $0 logs api     # 查看API服务日志
+    $0 unified-log  # 查看统一日志
+    $0 log-stats    # 查看日志统计
+    $0 log-search error api  # 搜索API错误日志
+    $0 log-level ERROR  # 显示所有错误日志
     DEBUG=true $0 start  # 以调试模式启动
 
 配置文件: dev.local
 日志目录: $LOG_DIR
 PID目录: $PID_DIR
+统一日志: $LOG_DIR/unified.log
 EOF
 }
 
 show_status() {
     log_step "服务状态检查..."
     
-    local services=("api" "frontend" "celery-worker" "celery-flower")
+    local services=("api" "frontend" "celery-worker" "celery-flower" "elasticsearch" "qdrant")
     
     for service in "${services[@]}"; do
         local pid_file="$PID_DIR/${service}.pid"
@@ -958,6 +1372,27 @@ show_status() {
             log_warn "✗ $service 未运行"
         fi
     done
+    
+    # 检查日志收集器状态
+    if [[ "${ENABLE_UNIFIED_LOG:-true}" == "true" ]]; then
+        local collector_pid_file="$LOG_COLLECTOR_PID_FILE"
+        if [[ -f "$collector_pid_file" ]]; then
+            local pid
+            pid=$(cat "$collector_pid_file")
+            if kill -0 "$pid" 2>/dev/null; then
+                log_info "✓ 日志收集器 运行中 (PID: $pid)"
+                if [[ -f "$UNIFIED_LOG_FILE" ]]; then
+                    local line_count
+                    line_count=$(wc -l < "$UNIFIED_LOG_FILE" 2>/dev/null || echo 0)
+                    log_info "  统一日志: $line_count 行"
+                fi
+            else
+                log_warn "✗ 日志收集器 已停止 (PID文件存在但进程不存在)"
+            fi
+        else
+            log_warn "✗ 日志收集器 未运行"
+        fi
+    fi
     
     # 检查端口使用情况
     echo
@@ -1060,9 +1495,18 @@ main() {
             fi
             log_info "  - Celery监控: http://localhost:${CELERY_FLOWER_PORT:-5555}"
             log_info ""
-            log_info "使用 '$0 stop' 停止所有服务"
-            log_info "使用 '$0 status' 查看服务状态"
-            log_info "使用 '$0 logs <service>' 查看服务日志"
+            log_info "日志管理:"
+            if [[ "${ENABLE_UNIFIED_LOG:-true}" == "true" ]]; then
+                log_info "  - 统一日志: $UNIFIED_LOG_FILE"
+                log_info "  - 查看统一日志: '$0 unified-log'"
+                log_info "  - 日志统计: '$0 log-stats'"
+            fi
+            log_info "  - 查看单个服务日志: '$0 logs <service>'"
+            log_info ""
+            log_info "常用命令:"
+            log_info "  - '$0 stop' 停止所有服务"
+            log_info "  - '$0 status' 查看服务状态"
+            log_info "  - '$0 restart' 重启所有服务"
             log_info ""
             log_info "按 Ctrl+C 退出并清理所有服务"
             
@@ -1087,6 +1531,22 @@ main() {
             ;;
         logs)
             show_logs "$2"
+            ;;
+        unified-log)
+            log_info "📜 查看统一日志"
+            show_unified_log
+            ;;
+        log-stats)
+            log_info "📊 日志统计信息"
+            log_statistics
+            ;;
+        log-search)
+            log_info "🔍 搜索日志"
+            search_unified_log "$2" "$3"
+            ;;
+        log-level)
+            log_info "📋 显示日志级别"
+            show_log_level "$2"
             ;;
         clean)
             log_info "🧹 清理临时文件"

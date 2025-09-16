@@ -15,10 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 
 from .change_detector import ChangeDetector
-from ..pipeline import DataProcessingPipeline
-from ..vector.vector_manager import VectorManager
-from ..elasticsearch.document_indexer import DocumentIndexer
-from ..config import config
+from pipeline import DataProcessingPipeline
+from vector.vector_manager import VectorManager
+from elasticsearch.document_indexer import DocumentIndexer
+from config import config
 
 
 class IncrementalProcessor:

@@ -32,7 +32,7 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     logger.warning("scikit-learn未安装，向量化功能受限")
 
-from ..config import config
+from config import config
 
 
 class TextEmbedder:

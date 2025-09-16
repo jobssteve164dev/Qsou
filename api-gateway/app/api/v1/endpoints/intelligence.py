@@ -586,7 +586,7 @@ def _create_empty_report(request: AnalysisRequest) -> IntelligenceReport:
     
     return IntelligenceReport(
         topic=request.topic,
-        summary=f"在指定的{request.time_range}天时间范围内，未找到与"{request.topic}"相关的足够信息。建议扩大时间范围或调整搜索关键词。",
+        summary=f"在指定的{request.time_range}天时间范围内，未找到与'{request.topic}'相关的足够信息。建议扩大时间范围或调整搜索关键词。",
         sentiment=SentimentData(
             positive=0.33,
             neutral=0.34,

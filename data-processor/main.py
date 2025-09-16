@@ -14,14 +14,20 @@ from datetime import datetime
 import asyncio
 
 # 导入各个模块
-from .pipeline import DataProcessingPipeline
-from .nlp.nlp_processor import NLPProcessor
-from .vector.vector_manager import VectorManager
-from .elasticsearch.index_manager import IndexManager
-from .elasticsearch.document_indexer import DocumentIndexer
-from .elasticsearch.search_engine import SearchEngine
-from .incremental.sync_manager import SyncManager
-from .config import config
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from pipeline import DataProcessingPipeline
+from nlp.nlp_processor import NLPProcessor
+from vector.vector_manager import VectorManager
+from elasticsearch.index_manager import IndexManager
+from elasticsearch.document_indexer import DocumentIndexer
+from elasticsearch.search_engine import SearchEngine
+from incremental.sync_manager import SyncManager
+from config import config
 
 
 class DataProcessorManager:

@@ -119,7 +119,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       router.events.off('routeChangeStart', handleRouteChange);
     };
-  }, [router, loading, isAuthenticated, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, loading, isAuthenticated, user]); // hasRole 依赖于 user，不需要单独添加
 
   const value: AuthContextType = {
     user,
@@ -163,7 +164,8 @@ export const withAuth = <P extends object>(
           router.push('/403');
         }
       }
-    }, [loading, isAuthenticated, user, router]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, isAuthenticated, user, router]); // hasRole 依赖于 user，不需要单独添加
 
     if (loading) {
       return (

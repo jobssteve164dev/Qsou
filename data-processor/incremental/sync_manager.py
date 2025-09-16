@@ -15,9 +15,9 @@ import threading
 import time
 from enum import Enum
 
-from .change_detector import ChangeDetector
-from .incremental_processor import IncrementalProcessor
-from ..config import config
+from incremental.change_detector import ChangeDetector
+from incremental.incremental_processor import IncrementalProcessor
+from config import config
 
 
 class SyncStatus(Enum):

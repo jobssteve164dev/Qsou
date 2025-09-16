@@ -15,7 +15,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from datetime import datetime
 import redis
-from ..config import config
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from config import config
 
 
 class Deduplicator:

@@ -13,13 +13,26 @@ LOG_LEVEL="INFO"
 # ============================================
 # 服务端口配置
 # ============================================
-API_PORT=8000
-FRONTEND_PORT=3000
+API_PORT=8888
+FRONTEND_PORT=3333
 CELERY_FLOWER_PORT=5555
 ELASTICSEARCH_PORT=9200
 QDRANT_PORT=6333
 POSTGRESQL_PORT=5432
 REDIS_PORT=6379
+
+# ============================================
+# 统一日志收集配置
+# ============================================
+# 启用统一日志收集（默认: true）
+ENABLE_UNIFIED_LOG=true
+
+# 统一日志文件最大行数（默认: 50000）
+# 超过此行数会自动轮转，保留最近80%的内容
+UNIFIED_LOG_MAX_LINES=50000
+
+# 日志收集刷新间隔（秒）
+LOG_COLLECTOR_REFRESH_INTERVAL=30
 PROMETHEUS_PORT=9090
 GRAFANA_PORT=3001
 
@@ -98,7 +111,7 @@ MAX_SEQUENCE_LENGTH=512
 SECRET_KEY="dev-secret-key-change-in-production"
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
-CORS_ORIGINS='["http://localhost:3000", "http://127.0.0.1:3000"]'
+CORS_ORIGINS='["http://localhost:3333", "http://127.0.0.1:3333"]'
 
 # ============================================
 # 日志配置
@@ -164,13 +177,14 @@ NEWS_API_KEY=""
 PID_DIR="./pids"
 
 # 进程启动等待时间（秒）
-SERVICE_START_WAIT=5
+SERVICE_START_WAIT=15
 SERVICE_STOP_WAIT=10
 SERVICE_KILL_WAIT=5
 
 # 健康检查重试次数
 HEALTH_CHECK_RETRIES=3
 HEALTH_CHECK_DELAY=2
+HEALTH_CHECK_INITIAL_WAIT=30
 
 # ============================================
 # 备份和清理配置

@@ -23,7 +23,7 @@ except ImportError:
     QDRANT_AVAILABLE = False
     logger.warning("qdrant-client未安装，向量存储功能不可用")
 
-from ..config import config
+from config import config
 
 
 class VectorStore:
