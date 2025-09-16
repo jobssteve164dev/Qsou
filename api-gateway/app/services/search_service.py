@@ -223,21 +223,36 @@ class SearchService:
         page_size: int
     ) -> Dict[str, Any]:
         """执行语义搜索"""
-        # TODO: 实现查询文本向量化
-        # 这里需要集成文本嵌入模型，将查询转换为向量
-        # 暂时使用模拟向量
+        # 观测优先：在关键节点记录调试信息
+        logger.info("开始语义搜索-向量化阶段", query=query[:50])
         query_vector = await self._vectorize_query(query)
+        logger.info(
+            "语义搜索-向量化完成",
+            vector_dim=len(query_vector)
+        )
         
         # 计算偏移量
         offset = (page - 1) * page_size
         
         # 执行向量搜索，获取更多结果用于分页
-        all_results = await self.qdrant.semantic_search(
-            query_vector=query_vector,
-            filters=filters,
-            limit=offset + page_size,
-            score_threshold=0.6
-        )
+        try:
+            all_results = await self.qdrant.semantic_search(
+                query_vector=query_vector,
+                filters=filters,
+                limit=offset + page_size,
+                score_threshold=0.6
+            )
+        except Exception as e:
+            # 强化错误上下文，暴露核心线索
+            logger.error(
+                "语义搜索调用Qdrant失败",
+                error=str(e),
+                vector_dim=len(query_vector),
+                expected_dim=settings.EMBEDDING_DIMENSION,
+                page=page,
+                page_size=page_size
+            )
+            raise
         
         # 分页处理
         results = all_results[offset:offset + page_size]
@@ -343,15 +358,16 @@ class SearchService:
             
             # 添加data-processor路径到Python路径
             data_processor_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data-processor')
-            sys.path.append(data_processor_path)
+            if data_processor_path not in sys.path:
+                sys.path.append(data_processor_path)
             
             from vector.embeddings import TextEmbedder
             import numpy as np
             
-            # 创建文本向量化器
+            # 创建文本向量化器（模型与维度由settings控制）
             embedder = TextEmbedder(
                 model_type="sentence_transformers",
-                model_name="paraphrase-multilingual-MiniLM-L12-v2",
+                model_name=settings.SENTENCE_TRANSFORMER_MODEL,
                 cache_embeddings=True
             )
             
@@ -361,6 +377,20 @@ class SearchService:
             # 转换为Python list
             if isinstance(vector, np.ndarray):
                 vector = vector.tolist()
+            
+            # 如果维度与配置不一致，记录警告并做安全扩展/截断
+            dim = len(vector)
+            expected = settings.EMBEDDING_DIMENSION
+            if dim != expected:
+                logger.warning(
+                    "向量维度与配置不一致，将进行调整",
+                    actual_dim=dim,
+                    expected_dim=expected
+                )
+                if dim > expected:
+                    vector = vector[:expected]
+                else:
+                    vector = vector + [0.0] * (expected - dim)
             
             logger.info("查询向量化完成", query=query[:50], vector_dim=len(vector))
             return vector
@@ -372,14 +402,10 @@ class SearchService:
             import hashlib
             import random
             
-            # 基于查询文本生成确定性的模拟向量
+            expected = settings.EMBEDDING_DIMENSION
             seed = int(hashlib.md5(query.encode()).hexdigest()[:8], 16)
             random.seed(seed)
-            
-            # 生成指定维度的向量
-            vector = [random.uniform(-1, 1) for _ in range(settings.EMBEDDING_DIMENSION)]
-            
-            # 归一化向量
+            vector = [random.uniform(-1, 1) for _ in range(expected)]
             norm = sum(x * x for x in vector) ** 0.5
             if norm > 0:
                 vector = [x / norm for x in vector]

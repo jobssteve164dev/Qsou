@@ -98,12 +98,19 @@ async def search_documents(search_query: SearchQuery):
         return response
         
     except Exception as e:
+        # 主动暴露详细错误，便于前端和日志定位
         logger.error(
             "搜索失败",
             query=search_query.query,
             error=str(e)
         )
-        raise HTTPException(status_code=500, detail=f"搜索服务异常: {str(e)}")
+        # 在开发环境下，返回更多上下文
+        from app.core.config import settings
+        detail = {
+            "message": "搜索服务异常",
+            "error": str(e)
+        } if settings.ENVIRONMENT == "development" else {"message": "搜索服务异常"}
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @router.get("/suggestions")

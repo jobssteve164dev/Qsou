@@ -94,6 +94,22 @@ class QdrantService:
             raise ConnectionError("Qdrant未连接")
         
         try:
+            # 观测优先：在真正请求Qdrant前先校验维度是否匹配
+            expected_dim = settings.EMBEDDING_DIMENSION
+            actual_dim = len(query_vector)
+            if actual_dim != expected_dim:
+                logger.error(
+                    "查询向量维度与集合配置不一致",
+                    expected_dim=expected_dim,
+                    actual_dim=actual_dim,
+                    collection=self.collection_name
+                )
+                # 主动暴露更明确的错误，便于前端提示与日志排查
+                raise ValueError(
+                    f"Vector dimension mismatch: expected {expected_dim}, got {actual_dim}. "
+                    f"请确保向量模型与Qdrant集合维度一致(集合: {self.collection_name})."
+                )
+            
             start_time = datetime.now()
             
             # 构建过滤器
