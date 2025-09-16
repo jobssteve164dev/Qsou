@@ -185,7 +185,7 @@ check_python_deps() {
                     need_install=true
                     log_info "FORCE_REINSTALL=true，强制重新安装API依赖"
                 else
-                    if eval "$API_PY -c 'import fastapi, uvicorn, sqlalchemy, redis, elasticsearch, qdrant_client'" >/dev/null 2>&1; then
+                    if eval "$API_PY -c 'import fastapi, uvicorn, sqlalchemy, redis, elasticsearch, qdrant_client, flower'" >/dev/null 2>&1; then
                         need_install=false
                         log_info "API依赖已满足，跳过安装（设置 FORCE_REINSTALL=true 可强制重装）"
                     else
@@ -213,7 +213,7 @@ check_python_deps() {
     # 复用同一虚拟环境为 data-processor 安装依赖，确保 Celery 与 API 在同一环境
     if [[ -f "data-processor/requirements.txt" ]]; then
         if [[ -n "$API_PY" ]]; then
-            if eval "$API_PY -c 'import elasticsearch, qdrant_client, redis, celery'" >/dev/null 2>&1; then
+            if eval "$API_PY -c 'import elasticsearch, qdrant_client, redis, celery, flower'" >/dev/null 2>&1; then
                 log_info "data-processor 核心依赖已满足（复用 API 虚拟环境）"
             else
                 log_info "为 data-processor 安装依赖到 API 虚拟环境..."
@@ -468,13 +468,15 @@ check_services() {
 
 # 目录与版本
 VENDOR_DIR="vendor"
+REDIS_DIR="$VENDOR_DIR/redis"
 ELASTIC_DIR="$VENDOR_DIR/elasticsearch"
 QDRANT_DIR="$VENDOR_DIR/qdrant"
+REDIS_VERSION_DEFAULT="5.0.14.1"
 ELASTIC_VERSION_DEFAULT="8.11.0"
 QDRANT_VERSION_DEFAULT="1.6.9"
 
 ensure_vendor_dirs() {
-    mkdir -p "$VENDOR_DIR" "$ELASTIC_DIR" "$QDRANT_DIR" 2>/dev/null || true
+    mkdir -p "$VENDOR_DIR" "$REDIS_DIR" "$ELASTIC_DIR" "$QDRANT_DIR" 2>/dev/null || true
 }
 
 install_elasticsearch_windows() {
@@ -706,6 +708,283 @@ start_qdrant_local() {
 }
 
 # ============================================
+# Redis服务管理
+# ============================================
+install_redis_windows() {
+    ensure_vendor_dirs
+    local redis_version="${REDIS_VERSION:-$REDIS_VERSION_DEFAULT}"
+    local redis_url="https://github.com/tporadowski/redis/releases/download/v${redis_version}/Redis-x64-${redis_version}.zip"
+    local redis_zip="$REDIS_DIR/redis-${redis_version}.zip"
+    
+    # 如果已安装则跳过
+    if [[ -f "$REDIS_DIR/redis-server.exe" ]]; then
+        log_debug "Redis 已安装在 $REDIS_DIR"
+        return 0
+    fi
+    
+    log_info "下载 Redis for Windows v${redis_version}..."
+    mkdir -p "$REDIS_DIR"
+    
+    # 下载Redis（显示进度）
+    log_info "下载地址: $redis_url"
+    if ! curl -L -o "$redis_zip" --progress-bar "$redis_url"; then
+        log_error "下载 Redis 失败，请检查网络连接"
+        rm -f "$redis_zip"
+        return 1
+    fi
+    
+    # 检查文件大小
+    local file_size=$(stat -c%s "$redis_zip" 2>/dev/null || stat -f%z "$redis_zip" 2>/dev/null || echo "0")
+    if [[ "$file_size" -lt 1000000 ]]; then
+        log_error "下载的文件太小（${file_size}字节），可能下载失败"
+        rm -f "$redis_zip"
+        return 1
+    fi
+    log_debug "下载完成，文件大小: ${file_size} 字节"
+    
+    log_info "解压 Redis..."
+    
+    # 尝试多种解压方式
+    local extract_success=false
+    
+    # 方法1：使用unzip（如果可用）
+    if command -v unzip &> /dev/null; then
+        log_debug "尝试使用 unzip 解压..."
+        if unzip -q -o "$redis_zip" -d "$REDIS_DIR" 2>/dev/null; then
+            extract_success=true
+            log_debug "unzip 解压成功"
+        fi
+    fi
+    
+    # 方法2：使用PowerShell（Windows环境）
+    if [[ "$extract_success" == "false" ]]; then
+        log_debug "尝试使用 PowerShell 解压..."
+        # 将路径转换为Windows格式
+        local win_zip=$(cygpath -w "$redis_zip" 2>/dev/null || echo "$redis_zip")
+        local win_dir=$(cygpath -w "$REDIS_DIR" 2>/dev/null || echo "$REDIS_DIR")
+        
+        if powershell -NoProfile -Command "
+            try {
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory('$win_zip', '$win_dir')
+                exit 0
+            } catch {
+                Write-Host \"PowerShell解压失败: \$_\"
+                exit 1
+            }
+        "; then
+            extract_success=true
+            log_debug "PowerShell 解压成功"
+        fi
+    fi
+    
+    # 方法3：使用7z（如果可用）
+    if [[ "$extract_success" == "false" ]] && command -v 7z &> /dev/null; then
+        log_debug "尝试使用 7z 解压..."
+        if 7z x "$redis_zip" -o"$REDIS_DIR" -y > /dev/null 2>&1; then
+            extract_success=true
+            log_debug "7z 解压成功"
+        fi
+    fi
+    
+    if [[ "$extract_success" == "false" ]]; then
+        log_error "解压失败，请手动安装Redis或安装unzip工具"
+        rm -f "$redis_zip"
+        return 1
+    fi
+    
+    # 清理zip文件
+    rm -f "$redis_zip"
+    
+    # 检查安装是否成功
+    if [[ -f "$REDIS_DIR/redis-server.exe" ]]; then
+        log_info "✓ Redis 安装成功"
+        # 设置执行权限（Git Bash环境）
+        chmod +x "$REDIS_DIR"/*.exe 2>/dev/null || true
+        return 0
+    else
+        log_error "Redis 安装失败，未找到redis-server.exe"
+        log_debug "目录内容："
+        ls -la "$REDIS_DIR" 2>/dev/null || true
+        return 1
+    fi
+}
+
+start_redis_local() {
+    # 检查redis-cli是否可用，如果可用则测试连接
+    if command -v redis-cli &> /dev/null; then
+        if redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" ping >/dev/null 2>&1; then
+            log_info "✓ Redis 已在运行"
+            return 0
+        fi
+    fi
+    
+    # 检查端口是否被占用
+    if check_port "${REDIS_PORT:-6379}" "Redis"; then
+        log_info "✓ Redis 端口已监听，视为运行中"
+        return 0
+    fi
+    
+    if [[ "$OS" == "windows" ]]; then
+        # Windows环境
+        install_redis_windows || return 1
+        
+        local redis_exe="$REDIS_DIR/redis-server.exe"
+        local redis_conf="$REDIS_DIR/redis.conf"
+        local pid_file="$PID_DIR/redis.pid"
+        local data_dir="$REDIS_DIR/data"
+        local log_file="$LOG_DIR/redis.log"  # 改为logs目录，让统一日志收集器能收集
+        
+        if [[ ! -f "$redis_exe" ]]; then
+            log_error "未找到Redis可执行文件"
+            return 1
+        fi
+        
+        # 创建必要的目录
+        mkdir -p "$data_dir"
+        mkdir -p "$LOG_DIR"
+        
+        # 将路径转换为Windows格式（避免路径问题）
+        local win_data_dir=$(cygpath -w "$data_dir" 2>/dev/null || echo "$data_dir")
+        
+        # 创建简单的配置文件
+        cat > "$redis_conf" << EOF
+# Redis开发环境配置
+bind 127.0.0.1
+port ${REDIS_PORT:-6379}
+dir ./data
+dbfilename dump.rdb
+appendonly no
+save ""
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+logfile ""
+EOF
+        
+        log_info "启动 Redis..."
+        
+        # 确保目录存在
+        mkdir -p "$LOG_DIR"
+        mkdir -p "$PID_DIR"
+        
+        # 在子shell中切换目录并启动Redis
+        (
+            cd "$REDIS_DIR" 2>/dev/null || {
+                log_error "无法进入Redis目录: $REDIS_DIR"
+                return 1
+            }
+            
+            # 在Redis目录下启动，使用相对路径
+            ./redis-server.exe redis.conf > "../../logs/redis.log" 2>&1 &
+            echo $!
+        ) > "$PID_DIR/redis.pid"
+        
+        local pid=$(cat "$PID_DIR/redis.pid" 2>/dev/null)
+        
+        if [[ -n "$pid" ]] && [[ "$pid" -gt 0 ]]; then
+            log_info "Redis 启动中 (PID: $pid)，等待就绪..."
+            
+            # 等待Redis就绪（使用安装目录中的redis-cli）
+            local redis_cli="$REDIS_DIR/redis-cli.exe"
+            for i in {1..10}; do
+                if [[ -f "$redis_cli" ]]; then
+                    if "$redis_cli" -h 127.0.0.1 -p "${REDIS_PORT:-6379}" ping >/dev/null 2>&1; then
+                        log_info "✓ Redis 就绪"
+                        return 0
+                    fi
+                elif check_port "${REDIS_PORT:-6379}" "Redis"; then
+                    log_info "✓ Redis 端口已监听，视为就绪"
+                    return 0
+                fi
+                sleep 1
+            done
+            
+            log_warn "Redis 启动超时"
+            return 1
+        else
+            log_error "Redis 启动失败"
+            return 1
+        fi
+        
+    elif [[ "$OS" == "linux" ]] || [[ "$OS" == "darwin" ]]; then
+        # Linux/Mac环境
+        if ! command -v redis-server &> /dev/null; then
+            log_error "Redis未安装，请先安装Redis："
+            if [[ "$OS" == "linux" ]]; then
+                log_info "  Ubuntu/Debian: sudo apt-get install redis-server"
+                log_info "  CentOS/RHEL: sudo yum install redis"
+            else
+                log_info "  macOS: brew install redis"
+            fi
+            return 1
+        fi
+        
+        local pid_file="$PID_DIR/redis.pid"
+        local data_dir="$HOME/.local/redis/data"
+        mkdir -p "$data_dir"
+        
+        log_info "启动 Redis..."
+        redis-server --bind 127.0.0.1 --port "${REDIS_PORT:-6379}" --dir "$data_dir" --daemonize yes --pidfile "$pid_file"
+        
+        # 等待Redis就绪
+        for i in {1..10}; do
+            if redis-cli -h 127.0.0.1 -p "${REDIS_PORT:-6379}" ping >/dev/null 2>&1; then
+                log_info "✓ Redis 就绪"
+                return 0
+            fi
+            sleep 1
+        done
+        
+        log_warn "Redis 启动超时"
+        return 1
+    else
+        log_warn "不支持的操作系统: $OS"
+        return 1
+    fi
+}
+
+stop_redis_local() {
+    local pid_file="$PID_DIR/redis.pid"
+    
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(cat "$pid_file")
+        
+        if [[ "$OS" == "windows" ]]; then
+            # 尝试优雅关闭
+            local redis_cli="$REDIS_DIR/redis-cli.exe"
+            if [[ -f "$redis_cli" ]]; then
+                "$redis_cli" -h 127.0.0.1 -p "${REDIS_PORT:-6379}" shutdown 2>/dev/null || true
+                sleep 1
+            fi
+            # 强制终止
+            taskkill /F /PID "$pid" 2>/dev/null || true
+        else
+            # 先尝试优雅关闭
+            if command -v redis-cli &> /dev/null; then
+                redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" shutdown 2>/dev/null || true
+                sleep 1
+            fi
+            # 发送终止信号
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
+        
+        rm -f "$pid_file"
+        log_info "✓ Redis已停止"
+    else
+        # 尝试通过redis-cli关闭
+        if [[ "$OS" == "windows" ]]; then
+            local redis_cli="$REDIS_DIR/redis-cli.exe"
+            if [[ -f "$redis_cli" ]]; then
+                "$redis_cli" -h 127.0.0.1 -p "${REDIS_PORT:-6379}" shutdown 2>/dev/null || true
+            fi
+        elif command -v redis-cli &> /dev/null; then
+            redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" shutdown 2>/dev/null || true
+        fi
+    fi
+}
+
+# ============================================
 # 统一日志收集机制
 # ============================================
 UNIFIED_LOG_FILE="${LOG_DIR}/unified.log"
@@ -728,108 +1007,48 @@ start_log_collector() {
         fi
     fi
     
-    log_info "启动统一日志收集器..."
+    log_info "启动统一日志收集器 (Python版本)..."
     
-    # 启动日志收集器后台进程
-    {
-        # 要监控的日志文件列表
-        local log_files=(
-            "${LOG_DIR}/api.log"
-            "${LOG_DIR}/frontend.log"
-            "${LOG_DIR}/celery-worker.log"
-            "${LOG_DIR}/celery-flower.log"
-            "${LOG_DIR}/elasticsearch.log"
-            "${LOG_DIR}/qdrant.log"
-        )
-        
-        # 添加额外的日志源（如果存在）
-        # Python/FastAPI uvicorn日志
-        if [[ -f "api-gateway/logs/uvicorn.log" ]]; then
-            log_files+=("api-gateway/logs/uvicorn.log")
-        fi
-        
-        # Next.js构建日志
-        if [[ -f "web-frontend/.next/trace" ]]; then
-            log_files+=("web-frontend/.next/trace")
-        fi
-        
-        # Celery详细日志
-        if [[ -f "data-processor/logs/celery.log" ]]; then
-            log_files+=("data-processor/logs/celery.log")
-        fi
-        
-        # 添加timestamp和来源标记的函数
-        add_log_prefix() {
-            local source=$1
-            while IFS= read -r line; do
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$source] $line"
-            done
-        }
-        
-        # 日志轮转函数
-        rotate_log_if_needed() {
-            if [[ -f "$UNIFIED_LOG_FILE" ]]; then
-                local line_count
-                line_count=$(wc -l < "$UNIFIED_LOG_FILE" 2>/dev/null || echo 0)
-                if [[ $line_count -gt $UNIFIED_LOG_MAX_LINES ]]; then
-                    # 保留最后的80%内容（避免频繁轮转）
-                    local keep_lines=$((UNIFIED_LOG_MAX_LINES * 8 / 10))
-                    local temp_file="${UNIFIED_LOG_FILE}.tmp"
-                    tail -n "$keep_lines" "$UNIFIED_LOG_FILE" > "$temp_file"
-                    mv "$temp_file" "$UNIFIED_LOG_FILE"
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [LOG-COLLECTOR] 日志轮转完成，保留最近 $keep_lines 行" >> "$UNIFIED_LOG_FILE"
-                fi
-            fi
-        }
-        
-        # 主循环：监控所有日志文件
-        while true; do
-            # 检查并轮转日志
-            rotate_log_if_needed
-            
-            # 使用tail监控所有存在的日志文件
-            for log_file in "${log_files[@]}"; do
-                if [[ -f "$log_file" ]]; then
-                    # 从文件名提取服务名
-                    local service_name
-                    service_name=$(basename "$log_file" .log)
-                    # 使用非阻塞方式读取新行
-                    tail -n 0 -F "$log_file" 2>/dev/null | add_log_prefix "$service_name" >> "$UNIFIED_LOG_FILE" &
-                fi
-            done
-            
-            # 监控系统服务日志（如果可用）
-            if [[ "$OS" == "windows" ]]; then
-                # Windows: 监控Elasticsearch目录日志
-                if [[ -f "$ELASTIC_DIR/current.path" ]]; then
-                    local es_base
-                    es_base=$(cat "$ELASTIC_DIR/current.path" 2>/dev/null)
-                    if [[ -n "$es_base" && -d "$es_base/logs" ]]; then
-                        tail -n 0 -F "$es_base/logs/elasticsearch.log" 2>/dev/null | add_log_prefix "ES-NATIVE" >> "$UNIFIED_LOG_FILE" &
-                    fi
-                fi
-            fi
-            
-            # 等待一段时间后重新检查（处理新创建的日志文件）
-            sleep "${LOG_COLLECTOR_REFRESH_INTERVAL:-30}"
-            
-            # 清理已经结束的tail进程
-            jobs -p | while read -r pid; do
-                if ! kill -0 "$pid" 2>/dev/null; then
-                    wait "$pid" 2>/dev/null
-                fi
-            done
-        done
-    } &
+    # 使用Python日志收集器（更高效、跨平台）
+    local python_cmd=""
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        python_cmd="api-gateway/.venv/Scripts/python.exe"
+    elif [[ -f "api-gateway/.venv/bin/python" ]]; then
+        python_cmd="api-gateway/.venv/bin/python"
+    else
+        python_cmd="${PYTHON_CMD:-python}"
+    fi
+    
+    # 检查Python脚本是否存在
+    if [[ ! -f "scripts/unified_logger.py" ]]; then
+        log_warn "Python日志收集器脚本不存在，跳过日志收集"
+        return 1
+    fi
+    
+    # 启动Python日志收集器
+    $python_cmd scripts/unified_logger.py \
+        --output "$UNIFIED_LOG_FILE" \
+        --max-lines "${UNIFIED_LOG_MAX_LINES:-50000}" \
+        --interval "${LOG_COLLECTOR_CHECK_INTERVAL:-2}" \
+        > "$LOG_DIR/collector.log" 2>&1 &
     
     local collector_pid=$!
     echo "$collector_pid" > "$pid_file"
     
-    log_info "✓ 日志收集器已启动 (PID: $collector_pid)"
-    log_info "统一日志文件: $UNIFIED_LOG_FILE"
-    log_info "最大行数限制: $UNIFIED_LOG_MAX_LINES"
+    # 等待一下确认启动成功
+    sleep 2
     
-    return 0
+    if kill -0 "$collector_pid" 2>/dev/null; then
+        log_info "✓ 日志收集器已启动 (PID: $collector_pid)"
+        log_info "  - 统一日志文件: $UNIFIED_LOG_FILE"
+        log_info "  - 最大行数限制: $UNIFIED_LOG_MAX_LINES"
+        log_info "  - 使用Python实现，内存占用更低"
+        return 0
+    else
+        log_error "日志收集器启动失败"
+        rm -f "$pid_file"
+        return 1
+    fi
 }
 
 stop_log_collector() {
@@ -842,21 +1061,55 @@ stop_log_collector() {
         if kill -0 "$pid" 2>/dev/null; then
             log_info "停止日志收集器 (PID: $pid)..."
             
-            # 停止主进程和所有子进程
-            if [[ "$OS" == "windows" ]]; then
-                # Windows: 杀死进程树
-                taskkill /T /F /PID "$pid" 2>/dev/null || true
-            else
-                # Unix: 杀死进程组
-                kill -TERM -"$pid" 2>/dev/null || true
-                sleep 2
-                kill -KILL -"$pid" 2>/dev/null || true
+            # 发送SIGTERM信号，让Python程序优雅退出
+            kill -TERM "$pid" 2>/dev/null || true
+            
+            # 等待进程退出
+            local wait_count=0
+            while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt 5 ]]; do
+                sleep 1
+                ((wait_count++))
+            done
+            
+            # 如果还在运行，强制终止
+            if kill -0 "$pid" 2>/dev/null; then
+                log_warn "日志收集器未响应，强制终止..."
+                if [[ "$OS" == "windows" ]]; then
+                    # Windows: 强制杀死进程树
+                    taskkill /T /F /PID "$pid" 2>/dev/null || true
+                else
+                    # Unix: 强制杀死
+                    kill -KILL "$pid" 2>/dev/null || true
+                fi
             fi
             
             log_info "✓ 日志收集器已停止"
+        else
+            log_debug "日志收集器进程不存在"
         fi
         
         rm -f "$pid_file"
+    else
+        log_debug "日志收集器PID文件不存在"
+    fi
+    
+    # 额外检查：清理可能残留的Python日志收集进程
+    if [[ "$OS" == "windows" ]]; then
+        # Windows: 查找并终止unified_logger.py进程
+        tasklist 2>/dev/null | grep -i "unified_logger" | awk '{print $2}' | while read -r pid; do
+            if [[ -n "$pid" ]]; then
+                log_debug "清理残留日志收集进程: $pid"
+                taskkill /F /PID "$pid" 2>/dev/null || true
+            fi
+        done
+    else
+        # Unix: 查找并终止unified_logger.py进程（使用ps代替pgrep）
+        ps aux | grep -v grep | grep "unified_logger.py" | awk '{print $2}' | while read -r pid; do
+            if [[ -n "$pid" ]]; then
+                log_debug "清理残留日志收集进程: $pid"
+                kill -TERM "$pid" 2>/dev/null || true
+            fi
+        done
     fi
 }
 
@@ -949,10 +1202,28 @@ search_unified_log() {
     fi
     echo ""
     
-    if [[ -n "$service" ]]; then
-        grep "\[$service\]" "$UNIFIED_LOG_FILE" | grep -iE "$pattern" || log_warn "未找到匹配的日志"
+    # 使用Python搜索（更高效）
+    local python_cmd=""
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        python_cmd="api-gateway/.venv/Scripts/python.exe"
+    elif [[ -f "api-gateway/.venv/bin/python" ]]; then
+        python_cmd="api-gateway/.venv/bin/python"
     else
-        grep -iE "$pattern" "$UNIFIED_LOG_FILE" || log_warn "未找到匹配的日志"
+        python_cmd="${PYTHON_CMD:-python}"
+    fi
+    
+    if [[ -f "scripts/unified_logger.py" ]]; then
+        $python_cmd scripts/unified_logger.py \
+            --output "$UNIFIED_LOG_FILE" \
+            --search "$pattern" \
+            ${service:+--service "$service"} || log_warn "未找到匹配的日志"
+    else
+        # 回退到grep
+        if [[ -n "$service" ]]; then
+            grep "\[$service\]" "$UNIFIED_LOG_FILE" | grep -iE "$pattern" || log_warn "未找到匹配的日志"
+        else
+            grep -iE "$pattern" "$UNIFIED_LOG_FILE" || log_warn "未找到匹配的日志"
+        fi
     fi
 }
 
@@ -968,24 +1239,42 @@ show_log_level() {
     log_info "显示 $level 级别的日志..."
     echo ""
     
-    case "$level" in
-        ERROR|error)
-            grep -iE "(error|exception|failed|fatal)" "$UNIFIED_LOG_FILE" || log_info "未找到错误日志"
-            ;;
-        WARN|warn|WARNING|warning)
-            grep -iE "(warn|warning)" "$UNIFIED_LOG_FILE" || log_info "未找到警告日志"
-            ;;
-        INFO|info)
-            grep -iE "(info|information)" "$UNIFIED_LOG_FILE" || log_info "未找到信息日志"
-            ;;
-        DEBUG|debug)
-            grep -iE "(debug|trace)" "$UNIFIED_LOG_FILE" || log_info "未找到调试日志"
-            ;;
-        *)
-            log_error "未知的日志级别: $level"
-            log_info "支持的级别: ERROR, WARN, INFO, DEBUG"
-            ;;
-    esac
+    # 使用Python搜索（更高效）
+    local python_cmd=""
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        python_cmd="api-gateway/.venv/Scripts/python.exe"
+    elif [[ -f "api-gateway/.venv/bin/python" ]]; then
+        python_cmd="api-gateway/.venv/bin/python"
+    else
+        python_cmd="${PYTHON_CMD:-python}"
+    fi
+    
+    if [[ -f "scripts/unified_logger.py" ]]; then
+        $python_cmd scripts/unified_logger.py \
+            --output "$UNIFIED_LOG_FILE" \
+            --search "" \
+            --level "$level" || log_info "未找到 $level 级别的日志"
+    else
+        # 回退到grep
+        case "$level" in
+            ERROR|error)
+                grep -iE "(error|exception|failed|fatal)" "$UNIFIED_LOG_FILE" || log_info "未找到错误日志"
+                ;;
+            WARN|warn|WARNING|warning)
+                grep -iE "(warn|warning)" "$UNIFIED_LOG_FILE" || log_info "未找到警告日志"
+                ;;
+            INFO|info)
+                grep -iE "(info|information)" "$UNIFIED_LOG_FILE" || log_info "未找到信息日志"
+                ;;
+            DEBUG|debug)
+                grep -iE "(debug|trace)" "$UNIFIED_LOG_FILE" || log_info "未找到调试日志"
+                ;;
+            *)
+                log_error "未知的日志级别: $level"
+                log_info "支持的级别: ERROR, WARN, INFO, DEBUG"
+                ;;
+        esac
+    fi
 }
 
 # ============================================
@@ -1185,9 +1474,19 @@ start_all_services() {
 
     # 若存在API虚拟环境，优先使用本地路径调用
     if [[ -n "$API_PY_LOCAL" ]]; then
-        UVICORN_CMD="cd api-gateway && \"$API_PY_LOCAL\" -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        if [[ "$OS" == "windows" ]]; then
+            # Git Bash中使用export而不是set，移除chcp命令避免错误
+            UVICORN_CMD="cd api-gateway && export PYTHONIOENCODING=utf-8 && \"$API_PY_LOCAL\" -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        else
+            UVICORN_CMD="cd api-gateway && PYTHONIOENCODING=utf-8 \"$API_PY_LOCAL\" -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        fi
     else
-        UVICORN_CMD="cd api-gateway && $PY_CMD -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        if [[ "$OS" == "windows" ]]; then
+            # Git Bash中使用export而不是set，移除chcp命令避免错误
+            UVICORN_CMD="cd api-gateway && export PYTHONIOENCODING=utf-8 && $PY_CMD -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        else
+            UVICORN_CMD="cd api-gateway && PYTHONIOENCODING=utf-8 $PY_CMD -m uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload"
+        fi
     fi
 
     # 启动API服务
@@ -1201,16 +1500,18 @@ start_all_services() {
     
     # 启动Celery工作进程（使用API虚拟环境）
     if [[ "$OS" == "windows" ]]; then
-        start_service "celery-worker" "cd data-processor && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+        # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     else
-        start_service "celery-worker" "cd data-processor && ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     fi
     
     # 启动Celery监控（可选）
     if [[ "$OS" == "windows" ]]; then
-        start_service "celery-flower" "cd data-processor && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555}"
+        # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
+        start_service "celery-flower" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     else
-        start_service "celery-flower" "cd data-processor && ../api-gateway/.venv/bin/python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555}"
+        start_service "celery-flower" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     fi
     
     # 等待服务完全启动
@@ -1250,10 +1551,14 @@ start_all_services() {
 stop_all_services() {
     log_step "停止所有开发服务..."
     
-    local services=("celery-flower" "celery-worker" "frontend" "api" "elasticsearch" "qdrant")
+    local services=("celery-flower" "celery-worker" "frontend" "api" "elasticsearch" "qdrant" "redis")
     
     for service in "${services[@]}"; do
-        stop_service "$service"
+        if [[ "$service" == "redis" ]]; then
+            stop_redis_local
+        else
+            stop_service "$service"
+        fi
     done
     
     # 停止日志收集器
@@ -1268,7 +1573,7 @@ stop_all_services() {
 cleanup() {
     log_step "执行清理操作..."
     
-    # 停止所有服务
+    # 停止所有服务（包括日志收集器）
     stop_all_services
     
     # 清理PID文件
@@ -1474,6 +1779,7 @@ main() {
             clean_ports
             # 在启动任何服务之前，确保数据服务先安装并启动
             if [[ "${AUTO_START_DATA_SERVICES:-true}" == "true" ]]; then
+                start_redis_local || log_warn "Redis 自动启动未成功"
                 start_elasticsearch_local || log_warn "Elasticsearch 自动启动未成功"
                 start_qdrant_local || log_warn "Qdrant 自动启动未成功"
             else

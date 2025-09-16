@@ -268,7 +268,7 @@ results = vector_mgr.search(
 提供强大的全文搜索能力：
 
 ```python
-from elasticsearch.search_engine import SearchEngine
+from es_indexing.search_engine import SearchEngine
 
 search_engine = SearchEngine()
 

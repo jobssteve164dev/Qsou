@@ -29,8 +29,8 @@ try:
     from pipeline import DataProcessingPipeline
     from nlp.nlp_processor import NLPProcessor
     from vector.vector_manager import VectorManager
-    from elasticsearch.document_indexer import DocumentIndexer
-    from elasticsearch.search_engine import SearchEngine
+    from es_indexing.document_indexer import DocumentIndexer
+    from es_indexing.search_engine import SearchEngine
     from config import config
     logger.info("成功导入所有数据处理模块")
 except ImportError as e:

@@ -1,9 +1,10 @@
 import React from 'react';
 import Link from 'next/link';
-import { Calendar, ExternalLink, Tag, TrendingUp } from 'lucide-react';
+import { Calendar, ExternalLink, Tag, TrendingUp, AlertCircle, RefreshCw, Search, FileSearch } from 'lucide-react';
 import { SearchDocument, SearchResponse } from '@/types';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
+import { Button } from '@/components/ui/Button';
 import { dateUtils, textUtils, numberUtils } from '@/utils';
 
 interface SearchResultsProps {
@@ -25,53 +26,120 @@ const SearchResults: React.FC<SearchResultsProps> = ({
 }) => {
   if (loading && !results) {
     return (
-      <div className="py-12">
-        <Loading size="lg" text="正在搜索相关资讯..." />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-50 rounded-full mb-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-primary-600 border-t-transparent"></div>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">正在搜索</h3>
+          <p className="text-sm text-gray-500">正在为您查找相关资讯...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
-        <CardContent className="py-8 text-center">
-          <div className="text-red-600 mb-4">
-            <ExternalLink className="h-12 w-12 mx-auto mb-2" />
-            <h3 className="text-lg font-medium">搜索出现错误</h3>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="text-center">
+          {/* 错误图标 */}
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mb-4">
+            <AlertCircle className="h-8 w-8 text-red-500" />
           </div>
-          <p className="text-red-500 text-sm mb-4">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-primary-600 hover:text-primary-700 font-medium"
-          >
-            重新尝试
-          </button>
-        </CardContent>
-      </Card>
+          
+          {/* 错误标题 */}
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            搜索出现错误
+          </h3>
+          
+          {/* 错误详情 */}
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            {error === 'Request failed with status code 500' 
+              ? '服务器暂时无法处理您的请求，请稍后再试'
+              : error}
+          </p>
+          
+          {/* 操作按钮 */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              重新尝试
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={() => window.history.back()}
+              className="inline-flex items-center"
+            >
+              返回上一页
+            </Button>
+          </div>
+          
+          {/* 帮助提示 */}
+          <div className="mt-8 pt-6 border-t border-gray-200 max-w-md mx-auto">
+            <p className="text-sm text-gray-500 mb-3">您可以尝试：</p>
+            <ul className="text-sm text-gray-600 space-y-1">
+              <li>• 检查网络连接是否正常</li>
+              <li>• 简化搜索关键词</li>
+              <li>• 稍后再次尝试搜索</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!results || results.documents.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <div className="text-gray-400 mb-4">
-            <TrendingUp className="h-12 w-12 mx-auto mb-2" />
-            <h3 className="text-lg font-medium text-gray-600">未找到相关结果</h3>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="text-center">
+          {/* 无结果图标 */}
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-50 rounded-full mb-4">
+            <FileSearch className="h-8 w-8 text-gray-400" />
           </div>
-          <p className="text-gray-500 text-sm mb-4">
-            尝试使用不同的关键词或扩大搜索范围
+          
+          {/* 标题 */}
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            未找到相关结果
+          </h3>
+          
+          {/* 描述 */}
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            没有找到与 "{query}" 相关的内容
           </p>
-          <div className="text-sm text-gray-400">
-            <p>建议:</p>
-            <ul className="mt-2 space-y-1">
-              <li>• 检查搜索关键词的拼写</li>
-              <li>• 尝试使用更通用的关键词</li>
-              <li>• 调整筛选条件</li>
+          
+          {/* 建议列表 */}
+          <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left max-w-md mx-auto">
+            <p className="text-sm font-medium text-gray-700 mb-3">搜索建议：</p>
+            <ul className="text-sm text-gray-600 space-y-2">
+              <li className="flex items-start">
+                <Search className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                <span>检查关键词拼写是否正确</span>
+              </li>
+              <li className="flex items-start">
+                <Search className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                <span>尝试使用更通用的搜索词</span>
+              </li>
+              <li className="flex items-start">
+                <Search className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                <span>减少筛选条件或扩大时间范围</span>
+              </li>
             </ul>
           </div>
-        </CardContent>
-      </Card>
+          
+          {/* 操作按钮 */}
+          <Button
+            variant="outline"
+            onClick={() => window.location.href = '/'}
+            className="inline-flex items-center"
+          >
+            重新搜索
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -106,16 +174,20 @@ const SearchResults: React.FC<SearchResultsProps> = ({
 
       {/* 加载更多按钮 */}
       {hasMore && (
-        <div className="text-center py-6">
+        <div className="flex justify-center py-8">
           {loading ? (
-            <Loading size="md" text="加载中..." />
+            <div className="inline-flex items-center px-6 py-3 text-gray-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-600 border-t-transparent mr-3"></div>
+              <span className="text-sm">加载中...</span>
+            </div>
           ) : (
-            <button
+            <Button
+              variant="outline"
               onClick={onLoadMore}
-              className="px-6 py-2 text-primary-600 hover:text-primary-700 font-medium border border-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+              className="inline-flex items-center px-6 py-2.5"
             >
               加载更多结果
-            </button>
+            </Button>
           )}
         </div>
       )}

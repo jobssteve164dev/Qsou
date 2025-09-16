@@ -21,7 +21,7 @@ langdetect==1.0.9
 
 # 数据库连接
 elasticsearch==8.11.0
-qdrant-client==1.7.0
+qdrant-client==1.12.1
 redis==5.0.1
 psycopg2-binary==2.9.9
 
@@ -33,6 +33,7 @@ tqdm==4.66.1
 
 # 任务队列
 celery==5.3.4
+flower==2.0.1
 
 # 配置管理
 pydantic==2.5.0

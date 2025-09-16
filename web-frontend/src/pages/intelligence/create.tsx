@@ -10,9 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { analysisApi } from '@/services/api';
 import { AnalysisRequest } from '@/types';
 import { dateUtils, errorUtils } from '@/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const CreateAnalysisPage: React.FC = () => {
   const router = useRouter();
+  
+  // 使用认证Hook，开发环境下会自动静默登录
+  const { isAuthenticated, isLoading: authLoading } = useAuth({
+    redirectTo: '/login',
+    redirectIfFound: false,
+    enableSilentLogin: true, // 开发环境启用静默登录
+  });
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -149,6 +158,31 @@ const CreateAnalysisPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // 处理认证加载状态
+  if (authLoading) {
+    return (
+      <Layout>
+        <Head>
+          <title>新建智能分析 - QSou</title>
+          <meta name="description" content="创建新的投资主题智能分析任务" />
+        </Head>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">
+              {process.env.NODE_ENV === 'development' ? '正在自动登录...' : '正在验证身份...'}
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // 未认证状态会由useAuth自动处理重定向
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <Layout>

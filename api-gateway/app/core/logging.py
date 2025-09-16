@@ -10,6 +10,16 @@ from datetime import datetime
 import structlog
 from pathlib import Path
 
+# Windows环境设置UTF-8编码
+if sys.platform == 'win32':
+    import locale
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    # 重新配置标准输出流
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+
 from app.core.config import settings
 
 

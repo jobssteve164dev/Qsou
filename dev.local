@@ -22,16 +22,20 @@ POSTGRESQL_PORT=5432
 REDIS_PORT=6379
 
 # ============================================
-# 统一日志收集配置
+# 统一日志收集配置（Python版本，更高效）
 # ============================================
 # 启用统一日志收集（默认: true）
+# 现在使用Python实现，内存占用大幅降低
 ENABLE_UNIFIED_LOG=true
 
 # 统一日志文件最大行数（默认: 50000）
 # 超过此行数会自动轮转，保留最近80%的内容
-UNIFIED_LOG_MAX_LINES=50000
+UNIFIED_LOG_MAX_LINES=30000
 
-# 日志收集刷新间隔（秒）
+# 日志收集检查间隔（秒）
+LOG_COLLECTOR_CHECK_INTERVAL=2
+
+# 日志收集刷新间隔（秒）- 已废弃，使用CHECK_INTERVAL
 LOG_COLLECTOR_REFRESH_INTERVAL=30
 PROMETHEUS_PORT=9090
 GRAFANA_PORT=3001

@@ -101,13 +101,29 @@ class VectorStore:
                 logger.info(f"集合 {self.collection_name} 已存在")
                 self.collection_exists = True
                 
-                # 验证向量维度
-                collection_info = self.client.get_collection(self.collection_name)
-                existing_dimension = collection_info.config.params.vectors.size
-                
-                if existing_dimension != self.vector_dimension:
-                    logger.warning(f"集合向量维度不匹配: 期望 {self.vector_dimension}, 实际 {existing_dimension}")
-                    # 可以选择重新创建集合或调整维度
+                # 验证向量维度（兼容新版本Qdrant）
+                try:
+                    collection_info = self.client.get_collection(self.collection_name)
+                    # 尝试不同的API结构以兼容不同版本
+                    existing_dimension = None
+                    
+                    # 尝试新版本API结构
+                    if hasattr(collection_info, 'config') and hasattr(collection_info.config, 'params'):
+                        if hasattr(collection_info.config.params, 'vectors'):
+                            if hasattr(collection_info.config.params.vectors, 'size'):
+                                existing_dimension = collection_info.config.params.vectors.size
+                    
+                    # 如果新版本API失败，尝试其他结构
+                    if existing_dimension is None and hasattr(collection_info, 'vectors_count'):
+                        # 新版本可能有不同的结构，暂时跳过维度验证
+                        logger.info(f"集合 {self.collection_name} 存在，跳过维度验证（API版本兼容性）")
+                    elif existing_dimension is not None and existing_dimension != self.vector_dimension:
+                        logger.warning(f"集合向量维度不匹配: 期望 {self.vector_dimension}, 实际 {existing_dimension}")
+                        # 可以选择重新创建集合或调整维度
+                except Exception as e:
+                    # 如果验证失败，记录警告但继续运行
+                    logger.warning(f"无法验证集合维度（可能是版本兼容性问题）: {str(e)}")
+                    # 集合存在，继续使用
                     
             else:
                 # 创建新集合
@@ -440,16 +456,34 @@ class VectorStore:
         try:
             collection_info = self.client.get_collection(self.collection_name)
             
-            return {
-                'name': self.collection_name,
-                'vectors_count': collection_info.vectors_count,
-                'indexed_vectors_count': collection_info.indexed_vectors_count,
-                'points_count': collection_info.points_count,
-                'segments_count': collection_info.segments_count,
-                'vector_size': collection_info.config.params.vectors.size,
-                'distance': collection_info.config.params.vectors.distance,
-                'status': collection_info.status
-            }
+            # 构建兼容不同版本的集合信息
+            info = {'name': self.collection_name}
+            
+            # 尝试获取各种属性（兼容不同版本）
+            if hasattr(collection_info, 'vectors_count'):
+                info['vectors_count'] = collection_info.vectors_count
+            if hasattr(collection_info, 'indexed_vectors_count'):
+                info['indexed_vectors_count'] = collection_info.indexed_vectors_count
+            if hasattr(collection_info, 'points_count'):
+                info['points_count'] = collection_info.points_count
+            if hasattr(collection_info, 'segments_count'):
+                info['segments_count'] = collection_info.segments_count
+            if hasattr(collection_info, 'status'):
+                info['status'] = collection_info.status
+                
+            # 尝试获取向量配置信息
+            try:
+                if hasattr(collection_info, 'config') and hasattr(collection_info.config, 'params'):
+                    if hasattr(collection_info.config.params, 'vectors'):
+                        if hasattr(collection_info.config.params.vectors, 'size'):
+                            info['vector_size'] = collection_info.config.params.vectors.size
+                        if hasattr(collection_info.config.params.vectors, 'distance'):
+                            info['distance'] = collection_info.config.params.vectors.distance
+            except Exception:
+                # 忽略向量配置获取失败
+                pass
+            
+            return info
             
         except Exception as e:
             logger.error(f"获取集合信息失败: {str(e)}")

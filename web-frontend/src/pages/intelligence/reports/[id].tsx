@@ -14,10 +14,18 @@ import { Loading } from '@/components/ui/Loading';
 import { analysisApi } from '@/services/api';
 import { AnalysisReport, SearchDocument } from '@/types';
 import { dateUtils, textUtils, errorUtils, numberUtils } from '@/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const ReportDetailPage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
+  
+  // 使用认证Hook，开发环境下会自动静默登录
+  const { isAuthenticated, isLoading: authLoading } = useAuth({
+    redirectTo: '/login',
+    redirectIfFound: false,
+    enableSilentLogin: true, // 开发环境启用静默登录
+  });
   
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,9 +116,12 @@ ${report.key_points.map((point, index) => `${index + 1}. ${point}`).join('\n')}
   };
 
   useEffect(() => {
-    fetchReport();
+    // 等待认证完成后再获取报告
+    if (!authLoading && isAuthenticated && id) {
+      fetchReport();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]); // 当ID改变时重新获取报告
+  }, [authLoading, isAuthenticated, id]); // 当认证状态或ID改变时重新获取报告
 
   // 获取状态颜色和文本
   const getStatusColor = (status: AnalysisReport['status']) => {
@@ -132,6 +143,30 @@ ${report.key_points.map((point, index) => `${index + 1}. ${point}`).join('\n')}
     };
     return statusMap[status];
   };
+
+  // 处理认证加载状态
+  if (authLoading) {
+    return (
+      <Layout>
+        <Head>
+          <title>智能分析报告 - QSou</title>
+        </Head>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">
+              {process.env.NODE_ENV === 'development' ? '正在自动登录...' : '正在验证身份...'}
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // 未认证状态会由useAuth自动处理重定向
+  if (!isAuthenticated) {
+    return null;
+  }
 
   if (loading) {
     return (

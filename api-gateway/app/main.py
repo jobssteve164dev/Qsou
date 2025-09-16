@@ -3,13 +3,18 @@ Qsou Investment Intelligence Engine - API Gateway
 主应用程序入口点
 """
 
+import os
+import sys
+# Windows环境设置UTF-8编码
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
 import logging
-import os
 from datetime import datetime
 
 from app.core.config import settings

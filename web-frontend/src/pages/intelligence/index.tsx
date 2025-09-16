@@ -10,8 +10,16 @@ import { Loading } from '@/components/ui/Loading';
 import { analysisApi } from '@/services/api';
 import { AnalysisReport } from '@/types';
 import { dateUtils, textUtils, errorUtils } from '@/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const IntelligencePage: React.FC = () => {
+  // 使用认证Hook，开发环境下会自动静默登录
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth({
+    redirectTo: '/login',
+    redirectIfFound: false,
+    enableSilentLogin: true, // 开发环境启用静默登录
+  });
+
   const [reports, setReports] = useState<AnalysisReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,9 +73,12 @@ const IntelligencePage: React.FC = () => {
 
   // 初始化加载
   useEffect(() => {
-    fetchReports();
+    // 等待认证完成后再加载报告
+    if (!authLoading && isAuthenticated) {
+      fetchReports();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 只在组件加载时执行一次
+  }, [authLoading, isAuthenticated]); // 认证状态变化时执行
 
   // 获取状态颜色
   const getStatusColor = (status: AnalysisReport['status']) => {
@@ -90,6 +101,31 @@ const IntelligencePage: React.FC = () => {
     };
     return statusMap[status];
   };
+
+  // 处理认证加载状态
+  if (authLoading) {
+    return (
+      <Layout>
+        <Head>
+          <title>智能情报分析 - QSou</title>
+          <meta name="description" content="智能情报分析管理，创建和查看投资主题分析报告" />
+        </Head>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">
+              {process.env.NODE_ENV === 'development' ? '正在自动登录...' : '正在验证身份...'}
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // 未认证状态会由useAuth自动处理重定向
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <Layout>
