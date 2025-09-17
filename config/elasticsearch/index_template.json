@@ -6,14 +6,11 @@
       "number_of_replicas": 0,
       "analysis": {
         "analyzer": {
-          "ik_smart_analyzer": {
-            "type": "ik_smart"
-          },
-          "ik_max_word_analyzer": {
-            "type": "ik_max_word"
+          "standard_analyzer": {
+            "type": "standard"
           },
           "financial_analyzer": {
-            "tokenizer": "ik_max_word",
+            "tokenizer": "standard",
             "filter": [
               "lowercase",
               "financial_synonym"
@@ -45,8 +42,8 @@
       "properties": {
         "title": {
           "type": "text",
-          "analyzer": "ik_smart_analyzer",
-          "search_analyzer": "ik_smart_analyzer",
+          "analyzer": "standard_analyzer",
+          "search_analyzer": "standard_analyzer",
           "fields": {
             "raw": {
               "type": "keyword"
@@ -56,11 +53,11 @@
         "content": {
           "type": "text",
           "analyzer": "financial_analyzer",
-          "search_analyzer": "ik_smart_analyzer"
+          "search_analyzer": "standard_analyzer"
         },
         "summary": {
           "type": "text",
-          "analyzer": "ik_smart_analyzer"
+          "analyzer": "standard_analyzer"
         },
         "url": {
           "type": "keyword",

@@ -69,7 +69,8 @@ class UnifiedLogCollector:
             "celery-worker.log",
             "celery-flower.log",
             "elasticsearch.log",
-            "qdrant.log"
+            "qdrant.log",
+            "redis.log"
         ]
         
     def start(self):

@@ -67,21 +67,18 @@ class IndexManager:
             self.client = None
     
     def _get_default_index_settings(self) -> Dict[str, Any]:
-        """获取默认索引设置"""
+        """获取默认索引设置 - 使用标准分析器替代IK分析器"""
         return {
             "number_of_shards": 1,
             "number_of_replicas": 0,
             "max_result_window": 50000,
             "analysis": {
                 "analyzer": {
-                    "ik_smart_analyzer": {
-                        "type": "ik_smart"
-                    },
-                    "ik_max_word_analyzer": {
-                        "type": "ik_max_word"
+                    "standard_analyzer": {
+                        "type": "standard"
                     },
                     "financial_analyzer": {
-                        "tokenizer": "ik_max_word",
+                        "tokenizer": "standard",
                         "filter": [
                             "lowercase",
                             "financial_synonym",
@@ -89,7 +86,7 @@ class IndexManager:
                         ]
                     },
                     "search_analyzer": {
-                        "tokenizer": "ik_smart",
+                        "tokenizer": "standard",
                         "filter": [
                             "lowercase",
                             "financial_synonym"

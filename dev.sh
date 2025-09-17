@@ -606,11 +606,12 @@ start_elasticsearch_local() {
             fi
         fi
 
-        log_info "启动Elasticsearch...（日志见 $base_dir/logs/elasticsearch.log）"
-        # 通过PowerShell启动并获取PID（不做文件重定向，避免权限/编码问题）
+        local log_file="$LOG_DIR/elasticsearch.log"
+        log_info "启动Elasticsearch...（日志见 $log_file）"
+        # 通过PowerShell启动并获取PID，同时重定向日志到项目logs目录
         local ps_cmd
-        # 开发模式禁用安全与HTTPS，单机引导
-        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        # 开发模式禁用安全与HTTPS，单机引导，指定日志文件路径
+        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false','-Epath.logs=$LOG_DIR' -RedirectStandardOutput '$log_file' -RedirectStandardError '$log_file' -WindowStyle Hidden -PassThru | Select -Expand Id"
         local pid
         pid=$(powershell -NoProfile -Command "$ps_cmd")
         if [[ -n "$pid" ]]; then
@@ -624,7 +625,7 @@ start_elasticsearch_local() {
                 fi
                 sleep 1
             done
-            log_warn "Elasticsearch 启动超时，请查看 $base_dir/logs/elasticsearch.log"
+            log_warn "Elasticsearch 启动超时，请查看 $log_file"
             return 1
         else
             log_error "Elasticsearch 启动失败"
@@ -678,8 +679,8 @@ start_qdrant_local() {
         local start_cmd="\"$exe\" --config-path \"$config_file\" --disable-telemetry"
         log_debug "启动命令: $start_cmd"
         
-        # 使用PowerShell启动并获取PID
-        local ps_cmd="Start-Process -FilePath '$exe' -ArgumentList '--config-path','$config_file','--disable-telemetry' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        # 使用PowerShell启动并获取PID，同时重定向日志到项目logs目录
+        local ps_cmd="Start-Process -FilePath '$exe' -ArgumentList '--config-path','$config_file','--disable-telemetry' -RedirectStandardOutput '$log_file' -RedirectStandardError '$log_file' -WindowStyle Hidden -PassThru | Select -Expand Id"
         local pid
         pid=$(powershell -NoProfile -Command "$ps_cmd")
         
@@ -695,7 +696,7 @@ start_qdrant_local() {
                 fi
                 sleep 1
             done
-            log_warn "Qdrant 启动超时，请查看日志或手动检查进程状态"
+            log_warn "Qdrant 启动超时，请查看日志: $log_file"
             return 1
         else
             log_error "Qdrant 启动失败"

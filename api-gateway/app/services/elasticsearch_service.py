@@ -200,7 +200,7 @@ class ElasticsearchService:
         }
         
         # 添加过滤器
-        must_clauses = [{"match": query_body["multi_match"]}]
+        must_clauses = [query_body]
         filter_clauses = []
         
         if filters:
@@ -285,23 +285,23 @@ class ElasticsearchService:
             exists = await self.client.indices.exists(index=index_name)
             
             if not exists:
-                # 创建索引映射
+                # 创建索引映射 - 使用标准分析器替代IK分析器
                 mapping = {
                     "mappings": {
                         "properties": {
                             "title": {
                                 "type": "text",
-                                "analyzer": "ik_max_word",
-                                "search_analyzer": "ik_smart"
+                                "analyzer": "standard",
+                                "search_analyzer": "standard"
                             },
                             "content": {
                                 "type": "text",
-                                "analyzer": "ik_max_word",
-                                "search_analyzer": "ik_smart"
+                                "analyzer": "standard",
+                                "search_analyzer": "standard"
                             },
                             "summary": {
                                 "type": "text",
-                                "analyzer": "ik_max_word"
+                                "analyzer": "standard"
                             },
                             "source": {"type": "keyword"},
                             "url": {"type": "keyword"},
@@ -310,23 +310,13 @@ class ElasticsearchService:
                             "view_count": {"type": "integer"},
                             "title_suggest": {
                                 "type": "completion",
-                                "analyzer": "ik_max_word"
+                                "analyzer": "standard"
                             }
                         }
                     },
                     "settings": {
                         "number_of_shards": 1,
-                        "number_of_replicas": 0,
-                        "analysis": {
-                            "analyzer": {
-                                "ik_max_word": {
-                                    "type": "ik_max_word"
-                                },
-                                "ik_smart": {
-                                    "type": "ik_smart"
-                                }
-                            }
-                        }
+                        "number_of_replicas": 0
                     }
                 }
                 
