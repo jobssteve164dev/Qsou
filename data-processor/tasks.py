@@ -64,6 +64,22 @@ app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     worker_max_tasks_per_child=1000,
+    
+    # 定时任务（需要 Celery Beat 运行）
+    beat_schedule={
+        'crawl-financial-news-every-15m': {
+            'task': 'data-processor.tasks.launch_crawler',
+            'schedule': 15 * 60,  # 每15分钟
+            'args': ('financial_news',),
+            'options': {'queue': 'data_processing'}
+        },
+        'crawl-company-announcement-every-30m': {
+            'task': 'data-processor.tasks.launch_crawler',
+            'schedule': 30 * 60,  # 每30分钟
+            'args': ('company_announcement',),
+            'options': {'queue': 'data_processing'}
+        }
+    },
 )
 
 # 全局组件实例（延迟初始化）
@@ -294,6 +310,61 @@ def generate_embeddings(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
             'doc_id': doc_id,
             'error': str(exc),
             'timestamp': datetime.now().isoformat()
+        }
+
+
+# 自动化：定时触发 Scrapy 爬虫（需要 Celery Beat）
+@app.task(base=BaseTask, bind=True)
+def launch_crawler(self, spider_name: str) -> Dict[str, Any]:
+    """
+    启动指定 Scrapy 爬虫。
+    说明：使用子进程执行 `scrapy crawl`，stdout/stderr 写入 crawler/logs/scrapy.log。
+    依赖：crawler/requirements 已安装，且运行环境可执行 scrapy。
+    """
+    try:
+        import subprocess
+        import pathlib
+
+        project_root = pathlib.Path(__file__).resolve().parents[1]
+        crawler_dir = project_root / 'crawler'
+        logs_dir = crawler_dir / 'logs'
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            'scrapy', 'crawl', spider_name,
+            '-L', 'INFO',
+            '-s', 'LOG_FILE=logs/scrapy.log'
+        ]
+
+        logger.info(f"启动爬虫: {spider_name}")
+        proc = subprocess.run(
+            cmd,
+            cwd=str(crawler_dir),
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=60 * 10  # 最长10分钟
+        )
+
+        result = {
+            'status': 'success' if proc.returncode == 0 else 'failed',
+            'spider': spider_name,
+            'returncode': proc.returncode,
+        }
+
+        if proc.returncode != 0:
+            logger.error(f"爬虫执行失败: {spider_name}, rc={proc.returncode}, err={proc.stderr[:500]}")
+        else:
+            logger.info(f"爬虫执行完成: {spider_name}")
+
+        return result
+
+    except Exception as exc:
+        logger.error(f"启动爬虫失败: {spider_name}, 错误: {str(exc)}")
+        return {
+            'status': 'failed',
+            'spider': spider_name,
+            'error': str(exc)
         }
 
 

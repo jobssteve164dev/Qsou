@@ -71,13 +71,10 @@ SPIDER_MIDDLEWARES = {
 # 数据管道配置
 # ============================================
 ITEM_PIPELINES = {
-    'qsou_crawler.pipelines.ValidationPipeline': 200,  # 数据验证
-    'qsou_crawler.pipelines.CleaningPipeline': 300,  # 数据清洗
-    'qsou_crawler.pipelines.DuplicationPipeline': 400,  # 去重
-    'qsou_crawler.pipelines.NLPPipeline': 500,  # NLP处理
-    'qsou_crawler.pipelines.DatabasePipeline': 600,  # 数据库存储
-    'qsou_crawler.pipelines.SearchEnginePipeline': 700,  # 搜索引擎索引
-    'qsou_crawler.pipelines.VectorStorePipeline': 800,  # 向量存储
+    'qsou_crawler.pipelines.data_processing_pipeline.ValidationPipeline': 200,  # 数据验证
+    'qsou_crawler.pipelines.data_processing_pipeline.DuplicationPipeline': 300,  # 去重
+    'qsou_crawler.pipelines.data_processing_pipeline.StatisticsPipeline': 400,  # 统计
+    'qsou_crawler.pipelines.data_processing_pipeline.DataProcessingPipeline': 500,  # 数据处理
 }
 
 # ============================================

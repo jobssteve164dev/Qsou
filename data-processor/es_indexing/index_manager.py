@@ -154,7 +154,7 @@ class IndexManager:
                 },
                 "summary": {
                     "type": "text",
-                    "analyzer": "ik_smart_analyzer"
+                    "analyzer": "standard_analyzer"
                 },
                 "url": {
                     "type": "keyword",

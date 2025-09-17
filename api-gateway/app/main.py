@@ -24,6 +24,7 @@ from app.api.v1.router import api_router
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.metrics import MetricsMiddleware
 from app.services.search_service import search_service
+from app.services.data_processing_service import data_processing_service
 
 # 设置日志
 setup_logging()
@@ -51,7 +52,16 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️  搜索服务初始化失败，部分功能可能不可用")
         
-        # TODO: 在这里初始化Redis连接
+        # 初始化数据处理服务
+        try:
+            data_processing_status = await data_processing_service.get_status()
+            if data_processing_status.get("status") == "running":
+                logger.info("📊 数据处理服务初始化成功")
+            else:
+                logger.warning("⚠️  数据处理服务初始化失败，爬虫数据可能无法处理")
+        except Exception as e:
+            logger.warning(f"⚠️  数据处理服务检查失败: {e}")
+        
         logger.info("🔗 外部服务连接检查完成")
     except Exception as e:
         logger.error(f"❌ 外部服务连接失败: {e}")

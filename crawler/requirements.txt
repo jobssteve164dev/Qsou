@@ -32,7 +32,6 @@ readability-lxml==0.8.1
 
 # Anti-Bot & Proxy
 scrapy-user-agents==0.1.1
-scrapy-proxy-middleware==0.2.0
 fake-useragent==1.4.0
 
 # Async & Task Queue

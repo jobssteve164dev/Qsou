@@ -4,7 +4,7 @@ API v1 主路由
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import search, documents, intelligence, health
+from app.api.v1.endpoints import search, documents, intelligence, health, data_processing
 
 api_router = APIRouter()
 
@@ -31,4 +31,10 @@ api_router.include_router(
     health.router, 
     prefix="/system", 
     tags=["系统监控"]
+)
+
+api_router.include_router(
+    data_processing.router, 
+    prefix="/process", 
+    tags=["数据处理"]
 )
