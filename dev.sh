@@ -1507,6 +1507,13 @@ start_all_services() {
         start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     fi
     
+    # 启动Celery Beat（定时任务调度）
+    if [[ "$OS" == "windows" ]]; then
+        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+    else
+        start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+    fi
+
     # 启动Celery监控（可选）
     if [[ "$OS" == "windows" ]]; then
         # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
@@ -1547,6 +1554,24 @@ start_all_services() {
 
     # Flower 健康检查仅做提示
     health_check "Celery监控" "http://localhost:${CELERY_FLOWER_PORT:-5555}" || log_warn "Celery监控页面暂不可达（不影响 worker 工作），可稍后再试"
+
+    # 应用启动后延时2分钟自动触发一次采集任务（无需手动运行爬虫）
+    (
+        sleep 120
+        log_info "⏱ 触发一次初始数据采集（financial_news, company_announcement）"
+        if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+            C_PY="api-gateway/.venv/Scripts/python.exe"
+        else
+            C_PY="api-gateway/.venv/bin/python"
+        fi
+        if [[ -f "$C_PY" ]]; then
+            (
+                cd data-processor 2>/dev/null || exit 0
+                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call data-processor.tasks.launch_crawler --args='["financial_news"]' >/dev/null 2>&1 || true
+                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call data-processor.tasks.launch_crawler --args='["company_announcement"]' >/dev/null 2>&1 || true
+            )
+        fi
+    ) >/dev/null 2>&1 &
 }
 
 stop_all_services() {
