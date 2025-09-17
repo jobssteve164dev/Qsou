@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { Layout } from '@/components/Layout';
 import { UnifiedSearchBar } from '@/components/search/UnifiedSearchBar';
 import { SearchResults } from '@/components/search/SearchResults';
+import { WelcomeScreen } from '@/components/search/WelcomeScreen';
 import { searchApi, systemApi } from '@/services/api';
 import { SearchRequest, SearchResponse, SystemStats } from '@/types';
 import { errorUtils, urlUtils } from '@/utils';
@@ -15,6 +16,7 @@ const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [hasSearched, setHasSearched] = useState<boolean>(false); // 新增：是否已经执行过搜索
   
   // 搜索筛选器状态
   const [filters, setFilters] = useState<Partial<SearchRequest>>({
@@ -41,6 +43,7 @@ const HomePage: React.FC = () => {
       setFilters(newFilters);
       
       // 自动执行搜索
+      setHasSearched(true); // 标记为已搜索
       performSearch(urlParams.q, newFilters);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,9 +110,19 @@ const HomePage: React.FC = () => {
   // 处理搜索（来自统一搜索栏）
   const handleSearch = (searchQuery: string, searchFilters: Partial<SearchRequest>) => {
     setQuery(searchQuery);
+    setHasSearched(true); // 标记为已搜索
     const newFilters = { ...searchFilters, page: 1, size: filters.size || 20 };
     setFilters(newFilters);
     performSearch(searchQuery, newFilters);
+  };
+
+  // 处理欢迎界面的搜索建议
+  const handleSearchSuggestion = (suggestedQuery: string) => {
+    setQuery(suggestedQuery);
+    setHasSearched(true); // 标记为已搜索
+    const newFilters = { ...filters, page: 1 };
+    setFilters(newFilters);
+    performSearch(suggestedQuery, newFilters);
   };
 
   // 加载更多结果
@@ -143,7 +156,7 @@ const HomePage: React.FC = () => {
             <div className="py-6 sm:py-8 lg:py-10">
               <div className="text-center mb-6 sm:mb-8">
                 <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-                  投资情报搜索引擎
+                  智能搜索
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto px-4">
                   搜索最新财经资讯、公司公告、行业报告，为您的投资决策提供数据支持
@@ -171,16 +184,26 @@ const HomePage: React.FC = () => {
 
         {/* 主内容区域 - 响应式单栏布局 */}
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          {/* 搜索结果 */}
           <div className="max-w-4xl mx-auto px-4">
-            <SearchResults
-              results={results}
-              query={query}
-              loading={loading}
-              error={error}
-              onLoadMore={handleLoadMore}
-              hasMore={hasMore}
-            />
+            {/* 根据搜索状态显示不同内容 */}
+            {!hasSearched ? (
+              /* 显示欢迎界面 */
+              <WelcomeScreen
+                systemStats={systemStats}
+                onSearchSuggestion={handleSearchSuggestion}
+              />
+            ) : (
+              /* 显示搜索结果 */
+              <SearchResults
+                results={results}
+                query={query}
+                loading={loading}
+                error={error}
+                onLoadMore={handleLoadMore}
+                hasMore={hasMore}
+                hasSearched={hasSearched}
+              />
+            )}
           </div>
         </div>
 

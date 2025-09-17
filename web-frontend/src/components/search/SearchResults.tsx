@@ -14,6 +14,7 @@ interface SearchResultsProps {
   error: string | null;
   onLoadMore?: () => void;
   hasMore?: boolean;
+  hasSearched?: boolean; // 新增：是否已经执行过搜索
 }
 
 const SearchResults: React.FC<SearchResultsProps> = ({
@@ -23,6 +24,7 @@ const SearchResults: React.FC<SearchResultsProps> = ({
   error,
   onLoadMore,
   hasMore = false,
+  hasSearched = false,
 }) => {
   if (loading && !results) {
     return (
@@ -92,7 +94,8 @@ const SearchResults: React.FC<SearchResultsProps> = ({
     );
   }
 
-  if (!results || results.documents.length === 0) {
+  // 只有在已经搜索过且没有结果时才显示"未找到相关结果"
+  if (hasSearched && (!results || results.documents.length === 0)) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="text-center">
@@ -141,6 +144,11 @@ const SearchResults: React.FC<SearchResultsProps> = ({
         </div>
       </div>
     );
+  }
+
+  // 如果还没有搜索过，返回null，让父组件显示欢迎界面
+  if (!hasSearched) {
+    return null;
   }
 
   return (
