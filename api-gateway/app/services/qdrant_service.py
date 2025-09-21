@@ -63,21 +63,26 @@ class QdrantService:
             logger.info("Qdrant连接已断开")
     
     async def health_check(self) -> Dict[str, Any]:
-        """健康检查"""
-        if not self.client or not self.is_connected:
-            return {"status": "disconnected", "error": "No connection"}
-        
+        """健康检查
+        使用 httpx 异步HTTP探测 /collections，避免同步客户端阻塞。
+        """
         try:
-            collections = self.client.get_collections()
-            collection_info = self.client.get_collection(self.collection_name)
-            
-            return {
-                "status": "connected",
-                "collections_count": len(collections.collections),
-                "collection_name": self.collection_name,
-                "vectors_count": collection_info.vectors_count,
-                "points_count": collection_info.points_count
-            }
+            import httpx
+            url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}/collections"
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                collections = data.get("result", {}).get("collections", [])
+                return {
+                    "status": "connected",
+                    "collections_count": len(collections),
+                }
+            return {"status": "error", "error": f"HTTP {resp.status_code}"}
+        except httpx.ReadTimeout:
+            return {"status": "timeout"}
+        except httpx.ConnectTimeout:
+            return {"status": "timeout"}
         except Exception as e:
             logger.error("Qdrant健康检查失败", error=str(e))
             return {"status": "error", "error": str(e)}

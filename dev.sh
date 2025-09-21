@@ -1957,15 +1957,19 @@ main() {
                             # 读取原始启动命令
                             if [[ "$svc" == "celery-worker" ]]; then
                                 if [[ "$OS" == "windows" ]]; then
-                                    start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
+                                    start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                        || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                                 else
-                                    start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+                                    start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}" \
+                                        || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                                 fi
                             else
                                 if [[ "$OS" == "windows" ]]; then
-                                    start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                    start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                        || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
                                 else
-                                    start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                    start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                        || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
                                 fi
                             fi
                         fi
@@ -1974,15 +1978,19 @@ main() {
                         log_warn "$svc 缺少PID文件，尝试恢复..."
                         if [[ "$svc" == "celery-worker" ]]; then
                             if [[ "$OS" == "windows" ]]; then
-                                start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
+                                start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                    || log_warn "celery-worker 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                             else
-                                start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+                                start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}" \
+                                    || log_warn "celery-worker 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                             fi
                         else
                             if [[ "$OS" == "windows" ]]; then
-                                start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                    || log_warn "celery-beat 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
                             else
-                                start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                                    || log_warn "celery-beat 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
                             fi
                         fi
                     fi

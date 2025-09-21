@@ -226,7 +226,10 @@ const MonitorPage: React.FC = () => {
                           <div className="text-sm text-gray-500">搜索引擎</div>
                         </div>
                       </div>
-                      <div className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.elasticsearch)}`}>
+                      <div
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.elasticsearch)}`}
+                        title={!stats.services.elasticsearch && stats.service_messages?.elasticsearch ? stats.service_messages.elasticsearch : ''}
+                      >
                         {getServiceStatusIcon(stats.services.elasticsearch)}
                         <span className="text-sm font-medium">
                           {stats.services.elasticsearch ? '正常' : '异常'}
@@ -242,7 +245,10 @@ const MonitorPage: React.FC = () => {
                           <div className="text-sm text-gray-500">向量数据库</div>
                         </div>
                       </div>
-                      <div className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.qdrant)}`}>
+                      <div
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.qdrant)}`}
+                        title={!stats.services.qdrant && stats.service_messages?.qdrant ? stats.service_messages.qdrant : ''}
+                      >
                         {getServiceStatusIcon(stats.services.qdrant)}
                         <span className="text-sm font-medium">
                           {stats.services.qdrant ? '正常' : '异常'}
@@ -258,7 +264,10 @@ const MonitorPage: React.FC = () => {
                           <div className="text-sm text-gray-500">数据采集</div>
                         </div>
                       </div>
-                      <div className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.crawler)}`}>
+                      <div
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.crawler)}`}
+                        title={!stats.services.crawler && stats.service_messages?.crawler ? stats.service_messages.crawler : ''}
+                      >
                         {getServiceStatusIcon(stats.services.crawler)}
                         <span className="text-sm font-medium">
                           {stats.services.crawler ? '正常' : '异常'}
@@ -274,7 +283,10 @@ const MonitorPage: React.FC = () => {
                           <div className="text-sm text-gray-500">内容分析</div>
                         </div>
                       </div>
-                      <div className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.processor)}`}>
+                      <div
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.processor)}`}
+                        title={!stats.services.processor && stats.service_messages?.processor ? stats.service_messages.processor : ''}
+                      >
                         {getServiceStatusIcon(stats.services.processor)}
                         <span className="text-sm font-medium">
                           {stats.services.processor ? '正常' : '异常'}

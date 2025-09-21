@@ -113,4 +113,10 @@ export interface SystemStats {
     crawler: boolean;
     processor: boolean;
   };
+  service_messages?: {
+    elasticsearch?: string;
+    qdrant?: string;
+    crawler?: string;
+    processor?: string;
+  };
 }

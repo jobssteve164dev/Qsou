@@ -5,32 +5,141 @@
 from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 import structlog
 import asyncio
+import shutil
+
+from app.services.search_service import search_service
+from app.services.data_processing_service import data_processing_service
+from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
 @router.get("/stats")
 async def system_stats():
     """
-    提供给前端首页/监控页的简要系统统计信息。
-    避免 404：路径为 /api/v1/system/stats。
+    提供给前端首页/监控页的系统统计信息（真实健康检查）。
+    路径：/api/v1/system/stats
     """
     try:
-        # 这里返回最小可用的统计信息；真实实现可对接各服务
-        return {
-            "documents_count": 0,
+        # 并行执行健康检查并记录耗时（暴露调试信息）
+        es_health, es_ms = await _with_timeout_timed(
+            search_service.elasticsearch.health_check(), 2.0, {"status": "timeout"}
+        )
+        qdrant_health, qdrant_ms = await _with_timeout_timed(
+            search_service.qdrant.health_check(), 2.0, {"status": "timeout"}
+        )
+        processor_health, processor_ms = await _with_timeout_timed(
+            data_processing_service.health_check(),
+            2.0,
+            {"healthy": False, "checks": {"celery": {"status": "unknown"}}},
+        )
+        crawler_ok, crawler_ms = await _with_timeout_timed(
+            _check_crawler_service(), 1.0, False
+        )
+
+        elastic_ok = es_health.get("status") == "connected"
+        qdrant_ok = qdrant_health.get("status") == "connected"
+        processor_ok = bool(processor_health.get("healthy")) and (
+            processor_health.get("checks", {}).get("celery", {}).get("status") == "healthy"
+        )
+
+        # 计算文档数量（在ES可用时）
+        documents_count = 0
+        if elastic_ok:
+            try:
+                index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"
+                client = search_service.elasticsearch.client
+                if client:
+                    count_resp = await _with_timeout(client.count(index=index_name), 1.5, {"count": 0})
+                    documents_count = int(count_resp.get("count", 0))
+            except Exception:
+                documents_count = 0
+
+        # 汇总系统状态
+        service_ok_flags = [elastic_ok, qdrant_ok, bool(crawler_ok), processor_ok]
+        if all(service_ok_flags):
+            overall = "healthy"
+        elif any(service_ok_flags):
+            overall = "warning"
+        else:
+            overall = "error"
+
+        # 生成服务异常消息（用于前端悬浮提示）
+        def _es_msg():
+            status = es_health.get("status")
+            if status == "connected":
+                return ""
+            if status == "timeout":
+                return "Elasticsearch 健康检查超时"
+            return f"Elasticsearch 异常: {es_health.get('error', '未连接')}"
+
+        def _q_msg():
+            status = qdrant_health.get("status")
+            if status == "connected":
+                return ""
+            if status == "timeout":
+                return "Qdrant 健康检查超时"
+            return f"Qdrant 异常: {qdrant_health.get('error', '未连接')}"
+
+        def _p_msg():
+            if processor_ok:
+                return ""
+            cel = processor_health.get("checks", {}).get("celery", {})
+            if cel.get("status") == "no_workers":
+                return "Celery 无可用 worker"
+            if cel.get("status") == "unhealthy":
+                return f"Celery 异常: {cel.get('error', '未知错误')}"
+            return "数据处理服务未就绪"
+
+        def _c_msg():
+            if crawler_ok:
+                return ""
+            return "爬虫未就绪：缺少 scrapy 或日志过旧/未运行"
+
+        payload = {
+            "documents_count": documents_count,
             "searches_today": 0,
             "analysis_reports": 0,
-            "system_status": "healthy",
+            "system_status": overall,
             "services": {
-                "elasticsearch": True,
-                "qdrant": True,
-                "crawler": True,
-                "processor": True,
+                "elasticsearch": elastic_ok,
+                "qdrant": qdrant_ok,
+                "crawler": bool(crawler_ok),
+                "processor": processor_ok,
+            },
+            "service_messages": {
+                "elasticsearch": _es_msg(),
+                "qdrant": _q_msg(),
+                "crawler": _c_msg(),
+                "processor": _p_msg(),
+            },
+            "diagnostics": {
+                "durations_ms": {
+                    "elasticsearch": es_ms,
+                    "qdrant": qdrant_ms,
+                    "processor": processor_ms,
+                    "crawler": crawler_ms,
+                },
+                "raw": {
+                    "elasticsearch": es_health,
+                    "qdrant": qdrant_health,
+                    "processor": processor_health,
+                },
             },
         }
+        logger.info(
+            "系统统计诊断",
+            es_ms=es_ms,
+            qdrant_ms=qdrant_ms,
+            processor_ms=processor_ms,
+            crawler_ms=crawler_ms,
+            es_status=es_health.get("status"),
+            qdrant_status=qdrant_health.get("status"),
+        )
+        return payload
     except Exception as e:
         logger.error("系统统计获取失败", error=str(e))
         raise HTTPException(status_code=500, detail="系统统计获取失败")
@@ -457,3 +566,58 @@ async def _collect_system_metrics() -> SystemMetrics:
         error_rate=0.15,
         avg_response_time=125.8
     )
+
+
+async def _check_crawler_service() -> bool:
+    """检查爬虫服务健康状况。
+    判定标准（尽量避免臆测，基于可观测事实）：
+    1) Celery worker 可用（由数据处理服务健康检查提供）
+    2) 存在 Scrapy 项目结构（crawler/scrapy.cfg）
+    3) 二者其一满足：
+       - 系统中可找到 scrapy 可执行文件；或
+       - 爬虫日志在最近24小时内有更新。
+    """
+    try:
+        # 1) Celery 健康
+        processor_health = await data_processing_service.health_check()
+        celery_ok = processor_health.get("checks", {}).get("celery", {}).get("status") == "healthy"
+
+        # 2) Scrapy 项目结构与日志
+        api_gateway_dir = Path(__file__).resolve().parents[4]
+        project_root = api_gateway_dir.parent
+        crawler_dir = project_root / "crawler"
+        cfg_ok = (crawler_dir / "scrapy.cfg").exists()
+
+        # 3) scrapy 可执行 或 日志最近更新
+        scrapy_ok = shutil.which("scrapy") is not None
+        log_file = crawler_dir / "logs" / "scrapy.log"
+        recent_log = False
+        if log_file.exists():
+            try:
+                mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                recent_log = (datetime.now() - mtime) <= timedelta(hours=24)
+            except Exception:
+                recent_log = False
+
+        return bool(celery_ok and cfg_ok and (scrapy_ok or recent_log))
+    except Exception:
+        return False
+
+
+async def _with_timeout(coro, seconds: float, fallback):
+    """为协程执行设置超时，超时/异常时返回给定回退值。"""
+    try:
+        return await asyncio.wait_for(coro, timeout=seconds)
+    except Exception:
+        return fallback
+
+
+async def _with_timeout_timed(coro, seconds: float, fallback):
+    """带耗时统计的超时包装，返回 (结果, 毫秒)。"""
+    import time
+    start = time.monotonic()
+    try:
+        result = await asyncio.wait_for(coro, timeout=seconds)
+        return result, int((time.monotonic() - start) * 1000)
+    except Exception:
+        return fallback, int((time.monotonic() - start) * 1000)

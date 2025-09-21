@@ -1,15 +1,14 @@
 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
 websocket.js:39 [HMR] connected
 hot-reloader-client.js:222 [Fast Refresh] rebuilding
+api.ts:56 [API] 200 GET /search/trending Object
+api.ts:56 [API] 200 GET /system/stats Object
+api.ts:56 [API] 200 GET /search/trending Object
 hot-reloader-client.js:222 [Fast Refresh] rebuilding
-api.ts:56 [API] 200 GET /search/trending {durationMs: 11495, traceId: '026ad161-4d6b-482c-8127-f94c5896bbd5'}
-api.ts:56 [API] 200 GET /auth/me {durationMs: 11496, traceId: 'd696baa8-1903-48d6-98a7-38be26fa1b83'}
-api.ts:56 [API] 200 GET /system/stats {durationMs: 11500, traceId: 'a861d2f6-3e27-4558-a586-b6f38cb3ee15'}
-api.ts:56 [API] 200 GET /search/trending {durationMs: 11503, traceId: '13cc0de8-00df-4ac9-8077-95140a22624e'}
-api.ts:56 [API] 200 GET /auth/me {durationMs: 17620, traceId: '8fb02943-fee0-4f75-bb12-e55ef0e3dd8a'}
-api.ts:56 [API] 200 GET /system/stats {durationMs: 23498, traceId: '2405164c-3f59-469e-9c75-4d71c9202f86'}
-api.ts:56 [API] 200 GET /auth/me {durationMs: 25285, traceId: '8f223fc7-3dbd-4c7f-98b7-894069ada7b9'}
-api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '2dd7f0cf-ab64-4273-9a77-da76a13c5495', detail: undefined}
+api.ts:56 [API] 200 GET /auth/me {durationMs: 20549, traceId: '35b23d4d-179a-48fd-8878-1197f12f3a0a'}
+api.ts:56 [API] 200 GET /system/stats {durationMs: 20555, traceId: '0de8292c-6add-4be6-b183-7c0b5b077a01'}
+api.ts:56 [API] 200 GET /auth/me {durationMs: 20559, traceId: 'b9eaa001-923f-4b13-89bd-8c83e7891131'}
+api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '239e5f55-4db2-4d36-816d-1b2b3793919d', detail: undefined}
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 eval @ api.ts:70
@@ -17,7 +16,15 @@ api.ts:97 API请求失败 [GET /system/stats]: AxiosError {message: 'timeout of
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 apiRequest @ api.ts:97
-api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '092f9da8-4c2e-4b37-8bdb-c1ddab1c80a0', detail: undefined}
+api.ts:70 [API ERROR] GET /auth/me undefined {traceId: 'b0bc2584-8062-490f-9873-e93ecd3f2d55', detail: undefined}
+console.error @ hydration-error-info.js:63
+window.console.error @ setup-hydration-warning.js:18
+eval @ api.ts:70
+api.ts:97 API请求失败 [GET /auth/me]: AxiosError {message: 'timeout of 30000ms exceeded', name: 'AxiosError', code: 'ECONNABORTED', config: {…}, request: XMLHttpRequest, …}
+console.error @ hydration-error-info.js:63
+window.console.error @ setup-hydration-warning.js:18
+apiRequest @ api.ts:97
+api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '0bdf2045-fb03-4276-9a53-f16f50a5519f', detail: undefined}
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 eval @ api.ts:70
@@ -25,7 +32,7 @@ api.ts:97 API请求失败 [GET /system/stats]: AxiosError {message: 'timeout of
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 apiRequest @ api.ts:97
-api.ts:70 [API ERROR] GET /auth/me undefined {traceId: '6b1e9d5a-545a-4aa1-a463-59beacb95c17', detail: undefined}
+api.ts:70 [API ERROR] GET /auth/me undefined {traceId: '0a42950c-26f2-4a0d-bfd3-2dbc5b82c0bb', detail: undefined}
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 eval @ api.ts:70
@@ -34,6 +41,18 @@ console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 apiRequest @ api.ts:97
 hot-reloader-client.js:222 [Fast Refresh] rebuilding
-api.ts:56 [API] 200 GET /search/trending {durationMs: 6618, traceId: '7de3de74-f966-46d1-87ce-f4aea95e3f1f'}
-api.ts:56 [API] 200 GET /system/stats {durationMs: 6620, traceId: '37e9425b-88b1-473b-8c3d-6f459c907056'}
-api.ts:56 [API] 200 GET /search/trending {durationMs: 6628, traceId: '76a6652f-4aca-4d5e-a090-5126b663a8ce'}
+useAuth.tsx:74 Error: Abort fetching component for route: "/login"
+    at handleCancelled (router.js:387:27)
+    at Router.fetchComponent (router.js:1365:13)
+    at async Router.getRouteInfo (router.js:1090:50)
+    at async Router.change (router.js:695:29)
+console.error @ hydration-error-info.js:63
+window.console.error @ setup-hydration-warning.js:18
+handleRouteInfoError @ router.js:933
+getRouteInfo @ router.js:1168
+await in getRouteInfo
+change @ router.js:695
+await in change
+push @ router.js:420
+instance.<computed> @ router.js:174
+checkAuth @ useAuth.tsx:74

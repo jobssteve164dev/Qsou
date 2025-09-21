@@ -65,18 +65,30 @@ class ElasticsearchService:
             logger.info("Elasticsearch连接已断开")
     
     async def health_check(self) -> Dict[str, Any]:
-        """健康检查"""
+        """健康检查
+        限制ES健康查询耗时，避免阻塞整体统计。
+        """
         if not self.client or not self.is_connected:
             return {"status": "disconnected", "error": "No connection"}
         
         try:
-            health = await self.client.cluster.health()
+            import asyncio
+            # 优先使用 ping（HEAD /），最快速判断连通性
+            ok = await asyncio.wait_for(self.client.ping(), timeout=1.5)
+            if ok:
+                # 轻量化：不再阻塞性地获取 cluster health，避免Windows本地耗时过长
+                return {
+                    "status": "connected",
+                    "cluster_status": "unknown",
+                }
+            # ping 失败则再尝试一次短超时的 cluster health，以便返回更具体错误
+            health = await asyncio.wait_for(self.client.cluster.health(), timeout=2.0)
             return {
-                "status": "connected",
-                "cluster_status": health.get('status'),
-                "number_of_nodes": health.get('number_of_nodes'),
-                "active_primary_shards": health.get('active_primary_shards')
+                "status": "connected" if health else "error",
+                "cluster_status": health.get('status') if isinstance(health, dict) else "unknown",
             }
+        except asyncio.TimeoutError:
+            return {"status": "timeout"}
         except Exception as e:
             logger.error("Elasticsearch健康检查失败", error=str(e))
             return {"status": "error", "error": str(e)}
