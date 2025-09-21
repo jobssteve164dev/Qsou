@@ -46,8 +46,8 @@ class ProcessorConfig(BaseSettings):
     es_announcements_index: str = Field(default="qsou_announcements", env="ES_ANNOUNCEMENTS_INDEX")
     
     # 任务队列配置
-    celery_broker_url: str = Field(default="redis://localhost:6379/0", env="CELERY_BROKER_URL")
-    celery_result_backend: str = Field(default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
+    celery_broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
+    celery_result_backend: str = Field(default="redis://localhost:6379/2", env="CELERY_RESULT_BACKEND")
     
     class Config:
         env_file = ".env"

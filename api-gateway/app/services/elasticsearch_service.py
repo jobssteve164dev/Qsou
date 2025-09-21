@@ -36,8 +36,8 @@ class ElasticsearchService:
                 verify_certs=False if settings.SKIP_SSL_VERIFY else True,
                 # 添加连接池配置
                 maxsize=10,
-                # 只使用request_timeout，移除timeout参数
-                request_timeout=30
+                # 只使用request_timeout，不能同时指定timeout
+                request_timeout=5
             )
             
             # 测试连接

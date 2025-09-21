@@ -45,6 +45,7 @@ task_reject_on_worker_lost = True
 
 # 任务路由
 task_routes = {
+    'tasks.launch_crawler': {'queue': 'data_processing'},
     'tasks.process_crawled_data': {'queue': 'data_processing'},
     'tasks.generate_embeddings': {'queue': 'ml_processing'},
     'tasks.update_search_index': {'queue': 'indexing'},
@@ -79,6 +80,18 @@ beat_schedule = {
         'task': 'tasks.health_check',
         'schedule': 60.0,  # 每分钟执行一次
     },
+    'crawl-financial-news-every-15m': {
+        'task': 'tasks.launch_crawler',
+        'schedule': 15 * 60,  # 每15分钟
+        'args': ('financial_news',),
+        'options': {'queue': 'data_processing'}
+    },
+    'crawl-company-announcement-every-30m': {
+        'task': 'tasks.launch_crawler',
+        'schedule': 30 * 60,  # 每30分钟
+        'args': ('company_announcement',),
+        'options': {'queue': 'data_processing'}
+    }
 }
 
 # 连接池配置
@@ -86,6 +99,16 @@ broker_pool_limit = 10
 broker_connection_retry = True
 broker_connection_retry_on_startup = True
 broker_connection_max_retries = 10
+
+# Redis连接配置
+broker_connection_retry_delay = 1.0
+broker_connection_retry_max_delay = 10.0
+broker_connection_retry_jitter = True
+
+# 结果后端连接配置
+result_backend_connection_retry = True
+result_backend_connection_retry_on_startup = True
+result_backend_connection_max_retries = 10
 
 # 消息确认配置
 task_track_started = True

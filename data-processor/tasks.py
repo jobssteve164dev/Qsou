@@ -77,13 +77,13 @@ app.conf.update(
     # 定时任务（需要 Celery Beat 运行）
     beat_schedule={
         'crawl-financial-news-every-15m': {
-            'task': 'data-processor.tasks.launch_crawler',
+            'task': 'tasks.launch_crawler',
             'schedule': 15 * 60,  # 每15分钟
             'args': ('financial_news',),
             'options': {'queue': 'data_processing'}
         },
         'crawl-company-announcement-every-30m': {
-            'task': 'data-processor.tasks.launch_crawler',
+            'task': 'tasks.launch_crawler',
             'schedule': 30 * 60,  # 每30分钟
             'args': ('company_announcement',),
             'options': {'queue': 'data_processing'}

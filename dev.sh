@@ -1515,6 +1515,51 @@ health_check() {
     return 1
 }
 
+# Celery Worker 就绪检查辅助函数
+wait_for_celery_worker_ready() {
+    local max_attempts=15  # 自愈时等待时间较短，15次*2秒=30秒
+    local attempt=0
+    local worker_ready=false
+    
+    local celery_py
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        celery_py="api-gateway/.venv/Scripts/python.exe"
+    else
+        celery_py="api-gateway/.venv/bin/python"
+    fi
+    
+    if [[ ! -f "$celery_py" ]]; then
+        log_warn "未找到 Celery Python 解释器，跳过 Worker 就绪检查"
+        return 1
+    fi
+    
+    while [[ $attempt -lt $max_attempts && "$worker_ready" == "false" ]]; do
+        attempt=$((attempt + 1))
+        
+        # 检查Worker是否响应ping
+        if (cd data-processor && "$celery_py" -m celery -A tasks inspect ping) >/dev/null 2>&1; then
+            # 检查任务注册状态
+            local registered_tasks
+            registered_tasks=$(cd data-processor && "$celery_py" -m celery -A tasks inspect registered 2>/dev/null | grep -c "launch_crawler" || echo "0")
+            if [[ "$registered_tasks" -gt 0 ]]; then
+                worker_ready=true
+                log_info "✓ Celery Worker 自愈后已就绪"
+            fi
+        fi
+        
+        if [[ "$worker_ready" == "false" ]]; then
+            sleep 2
+        fi
+    done
+    
+    if [[ "$worker_ready" == "true" ]]; then
+        return 0
+    else
+        log_warn "⚠️  Celery Worker 自愈后30秒内未完全就绪"
+        return 1
+    fi
+}
+
 # ============================================
 # 主要启动流程
 # ============================================
@@ -1584,14 +1629,66 @@ start_all_services() {
     fi
     
     # 启动Celery工作进程（使用API虚拟环境）
+    log_info "启动 Celery Worker..."
     if [[ "$OS" == "windows" ]]; then
         # Windows下使用 solo 池避免 WinError 5（billiard 进程/锁权限问题）
-        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,celery"
     else
-        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,celery"
     fi
     
-    # 启动Celery Beat（定时任务调度）
+    # 等待Celery Worker完全就绪（关键修复：避免任务丢失）
+    log_info "等待 Celery Worker 完全就绪..."
+    local celery_py
+    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
+        celery_py="api-gateway/.venv/Scripts/python.exe"
+    else
+        celery_py="api-gateway/.venv/bin/python"
+    fi
+    
+    if [[ -f "$celery_py" ]]; then
+        local max_attempts=30  # 最多等待30次，每次2秒，总共60秒
+        local attempt=0
+        local worker_ready=false
+        
+        while [[ $attempt -lt $max_attempts && "$worker_ready" == "false" ]]; do
+            attempt=$((attempt + 1))
+            log_info "检查 Worker 就绪状态 (尝试 $attempt/$max_attempts)..."
+            
+            # 检查Worker是否响应ping
+            if (cd data-processor && "$celery_py" -m celery -A tasks inspect ping) >/dev/null 2>&1; then
+                # 额外检查：确保Worker已注册所有任务
+                if (cd data-processor && "$celery_py" -m celery -A tasks inspect registered) >/dev/null 2>&1; then
+                    local registered_tasks
+                    registered_tasks=$(cd data-processor && "$celery_py" -m celery -A tasks inspect registered 2>/dev/null | grep -c "launch_crawler" || echo "0")
+                    if [[ "$registered_tasks" -gt 0 ]]; then
+                        worker_ready=true
+                        log_info "✓ Celery Worker 完全就绪，已注册 launch_crawler 任务"
+                    else
+                        log_info "Worker 响应但任务未完全注册，继续等待..."
+                    fi
+                else
+                    log_info "Worker 响应但无法检查任务注册状态，继续等待..."
+                fi
+            else
+                log_info "Worker 尚未响应，继续等待..."
+            fi
+            
+            if [[ "$worker_ready" == "false" ]]; then
+                sleep 2
+            fi
+        done
+        
+        if [[ "$worker_ready" == "false" ]]; then
+            log_warn "⚠️  Celery Worker 在60秒内未完全就绪，但将继续启动 Beat（可能导致任务丢失）"
+        fi
+    else
+        log_warn "未找到 Celery Python 解释器，跳过 Worker 就绪检查"
+        sleep 10  # 给Worker一些时间启动
+    fi
+    
+    # 启动Celery Beat（定时任务调度）- 现在Worker已经就绪
+    log_info "启动 Celery Beat（Worker已就绪）..."
     if [[ "$OS" == "windows" ]]; then
         start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
     else
@@ -1616,24 +1713,14 @@ start_all_services() {
         health_check "前端服务" "http://localhost:${FRONTEND_PORT:-3000}" || log_warn "前端服务健康检查失败，继续运行"
     fi
 
-    # Celery worker 就绪检查（使用 inspect ping）
-    log_info "检查 Celery worker 就绪..."
-    local celery_py
-    if [[ -f "api-gateway/.venv/Scripts/python.exe" ]]; then
-        celery_py="api-gateway/.venv/Scripts/python.exe"
-    else
-        celery_py="api-gateway/.venv/bin/python"
-    fi
+    # Celery worker 最终状态确认（启动时已进行详细检查）
+    log_info "确认 Celery worker 最终状态..."
     if [[ -f "$celery_py" ]]; then
-        # 给 worker 一些时间完成加载
-        sleep 2
         if (cd data-processor && "$celery_py" -m celery -A tasks inspect ping) >/dev/null 2>&1; then
-            log_info "✓ Celery worker 就绪"
+            log_info "✓ Celery worker 运行正常"
         else
-            log_warn "Celery worker 未响应 ping，但进程已启动，可能仍在初始化（可稍后重试或查看 logs/celery-worker.log）"
+            log_warn "⚠️  Celery worker 状态异常，请检查 logs/celery-worker.log"
         fi
-    else
-        log_warn "未找到 Celery Python 解释器，跳过 worker 就绪检查"
     fi
 
     # Flower 健康检查仅做提示
@@ -1660,8 +1747,8 @@ start_all_services() {
         if [[ -f "$C_PY" ]]; then
             (
                 cd data-processor 2>/dev/null || exit 0
-                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call data-processor.tasks.launch_crawler --args='["financial_news"]' >/dev/null 2>&1 || true
-                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call data-processor.tasks.launch_crawler --args='["company_announcement"]' >/dev/null 2>&1 || true
+                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call tasks.launch_crawler --args='["financial_news"]' >/dev/null 2>&1 || true
+                PYTHONIOENCODING=utf-8 "$C_PY" -m celery -A tasks call tasks.launch_crawler --args='["company_announcement"]' >/dev/null 2>&1 || true
             )
         fi
     ) >/dev/null 2>&1 &
@@ -1947,54 +2034,69 @@ main() {
             while true; do
                 sleep 10
                 # 定期自愈：如果 Celery worker/beat 异常退出则自动重启
-                for svc in "celery-worker" "celery-beat"; do
-                    local pid_file="$PID_DIR/${svc}.pid"
-                    if [[ -f "$pid_file" ]]; then
-                        local pid
-                        pid=$(cat "$pid_file")
-                        if ! kill -0 "$pid" 2>/dev/null; then
-                            log_warn "检测到 $svc 异常退出，正在自动重启..."
-                            # 读取原始启动命令
-                            if [[ "$svc" == "celery-worker" ]]; then
-                                if [[ "$OS" == "windows" ]]; then
-                                    start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                        || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
-                                else
-                                    start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}" \
-                                        || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
-                                fi
-                            else
-                                if [[ "$OS" == "windows" ]]; then
-                                    start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                        || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
-                                else
-                                    start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                        || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
-                                fi
-                            fi
-                        fi
-                    else
-                        # 无PID文件也认为需要恢复
-                        log_warn "$svc 缺少PID文件，尝试恢复..."
-                        if [[ "$svc" == "celery-worker" ]]; then
-                            if [[ "$OS" == "windows" ]]; then
-                                start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                    || log_warn "celery-worker 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
-                            else
-                                start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}" \
-                                    || log_warn "celery-worker 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
-                            fi
-                        else
-                            if [[ "$OS" == "windows" ]]; then
-                                start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                    || log_warn "celery-beat 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
-                            else
-                                start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
-                                    || log_warn "celery-beat 恢复启动失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
-                            fi
-                        fi
+                # 注意：Worker必须在Beat之前重启，确保任务不丢失
+                local worker_needs_restart=false
+                local beat_needs_restart=false
+                
+                # 检查Worker状态
+                local worker_pid_file="$PID_DIR/celery-worker.pid"
+                if [[ -f "$worker_pid_file" ]]; then
+                    local worker_pid
+                    worker_pid=$(cat "$worker_pid_file")
+                    if ! kill -0 "$worker_pid" 2>/dev/null; then
+                        worker_needs_restart=true
+                        log_warn "检测到 celery-worker 异常退出，标记需要重启"
                     fi
-                done
+                else
+                    worker_needs_restart=true
+                    log_warn "celery-worker PID文件缺失，标记需要重启"
+                fi
+                
+                # 检查Beat状态
+                local beat_pid_file="$PID_DIR/celery-beat.pid"
+                if [[ -f "$beat_pid_file" ]]; then
+                    local beat_pid
+                    beat_pid=$(cat "$beat_pid_file")
+                    if ! kill -0 "$beat_pid" 2>/dev/null; then
+                        beat_needs_restart=true
+                        log_warn "检测到 celery-beat 异常退出，标记需要重启"
+                    fi
+                else
+                    beat_needs_restart=true
+                    log_warn "celery-beat PID文件缺失，标记需要重启"
+                fi
+                
+                # 重启Worker（如果需要）
+                if [[ "$worker_needs_restart" == "true" ]]; then
+                    log_warn "正在重启 celery-worker..."
+                    if [[ "$OS" == "windows" ]]; then
+                        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,celery" \
+                            || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
+                    else
+                        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,celery" \
+                            || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
+                    fi
+                    
+                    # 等待Worker就绪
+                    log_info "等待 celery-worker 自愈后就绪..."
+                    if wait_for_celery_worker_ready; then
+                        log_info "✓ celery-worker 自愈成功，已就绪"
+                    else
+                        log_warn "⚠️  celery-worker 自愈后未完全就绪，但继续运行"
+                    fi
+                fi
+                
+                # 重启Beat（如果需要，且Worker已就绪）
+                if [[ "$beat_needs_restart" == "true" ]]; then
+                    log_warn "正在重启 celery-beat..."
+                    if [[ "$OS" == "windows" ]]; then
+                        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                            || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
+                    else
+                        start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}" \
+                            || log_warn "celery-beat 自动重启失败，将在下一轮自愈重试（查看 logs/celery-beat.log）"
+                    fi
+                fi
             done
             ;;
         stop)
