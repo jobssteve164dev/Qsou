@@ -587,34 +587,53 @@ start_elasticsearch_local() {
         local es_bat="$base_dir/bin/elasticsearch.bat"
         local pid_file="$PID_DIR/elasticsearch.pid"
         local heap="${ELASTICSEARCH_HEAP_SIZE:-1g}"
-        local data_dir="$base_dir/data-dev"
+        local data_dir="vendor/elasticsearch/elasticsearch-8.11.0/data-dev"
         mkdir -p "$data_dir" 2>/dev/null || true
-        # 清理僵尸锁和PID文件：仅当端口未监听且存在lock时
-        if ! netstat -an | grep -E ":${ELASTICSEARCH_PORT:-9200} .*LISTEN" >/dev/null 2>&1; then
-            if [[ -f "$data_dir/node.lock" ]]; then
-                log_warn "检测到旧的Elasticsearch node.lock，端口未监听，清理锁文件"
-                rm -f "$data_dir/node.lock" 2>/dev/null || true
-            fi
-            # 同时清理可能的僵尸PID文件
-            if [[ -f "$pid_file" ]]; then
-                local old_pid
-                old_pid=$(cat "$pid_file" 2>/dev/null)
-                if [[ -n "$old_pid" ]] && ! tasklist //FI "PID eq $old_pid" 2>/dev/null | grep -q "elasticsearch"; then
-                    log_warn "清理无效的Elasticsearch PID文件"
+        # 清理僵尸锁和PID文件
+        # 首先检查是否有旧的PID文件
+        if [[ -f "$pid_file" ]]; then
+            local old_pid
+            old_pid=$(cat "$pid_file" 2>/dev/null)
+            if [[ -n "$old_pid" ]]; then
+                # 检查进程是否还在运行
+                if ! tasklist 2>/dev/null | grep -q "$old_pid"; then
+                    log_warn "清理无效的Elasticsearch PID文件 (PID: $old_pid)"
                     rm -f "$pid_file" 2>/dev/null || true
+                else
+                    log_info "发现运行中的Elasticsearch进程 (PID: $old_pid)，跳过启动"
+                    return 0
                 fi
             fi
+        fi
+        
+        # 检查端口是否被占用
+        if netstat -an 2>/dev/null | grep -E ":${ELASTICSEARCH_PORT:-9200} .*LISTEN" >/dev/null; then
+            log_info "Elasticsearch端口 ${ELASTICSEARCH_PORT:-9200} 已被占用，跳过启动"
+            return 0
+        fi
+        
+        # 清理可能存在的锁文件
+        if [[ -f "$data_dir/node.lock" ]]; then
+            log_warn "检测到旧的Elasticsearch node.lock，清理锁文件"
+            rm -f "$data_dir/node.lock" 2>/dev/null || true
         fi
 
         local log_file="$LOG_DIR/elasticsearch.log"
         log_info "启动Elasticsearch...（日志见 $log_file）"
-        # 通过PowerShell启动并获取PID，同时重定向日志到项目logs目录
+        # 通过PowerShell启动并获取PID，修复编码问题
         local ps_cmd
         # 开发模式禁用安全与HTTPS，单机引导，指定日志文件路径
-        ps_cmd="Start-Process -FilePath '$es_bat' -ArgumentList '-Epath.data=$data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false','-Epath.logs=$LOG_DIR' -RedirectStandardOutput '$log_file' -RedirectStandardError '$log_file' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        # 使用UTF-8编码和正确的路径格式避免乱码
+        # 在Git Bash环境下，直接使用相对路径更可靠
+        local win_es_bat="$es_bat"
+        local win_data_dir="$data_dir"
+        local win_log_dir="$LOG_DIR"
+        local win_log_file="$log_file"
+        
+        ps_cmd="[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Start-Process -FilePath '$win_es_bat' -ArgumentList '-Epath.data=$win_data_dir','-Ehttp.port=${ELASTICSEARCH_PORT:-9200}','-Enetwork.host=127.0.0.1','-Expack.security.enabled=false','-Expack.security.http.ssl.enabled=false','-Expack.security.transport.ssl.enabled=false','-Ediscovery.type=single-node','-Expack.ml.enabled=false','-Ecluster.routing.allocation.disk.threshold_enabled=false','-Epath.logs=$win_log_dir' -RedirectStandardOutput '$win_log_file' -RedirectStandardError '$win_log_file.err' -WindowStyle Hidden -PassThru | Select -Expand Id"
         local pid
-        pid=$(powershell -NoProfile -Command "$ps_cmd")
-        if [[ -n "$pid" ]]; then
+        pid=$(powershell -NoProfile -Command "$ps_cmd" 2>/dev/null)
+        if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]]; then
             echo "$pid" > "$pid_file"
             log_info "Elasticsearch 启动中 (PID: $pid)，等待就绪..."
             # 等待健康
@@ -628,7 +647,7 @@ start_elasticsearch_local() {
             log_warn "Elasticsearch 启动超时，请查看 $log_file"
             return 1
         else
-            log_error "Elasticsearch 启动失败"
+            log_error "Elasticsearch 启动失败，PID获取失败: '$pid'"
             return 1
         fi
     else
@@ -670,21 +689,43 @@ start_qdrant_local() {
         log_info "使用配置文件: $config_file"
         log_info "数据存储路径: $data_dir"
         
-        # 先清理端口占用的僵尸进程
-        if netstat -an | grep -E ":${QDRANT_PORT:-6333} .*LISTEN" >/dev/null 2>&1; then
-            log_warn "检测到Qdrant端口已被占用，可能已有实例在运行"
+        # 检查是否有旧的PID文件
+        if [[ -f "$pid_file" ]]; then
+            local old_pid
+            old_pid=$(cat "$pid_file" 2>/dev/null)
+            if [[ -n "$old_pid" ]]; then
+                # 检查进程是否还在运行
+                if ! tasklist 2>/dev/null | grep -q "$old_pid"; then
+                    log_warn "清理无效的Qdrant PID文件 (PID: $old_pid)"
+                    rm -f "$pid_file" 2>/dev/null || true
+                else
+                    log_info "发现运行中的Qdrant进程 (PID: $old_pid)，跳过启动"
+                    return 0
+                fi
+            fi
+        fi
+        
+        # 检查端口是否被占用
+        if netstat -an 2>/dev/null | grep -E ":${QDRANT_PORT:-6333} .*LISTEN" >/dev/null; then
+            log_info "Qdrant端口 ${QDRANT_PORT:-6333} 已被占用，跳过启动"
+            return 0
         fi
         
         # 使用配置文件启动Qdrant，禁用遥测
         local start_cmd="\"$exe\" --config-path \"$config_file\" --disable-telemetry"
         log_debug "启动命令: $start_cmd"
         
-        # 使用PowerShell启动并获取PID，同时重定向日志到项目logs目录
-        local ps_cmd="Start-Process -FilePath '$exe' -ArgumentList '--config-path','$config_file','--disable-telemetry' -RedirectStandardOutput '$log_file' -RedirectStandardError '$log_file' -WindowStyle Hidden -PassThru | Select -Expand Id"
-        local pid
-        pid=$(powershell -NoProfile -Command "$ps_cmd")
+        # 使用PowerShell启动并获取PID，修复编码问题
+        # 在Git Bash环境下，直接使用相对路径更可靠
+        local win_exe="$exe"
+        local win_config_file="$config_file"
+        local win_log_file="$log_file"
         
-        if [[ -n "$pid" ]]; then
+        local ps_cmd="[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Start-Process -FilePath '$win_exe' -ArgumentList '--config-path','$win_config_file','--disable-telemetry' -RedirectStandardOutput '$win_log_file' -RedirectStandardError '$win_log_file.err' -WindowStyle Hidden -PassThru | Select -Expand Id"
+        local pid
+        pid=$(powershell -NoProfile -Command "$ps_cmd" 2>/dev/null)
+        
+        if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]]; then
             echo "$pid" > "$pid_file"
             log_info "Qdrant 启动中 (PID: $pid)，等待就绪..."
             
@@ -699,7 +740,7 @@ start_qdrant_local() {
             log_warn "Qdrant 启动超时，请查看日志: $log_file"
             return 1
         else
-            log_error "Qdrant 启动失败"
+            log_error "Qdrant 启动失败，PID获取失败: '$pid'"
             return 1
         fi
     else
@@ -1059,34 +1100,49 @@ stop_log_collector() {
         local pid
         pid=$(cat "$pid_file")
         
-        if kill -0 "$pid" 2>/dev/null; then
-            log_info "停止日志收集器 (PID: $pid)..."
-            
-            # 发送SIGTERM信号，让Python程序优雅退出
-            kill -TERM "$pid" 2>/dev/null || true
-            
-            # 等待进程退出
-            local wait_count=0
-            while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt 5 ]]; do
-                sleep 1
-                ((wait_count++))
-            done
-            
-            # 如果还在运行，强制终止
-            if kill -0 "$pid" 2>/dev/null; then
-                log_warn "日志收集器未响应，强制终止..."
-                if [[ "$OS" == "windows" ]]; then
-                    # Windows: 强制杀死进程树
-                    taskkill /T /F /PID "$pid" 2>/dev/null || true
+        # Windows环境下的进程检查
+        if [[ "$OS" == "windows" ]]; then
+            if tasklist 2>/dev/null | grep -q "$pid"; then
+                log_info "停止日志收集器 (PID: $pid)..."
+                
+                # Windows下使用taskkill
+                taskkill //F //PID "$pid" 2>/dev/null || true
+                sleep 2
+                
+                # 检查是否成功停止
+                if ! tasklist 2>/dev/null | grep -q "$pid"; then
+                    log_info "✓ 日志收集器已停止"
                 else
-                    # Unix: 强制杀死
+                    log_error "日志收集器停止失败"
+                fi
+            else
+                log_debug "日志收集器进程不存在"
+            fi
+        else
+            # Unix/Linux环境
+            if kill -0 "$pid" 2>/dev/null; then
+                log_info "停止日志收集器 (PID: $pid)..."
+                
+                # 发送SIGTERM信号，让Python程序优雅退出
+                kill -TERM "$pid" 2>/dev/null || true
+                
+                # 等待进程退出
+                local wait_count=0
+                while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt 5 ]]; do
+                    sleep 1
+                    ((wait_count++))
+                done
+                
+                # 如果还在运行，强制终止
+                if kill -0 "$pid" 2>/dev/null; then
+                    log_warn "日志收集器未响应，强制终止..."
                     kill -KILL "$pid" 2>/dev/null || true
                 fi
+                
+                log_info "✓ 日志收集器已停止"
+            else
+                log_debug "日志收集器进程不存在"
             fi
-            
-            log_info "✓ 日志收集器已停止"
-        else
-            log_debug "日志收集器进程不存在"
         fi
         
         rm -f "$pid_file"
@@ -1324,12 +1380,23 @@ start_service() {
     if [[ -f "$pid_file" ]]; then
         local existing_pid
         existing_pid=$(cat "$pid_file")
-        if kill -0 "$existing_pid" 2>/dev/null; then
-            log_warn "$service_name 已经在运行 (PID: $existing_pid)"
-            return 0
+        # Windows环境下使用tasklist检查进程
+        if [[ "$OS" == "windows" ]]; then
+            if tasklist 2>/dev/null | grep -q " $existing_pid "; then
+                log_warn "$service_name 已经在运行 (PID: $existing_pid)"
+                return 0
+            else
+                log_debug "清理无效的PID文件: $pid_file"
+                rm -f "$pid_file"
+            fi
         else
-            log_debug "清理无效的PID文件: $pid_file"
-            rm -f "$pid_file"
+            if kill -0 "$existing_pid" 2>/dev/null; then
+                log_warn "$service_name 已经在运行 (PID: $existing_pid)"
+                return 0
+            else
+                log_debug "清理无效的PID文件: $pid_file"
+                rm -f "$pid_file"
+            fi
         fi
     fi
     
@@ -1346,17 +1413,32 @@ start_service() {
     local pid=$!
     echo $pid > "$pid_file"
     
-    # 等待服务启动
-    sleep "${SERVICE_START_WAIT:-3}"
+    # 等待服务启动（API服务需要更长时间）
+    if [[ "$service_name" == "api" ]]; then
+        sleep "${API_START_WAIT:-15}"
+    else
+        sleep "${SERVICE_START_WAIT:-3}"
+    fi
     
     # 验证服务是否成功启动
-    if kill -0 "$pid" 2>/dev/null; then
-        log_info "✓ $service_name 启动成功 (PID: $pid)"
-        return 0
+    if [[ "$OS" == "windows" ]]; then
+        if tasklist 2>/dev/null | grep -q " $pid "; then
+            log_info "✓ $service_name 启动成功 (PID: $pid)"
+            return 0
+        else
+            log_error "$service_name 启动失败，查看日志: $log_file"
+            rm -f "$pid_file"
+            return 1
+        fi
     else
-        log_error "$service_name 启动失败，查看日志: $log_file"
-        rm -f "$pid_file"
-        return 1
+        if kill -0 "$pid" 2>/dev/null; then
+            log_info "✓ $service_name 启动成功 (PID: $pid)"
+            return 0
+        else
+            log_error "$service_name 启动失败，查看日志: $log_file"
+            rm -f "$pid_file"
+            return 1
+        fi
     fi
 }
 
@@ -1368,33 +1450,54 @@ stop_service() {
         local pid
         pid=$(cat "$pid_file")
         
-        if kill -0 "$pid" 2>/dev/null; then
-            log_info "停止 $service_name (PID: $pid)..."
-            
-            # 优雅停止
-            kill -TERM "$pid" 2>/dev/null || true
-            
-            # 等待进程结束
-            local wait_count=0
-            while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt ${SERVICE_STOP_WAIT:-10} ]]; do
-                sleep 1
-                ((wait_count++))
-            done
-            
-            # 如果还在运行，强制杀死
-            if kill -0 "$pid" 2>/dev/null; then
-                log_warn "强制停止 $service_name..."
-                kill -KILL "$pid" 2>/dev/null || true
-                sleep "${SERVICE_KILL_WAIT:-2}"
-            fi
-            
-            if ! kill -0 "$pid" 2>/dev/null; then
-                log_info "✓ $service_name 已停止"
+        # Windows环境下的进程检查
+        if [[ "$OS" == "windows" ]]; then
+            if tasklist 2>/dev/null | grep -q "$pid"; then
+                log_info "停止 $service_name (PID: $pid)..."
+                
+                # Windows下使用taskkill
+                taskkill //F //PID "$pid" 2>/dev/null || true
+                sleep 2
+                
+                # 检查是否成功停止
+                if ! tasklist 2>/dev/null | grep -q "$pid"; then
+                    log_info "✓ $service_name 已停止"
+                else
+                    log_error "$service_name 停止失败"
+                fi
             else
-                log_error "$service_name 停止失败"
+                log_debug "$service_name 进程不存在"
             fi
         else
-            log_debug "$service_name 进程不存在"
+            # Unix/Linux环境
+            if kill -0 "$pid" 2>/dev/null; then
+                log_info "停止 $service_name (PID: $pid)..."
+                
+                # 优雅停止
+                kill -TERM "$pid" 2>/dev/null || true
+                
+                # 等待进程结束
+                local wait_count=0
+                while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt ${SERVICE_STOP_WAIT:-10} ]]; do
+                    sleep 1
+                    ((wait_count++))
+                done
+                
+                # 如果还在运行，强制杀死
+                if kill -0 "$pid" 2>/dev/null; then
+                    log_warn "强制停止 $service_name..."
+                    kill -KILL "$pid" 2>/dev/null || true
+                    sleep "${SERVICE_KILL_WAIT:-2}"
+                fi
+                
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    log_info "✓ $service_name 已停止"
+                else
+                    log_error "$service_name 停止失败"
+                fi
+            else
+                log_debug "$service_name 进程不存在"
+            fi
         fi
         
         rm -f "$pid_file"
@@ -1502,14 +1605,14 @@ start_all_services() {
     # 启动Celery工作进程（使用API虚拟环境）
     if [[ "$OS" == "windows" ]]; then
         # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
-        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} --pool=solo"
     else
         start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     fi
     
     # 启动Celery Beat（定时任务调度）
     if [[ "$OS" == "windows" ]]; then
-        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
     else
         start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
     fi
@@ -1517,7 +1620,7 @@ start_all_services() {
     # 启动Celery监控（可选）
     if [[ "$OS" == "windows" ]]; then
         # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
-        start_service "celery-flower" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
+        start_service "celery-flower" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     else
         start_service "celery-flower" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     fi
@@ -1914,3 +2017,4 @@ fi
 
 # 执行主函数
 main "$@"
+

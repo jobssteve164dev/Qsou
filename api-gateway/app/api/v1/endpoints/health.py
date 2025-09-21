@@ -79,6 +79,40 @@ async def system_health_check():
         raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
 
 
+@router.get("/stats")
+async def system_stats():
+    """
+    获取系统统计信息 - 前端监控页面使用
+    """
+    logger.info("获取系统统计信息")
+    
+    try:
+        # 获取系统健康状态
+        services = await _check_all_services()
+        overall_status = _calculate_overall_status(services)
+        
+        # 构建前端期望的统计信息格式
+        stats = {
+            "documents_count": 12500,  # TODO: 从Elasticsearch获取真实文档数量
+            "searches_today": 156,     # TODO: 从Redis或数据库获取今日搜索次数
+            "analysis_reports": 23,    # TODO: 从数据库获取分析报告数量
+            "system_status": "healthy" if overall_status == "healthy" else "warning" if overall_status == "degraded" else "error",
+            "services": {
+                "elasticsearch": any(s.name == "elasticsearch" and s.status == "healthy" for s in services),
+                "qdrant": any(s.name == "qdrant" and s.status == "healthy" for s in services),
+                "crawler": True,  # TODO: 检查爬虫服务状态
+                "processor": True  # TODO: 检查数据处理服务状态
+            }
+        }
+        
+        logger.info("系统统计信息收集完成")
+        return stats
+        
+    except Exception as e:
+        logger.error("统计信息收集失败", error=str(e))
+        raise HTTPException(status_code=500, detail=f"统计信息收集失败: {str(e)}")
+
+
 @router.get("/metrics", response_model=SystemMetrics)
 async def system_metrics():
     """
