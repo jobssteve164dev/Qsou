@@ -41,8 +41,8 @@ class DataProcessingPipeline:
             import os
             self.celery_app = Celery('qsou-data-processor')
             self.celery_app.config_from_object({
-                'broker_url': os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
-                'result_backend': os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
+                'broker_url': os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/1'),
+                'result_backend': os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/2'),
                 'task_serializer': 'json',
                 'result_serializer': 'json',
                 'accept_content': ['json'],
