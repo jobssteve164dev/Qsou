@@ -1578,8 +1578,8 @@ start_all_services() {
     
     # 启动Celery工作进程（使用API虚拟环境）
     if [[ "$OS" == "windows" ]]; then
-        # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
-        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+        # Windows下使用 solo 池避免 WinError 5（billiard 进程/锁权限问题）
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
     else
         start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     fi
@@ -1699,6 +1699,14 @@ cleanup() {
         log_debug "清理旧日志文件"
     fi
     
+    # 额外安全清理：确保关键端口无残留进程（Windows/Unix 兼容）
+    for port in ${ELASTICSEARCH_PORT:-9200} ${QDRANT_PORT:-6333} ${REDIS_PORT:-6379}; do
+        if check_port_in_use "$port" "post-clean"; then
+            log_warn "清理后端口仍被占用: $port，尝试强制回收..."
+            kill_port "$port" "force-cleanup"
+        fi
+    done
+    
     log_info "清理完成"
 }
 
@@ -1712,8 +1720,8 @@ trap_exit() {
     exit 0
 }
 
-# 设置信号陷阱
-trap trap_exit SIGINT SIGTERM
+# 设置信号陷阱（包含正常退出）
+trap trap_exit SIGINT SIGTERM EXIT
 
 # ============================================
 # 帮助信息

@@ -12,7 +12,7 @@ redis==5.0.1
 
 # Search & Vector Database
 elasticsearch==8.11.0
-qdrant-client==1.12.1
+qdrant-client==1.15.1
 
 # Task Queue
 celery==5.3.4
@@ -24,6 +24,8 @@ numpy==1.24.4
 python-dateutil==2.8.2
 sentence-transformers==2.2.2
 jieba==0.42.1
+pkuseg==0.0.25
+LAC==2.1.2
 
 # HTTP & Networking  
 httpx==0.25.2

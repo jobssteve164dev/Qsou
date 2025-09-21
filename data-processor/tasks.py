@@ -43,6 +43,13 @@ except ImportError as e:
 # 创建Celery应用实例
 app = Celery('qsou-data-processor')
 
+# 先载入外部配置，以便在 Windows 下应用 solo 池等设置
+try:
+    app.config_from_object('celeryconfig')
+except Exception as _e:
+    # 保守处理：若未找到配置文件，继续使用下方内联配置
+    pass
+
 # Celery配置
 app.conf.update(
     broker_url=config.celery_broker_url,
