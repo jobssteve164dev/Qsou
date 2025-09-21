@@ -24,13 +24,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // 是否启用开发环境静默登录
+  const enableDevSilentLogin =
+    typeof process !== 'undefined' &&
+    process.env.NODE_ENV === 'development' &&
+    (process.env.NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN ?? 'true') !== 'false';
+
+  // 开发环境静默登录
+  const devSilentLogin = async (): Promise<boolean> => {
+    if (!enableDevSilentLogin) return false;
+    try {
+      const loginRes = await authApi.login({ username: 'admin', password: 'admin123' });
+      if (loginRes.success && loginRes.data?.token) {
+        const me = await authApi.getCurrentUser();
+        if (me.success && me.data) {
+          setUser(me.data);
+          return true;
+        }
+      }
+    } catch (error) {
+      // 在开发模式下打印更详细的错误，便于定位
+      // eslint-disable-next-line no-console
+      console.error('[Dev Mode] 静默登录失败:', errorUtils.getErrorMessage(error));
+    }
+    return false;
+  };
+
   // 检查当前用户状态
   const checkAuthStatus = async () => {
+    setLoading(true);
     const token = localStorage.getItem('auth_token');
     
     if (!token) {
+      // 开发环境尝试静默登录
+      const ok = await devSilentLogin();
       setLoading(false);
-      return;
+      if (ok) return; // 已完成静默登录并设置了用户
+      return; // 未开启或失败，保持未登录状态
     }
 
     try {
@@ -92,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // 监听路由变化，检查页面权限
   useEffect(() => {
-    const handleRouteChange = (url: string) => {
+    const handleRouteChange = async (url: string) => {
       // 受保护的路由列表
       const protectedRoutes = ['/intelligence', '/monitor'];
       const adminRoutes = ['/monitor'];
@@ -102,6 +132,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (!loading) {
         if (isProtectedRoute && !isAuthenticated) {
+          // 在开发环境下，尝试静默登录一次，避免点击受保护页面立即被重定向
+          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+          if (!token && enableDevSilentLogin) {
+            setLoading(true);
+            const ok = await devSilentLogin();
+            setLoading(false);
+            if (ok) {
+              // 已登录，继续原目标路由
+              router.replace(url);
+              return;
+            }
+          }
           router.push(`/login?returnUrl=${encodeURIComponent(url)}`);
         } else if (isAdminRoute && !hasRole('admin')) {
           router.push('/403'); // 权限不足页面

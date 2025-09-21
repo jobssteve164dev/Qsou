@@ -12,6 +12,8 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1',
+    // 开发环境静默登录开关（默认开启）。如需关闭，设置为 'false'
+    NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN: process.env.NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN || 'true',
   },
 }
 

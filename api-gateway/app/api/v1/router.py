@@ -4,7 +4,7 @@ API v1 主路由
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import search, documents, intelligence, health, data_processing
+from app.api.v1.endpoints import search, documents, intelligence, health, data_processing, auth
 
 api_router = APIRouter()
 
@@ -37,4 +37,11 @@ api_router.include_router(
     data_processing.router, 
     prefix="/process", 
     tags=["数据处理"]
+)
+
+# 开发环境最小认证路由
+api_router.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["认证"],
 )

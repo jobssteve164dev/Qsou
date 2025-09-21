@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { authApi } from '@/services/api';
 
@@ -84,6 +84,7 @@ export function useAuth(options: UseAuthOptions = {}) {
    */
   const performSilentLogin = async () => {
     try {
+      // eslint-disable-next-line no-console
       console.log('[Dev Mode] 尝试静默登录...');
       
       const response = await authApi.login({
@@ -92,6 +93,7 @@ export function useAuth(options: UseAuthOptions = {}) {
       });
 
       if (response.success && response.data?.token) {
+        // eslint-disable-next-line no-console
         console.log('[Dev Mode] 静默登录成功');
         
         // 获取用户信息
@@ -110,6 +112,7 @@ export function useAuth(options: UseAuthOptions = {}) {
         }
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('[Dev Mode] 静默登录失败:', error);
     }
 
@@ -174,3 +177,5 @@ export function withAuth<P extends object>(
     return <Component {...props} />;
   };
 }
+
+

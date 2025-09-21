@@ -1639,6 +1639,15 @@ start_all_services() {
     # Flower 健康检查仅做提示
     health_check "Celery监控" "http://localhost:${CELERY_FLOWER_PORT:-5555}" || log_warn "Celery监控页面暂不可达（不影响 worker 工作），可稍后再试"
 
+    # Celery Beat 轻量健康检查：查看调度心跳是否写入日志
+    if [[ -f "$LOG_DIR/celery-beat.log" ]]; then
+        if tail -n 200 "$LOG_DIR/celery-beat.log" | grep -qi "beat: Starting" || tail -n 200 "$LOG_DIR/celery-beat.log" | grep -qi "Scheduler"; then
+            log_info "✓ Celery Beat 日志检测正常"
+        else
+            log_warn "Celery Beat 日志未见心跳，稍后将由自愈机制检查并重启"
+        fi
+    fi
+
     # 应用启动后延时2分钟自动触发一次采集任务（无需手动运行爬虫）
     (
         sleep 120
@@ -1728,7 +1737,7 @@ trap_exit() {
 }
 
 # 设置信号陷阱（包含正常退出）
-trap trap_exit SIGINT SIGTERM EXIT
+trap trap_exit SIGINT SIGTERM
 
 # ============================================
 # 帮助信息
@@ -1779,7 +1788,7 @@ EOF
 show_status() {
     log_step "服务状态检查..."
     
-    local services=("api" "frontend" "celery-worker" "celery-flower" "elasticsearch" "qdrant")
+    local services=("api" "frontend" "celery-worker" "celery-beat" "celery-flower" "elasticsearch" "qdrant")
     
     for service in "${services[@]}"; do
         local pid_file="$PID_DIR/${service}.pid"
@@ -1937,7 +1946,47 @@ main() {
             # 保持脚本运行，等待用户中断
             while true; do
                 sleep 10
-                # 可以在这里添加定期健康检查
+                # 定期自愈：如果 Celery worker/beat 异常退出则自动重启
+                for svc in "celery-worker" "celery-beat"; do
+                    local pid_file="$PID_DIR/${svc}.pid"
+                    if [[ -f "$pid_file" ]]; then
+                        local pid
+                        pid=$(cat "$pid_file")
+                        if ! kill -0 "$pid" 2>/dev/null; then
+                            log_warn "检测到 $svc 异常退出，正在自动重启..."
+                            # 读取原始启动命令
+                            if [[ "$svc" == "celery-worker" ]]; then
+                                if [[ "$OS" == "windows" ]]; then
+                                    start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
+                                else
+                                    start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+                                fi
+                            else
+                                if [[ "$OS" == "windows" ]]; then
+                                    start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                else
+                                    start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                                fi
+                            fi
+                        fi
+                    else
+                        # 无PID文件也认为需要恢复
+                        log_warn "$svc 缺少PID文件，尝试恢复..."
+                        if [[ "$svc" == "celery-worker" ]]; then
+                            if [[ "$OS" == "windows" ]]; then
+                                start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info}"
+                            else
+                                start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
+                            fi
+                        else
+                            if [[ "$OS" == "windows" ]]; then
+                                start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                            else
+                                start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+                            fi
+                        fi
+                    fi
+                done
             done
             ;;
         stop)
