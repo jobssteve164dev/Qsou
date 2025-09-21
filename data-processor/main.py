@@ -26,7 +26,7 @@ from vector.vector_manager import VectorManager
 from es_indexing.index_manager import IndexManager
 from es_indexing.document_indexer import DocumentIndexer
 from es_indexing.search_engine import SearchEngine
-from incremental.sync_manager import SyncManager
+from incremental_processing.sync_manager import SyncManager
 from config import config
 
 
