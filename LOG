@@ -1,58 +1,21 @@
 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
 websocket.js:39 [HMR] connected
-hot-reloader-client.js:222 [Fast Refresh] rebuilding
 api.ts:56 [API] 200 GET /search/trending Object
+api.ts:56 [API] 200 GET /auth/me Object
+api.ts:56 [API] 200 GET /search/trending Object
+api.ts:56 [API] 200 GET /auth/me Object
 api.ts:56 [API] 200 GET /system/stats Object
-api.ts:56 [API] 200 GET /search/trending Object
-hot-reloader-client.js:222 [Fast Refresh] rebuilding
-api.ts:56 [API] 200 GET /auth/me {durationMs: 20549, traceId: '35b23d4d-179a-48fd-8878-1197f12f3a0a'}
-api.ts:56 [API] 200 GET /system/stats {durationMs: 20555, traceId: '0de8292c-6add-4be6-b183-7c0b5b077a01'}
-api.ts:56 [API] 200 GET /auth/me {durationMs: 20559, traceId: 'b9eaa001-923f-4b13-89bd-8c83e7891131'}
-api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '239e5f55-4db2-4d36-816d-1b2b3793919d', detail: undefined}
+api.ts:56 [API] 200 GET /system/stats Object
+api.ts:56 [API] 200 GET /search/suggestions?q=to Object
+api.ts:56 [API] 200 GET /search/suggestions?q=tou Object
+api.ts:56 [API] 200 GET /search/suggestions?q=tou'z Object
+search/:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+api.ts:70 [API ERROR] POST /search 500 {traceId: 'c21f2dfc-4b46-4d0f-a709-1214529f17ce', detail: {…}}
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 eval @ api.ts:70
-api.ts:97 API请求失败 [GET /system/stats]: AxiosError {message: 'timeout of 30000ms exceeded', name: 'AxiosError', code: 'ECONNABORTED', config: {…}, request: XMLHttpRequest, …}
+api.ts:97 API请求失败 [POST /search]: AxiosError {message: 'Request failed with status code 500', name: 'AxiosError', code: 'ERR_BAD_RESPONSE', config: {…}, request: XMLHttpRequest, …}
 console.error @ hydration-error-info.js:63
 window.console.error @ setup-hydration-warning.js:18
 apiRequest @ api.ts:97
-api.ts:70 [API ERROR] GET /auth/me undefined {traceId: 'b0bc2584-8062-490f-9873-e93ecd3f2d55', detail: undefined}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-eval @ api.ts:70
-api.ts:97 API请求失败 [GET /auth/me]: AxiosError {message: 'timeout of 30000ms exceeded', name: 'AxiosError', code: 'ECONNABORTED', config: {…}, request: XMLHttpRequest, …}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-apiRequest @ api.ts:97
-api.ts:70 [API ERROR] GET /system/stats undefined {traceId: '0bdf2045-fb03-4276-9a53-f16f50a5519f', detail: undefined}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-eval @ api.ts:70
-api.ts:97 API请求失败 [GET /system/stats]: AxiosError {message: 'timeout of 30000ms exceeded', name: 'AxiosError', code: 'ECONNABORTED', config: {…}, request: XMLHttpRequest, …}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-apiRequest @ api.ts:97
-api.ts:70 [API ERROR] GET /auth/me undefined {traceId: '0a42950c-26f2-4a0d-bfd3-2dbc5b82c0bb', detail: undefined}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-eval @ api.ts:70
-api.ts:97 API请求失败 [GET /auth/me]: AxiosError {message: 'timeout of 30000ms exceeded', name: 'AxiosError', code: 'ECONNABORTED', config: {…}, request: XMLHttpRequest, …}
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-apiRequest @ api.ts:97
-hot-reloader-client.js:222 [Fast Refresh] rebuilding
-useAuth.tsx:74 Error: Abort fetching component for route: "/login"
-    at handleCancelled (router.js:387:27)
-    at Router.fetchComponent (router.js:1365:13)
-    at async Router.getRouteInfo (router.js:1090:50)
-    at async Router.change (router.js:695:29)
-console.error @ hydration-error-info.js:63
-window.console.error @ setup-hydration-warning.js:18
-handleRouteInfoError @ router.js:933
-getRouteInfo @ router.js:1168
-await in getRouteInfo
-change @ router.js:695
-await in change
-push @ router.js:420
-instance.<computed> @ router.js:174
-checkAuth @ useAuth.tsx:74
+api.ts:56 [API] 200 GET /search/suggestions?q=%E6%8A%95%E8%B5%84 {durationMs: 8543, traceId: 'c63ecbea-1070-4803-85ef-8c72edff77a8'}durationMs: 8543traceId: "c63ecbea-1070-4803-85ef-8c72edff77a8"[[Prototype]]: Object

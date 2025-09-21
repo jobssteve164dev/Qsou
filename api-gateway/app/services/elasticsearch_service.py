@@ -31,10 +31,13 @@ class ElasticsearchService:
                     'port': settings.ELASTICSEARCH_PORT,
                     'scheme': 'http'
                 }],
-                timeout=30,
-                max_retries=3,
-                retry_on_timeout=True,
-                verify_certs=False if settings.SKIP_SSL_VERIFY else True
+                max_retries=1,  # 减少重试次数
+                retry_on_timeout=False,  # 禁用超时重试
+                verify_certs=False if settings.SKIP_SSL_VERIFY else True,
+                # 添加连接池配置
+                maxsize=10,
+                # 只使用request_timeout，移除timeout参数
+                request_timeout=30
             )
             
             # 测试连接
@@ -126,7 +129,7 @@ class ElasticsearchService:
                 body=search_body,
                 from_=from_param,
                 size=page_size,
-                timeout='30s'
+                timeout='10s'  # 减少搜索超时时间
             )
             
             search_time = int((datetime.now() - start_time).total_seconds() * 1000)
