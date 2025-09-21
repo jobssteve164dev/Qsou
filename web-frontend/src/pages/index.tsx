@@ -135,7 +135,7 @@ const HomePage: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
         {/* 搜索头部区域 - 优化响应式布局 */}
         <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* 主搜索区域 */}
             <div className="py-6 sm:py-8 lg:py-10">
               <div className="text-center mb-6 sm:mb-8">
@@ -162,27 +162,25 @@ const HomePage: React.FC = () => {
         </div>
 
         {/* 主内容区域 - 响应式单栏布局 */}
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="max-w-4xl mx-auto px-4">
-            {/* 根据搜索状态显示不同内容 */}
-            {!hasSearched ? (
-              /* 显示欢迎界面 */
-              <WelcomeScreen
-                onSearchSuggestion={handleSearchSuggestion}
-              />
-            ) : (
-              /* 显示搜索结果 */
-              <SearchResults
-                results={results}
-                query={query}
-                loading={loading}
-                error={error}
-                onLoadMore={handleLoadMore}
-                hasMore={hasMore}
-                hasSearched={hasSearched}
-              />
-            )}
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          {/* 根据搜索状态显示不同内容 */}
+          {!hasSearched ? (
+            /* 显示欢迎界面 */
+            <WelcomeScreen
+              onSearchSuggestion={handleSearchSuggestion}
+            />
+          ) : (
+            /* 显示搜索结果 */
+            <SearchResults
+              results={results}
+              query={query}
+              loading={loading}
+              error={error}
+              onLoadMore={handleLoadMore}
+              hasMore={hasMore}
+              hasSearched={hasSearched}
+            />
+          )}
         </div>
 
         {/* 底部占位，避免内容被遮挡 */}
