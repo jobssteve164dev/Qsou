@@ -267,8 +267,8 @@ const IntelligencePage: React.FC = () => {
               </CardContent>
             </Card>
           ) : filteredReports.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
+            <Card className="w-full">
+              <CardContent className="py-12 text-center flex flex-col items-center justify-center min-h-[300px]">
                 <div className="text-gray-400 mb-4">
                   <BarChart3 className="h-12 w-12 mx-auto mb-2" />
                   <h3 className="text-lg font-medium text-gray-600">
