@@ -1380,23 +1380,12 @@ start_service() {
     if [[ -f "$pid_file" ]]; then
         local existing_pid
         existing_pid=$(cat "$pid_file")
-        # Windows环境下使用tasklist检查进程
-        if [[ "$OS" == "windows" ]]; then
-            if tasklist 2>/dev/null | grep -q " $existing_pid "; then
-                log_warn "$service_name 已经在运行 (PID: $existing_pid)"
-                return 0
-            else
-                log_debug "清理无效的PID文件: $pid_file"
-                rm -f "$pid_file"
-            fi
+        if kill -0 "$existing_pid" 2>/dev/null; then
+            log_warn "$service_name 已经在运行 (PID: $existing_pid)"
+            return 0
         else
-            if kill -0 "$existing_pid" 2>/dev/null; then
-                log_warn "$service_name 已经在运行 (PID: $existing_pid)"
-                return 0
-            else
-                log_debug "清理无效的PID文件: $pid_file"
-                rm -f "$pid_file"
-            fi
+            log_debug "清理无效的PID文件: $pid_file"
+            rm -f "$pid_file"
         fi
     fi
     
@@ -1413,32 +1402,17 @@ start_service() {
     local pid=$!
     echo $pid > "$pid_file"
     
-    # 等待服务启动（API服务需要更长时间）
-    if [[ "$service_name" == "api" ]]; then
-        sleep "${API_START_WAIT:-15}"
-    else
-        sleep "${SERVICE_START_WAIT:-3}"
-    fi
+    # 等待服务启动
+    sleep "${SERVICE_START_WAIT:-3}"
     
     # 验证服务是否成功启动
-    if [[ "$OS" == "windows" ]]; then
-        if tasklist 2>/dev/null | grep -q " $pid "; then
-            log_info "✓ $service_name 启动成功 (PID: $pid)"
-            return 0
-        else
-            log_error "$service_name 启动失败，查看日志: $log_file"
-            rm -f "$pid_file"
-            return 1
-        fi
+    if kill -0 "$pid" 2>/dev/null; then
+        log_info "✓ $service_name 启动成功 (PID: $pid)"
+        return 0
     else
-        if kill -0 "$pid" 2>/dev/null; then
-            log_info "✓ $service_name 启动成功 (PID: $pid)"
-            return 0
-        else
-            log_error "$service_name 启动失败，查看日志: $log_file"
-            rm -f "$pid_file"
-            return 1
-        fi
+        log_error "$service_name 启动失败，查看日志: $log_file"
+        rm -f "$pid_file"
+        return 1
     fi
 }
 
@@ -1605,14 +1579,14 @@ start_all_services() {
     # 启动Celery工作进程（使用API虚拟环境）
     if [[ "$OS" == "windows" ]]; then
         # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
-        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} --pool=solo"
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     else
         start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4}"
     fi
     
     # 启动Celery Beat（定时任务调度）
     if [[ "$OS" == "windows" ]]; then
-        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
+        start_service "celery-beat" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
     else
         start_service "celery-beat" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks beat --loglevel=${CELERY_LOGLEVEL:-info}"
     fi
@@ -1620,7 +1594,7 @@ start_all_services() {
     # 启动Celery监控（可选）
     if [[ "$OS" == "windows" ]]; then
         # Windows下设置UTF-8编码，避免中文乱码（Git Bash中使用export）
-        start_service "celery-flower" "cd data-processor && export PYTHONIOENCODING=utf-8 && python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
+        start_service "celery-flower" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     else
         start_service "celery-flower" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks flower --port=${CELERY_FLOWER_PORT:-5555} --address=0.0.0.0"
     fi
