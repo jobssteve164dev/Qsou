@@ -725,23 +725,30 @@ start_qdrant_local() {
         local pid
         pid=$(powershell -NoProfile -Command "$ps_cmd" 2>/dev/null)
         
-        if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]]; then
-            echo "$pid" > "$pid_file"
+        if [[ -n "$pid" ]]; then
+            echo "$pid" >"$pid_file" 2>/dev/null || true
             log_info "Qdrant 启动中 (PID: $pid)，等待就绪..."
-            
-            # 等待服务就绪
-            for i in {1..30}; do
-                if curl -s "http://127.0.0.1:${QDRANT_PORT:-6333}/collections" >/dev/null 2>&1; then
-                    log_info "✓ Qdrant 就绪"
-                    return 0
-                fi
+            # 等待就绪（最多 SERVICE_START_WAIT 秒）
+            local waited=0
+            while [[ $waited -lt ${SERVICE_START_WAIT:-15} ]]; do
                 sleep 1
+                waited=$((waited + 1))
+                # 优先HTTP健康检查，设置1秒超时避免阻塞
+                if curl -sS -m 1 "http://127.0.0.1:${QDRANT_PORT:-6333}/collections" >/dev/null 2>&1; then
+                    log_info "✓ Qdrant 就绪"
+                    break
+                fi
+                # 回退：端口监听即视为就绪
+                if netstat -an 2>/dev/null | grep -E ":${QDRANT_PORT:-6333} .*LISTEN" >/dev/null; then
+                    log_info "✓ Qdrant 端口已监听，视为就绪"
+                    break
+                fi
             done
-            log_warn "Qdrant 启动超时，请查看日志: $log_file"
-            return 1
+            if [[ $waited -ge ${SERVICE_START_WAIT:-15} ]]; then
+                log_warn "Qdrant 启动超时，请查看日志: $log_file"
+            fi
         else
             log_error "Qdrant 启动失败，PID获取失败: '$pid'"
-            return 1
         fi
     else
         log_warn "当前仅实现Windows下的本地Qdrant自动安装/启动"
