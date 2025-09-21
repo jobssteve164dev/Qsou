@@ -50,7 +50,8 @@ class CompanyAnnouncementSpider(scrapy.Spider):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.logger = logging.getLogger(self.name)
+        # 使用Scrapy内置的logger，而不是直接设置self._logger
+        self._logger = logging.getLogger(self.name)
         self.processed_urls = set()
         self.max_pages_per_domain = 3  # 每个域名最多爬取3页
         
@@ -74,7 +75,7 @@ class CompanyAnnouncementSpider(scrapy.Spider):
         page = response.meta['page']
         start_url = response.meta['start_url']
         
-        self.logger.info(f"解析 {domain} 第 {page} 页: {response.url}")
+        self._logger.info(f"解析 {domain} 第 {page} 页: {response.url}")
         
         # 根据域名选择不同的解析策略
         if 'sse.com.cn' in domain:
@@ -154,13 +155,13 @@ class CompanyAnnouncementSpider(scrapy.Spider):
             # 提取公告标题
             title = self.extract_title(response)
             if not title or len(title.strip()) < 5:
-                self.logger.warning(f"公告标题过短或为空: {response.url}")
+                self._logger.warning(f"公告标题过短或为空: {response.url}")
                 return
             
             # 提取公告内容
             content = self.extract_content(response)
             if not content or len(content.strip()) < 50:
-                self.logger.warning(f"公告内容过短或为空: {response.url}")
+                self._logger.warning(f"公告内容过短或为空: {response.url}")
                 return
             
             # 提取公司信息
@@ -185,9 +186,9 @@ class CompanyAnnouncementSpider(scrapy.Spider):
             item['company_name'] = company_info.get('name', '')
             item['stock_code'] = company_info.get('code', '')
             item['announcement_type'] = announcement_type
-            item['publish_time'] = publish_time
+            item['published_at'] = publish_time
             item['announcement_id'] = announcement_id
-            item['crawl_time'] = datetime.now().isoformat()
+            item['crawled_at'] = datetime.now().isoformat()
             item['content_length'] = len(content)
             item['is_important'] = self.is_important_announcement(title, content)
             
@@ -195,10 +196,10 @@ class CompanyAnnouncementSpider(scrapy.Spider):
             if self.validate_announcement_item(item):
                 yield item
             else:
-                self.logger.warning(f"公告数据质量检查失败: {response.url}")
+                self._logger.warning(f"公告数据质量检查失败: {response.url}")
                 
         except Exception as e:
-            self.logger.error(f"解析公告详情失败 {response.url}: {str(e)}")
+            self._logger.error(f"解析公告详情失败 {response.url}: {str(e)}")
     
     def extract_title(self, response) -> str:
         """提取公告标题"""

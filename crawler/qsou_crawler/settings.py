@@ -17,6 +17,7 @@ NEWSPIDER_MODULE = 'qsou_crawler.spiders'
 # 机器人协议遵循 (Robots.txt Compliance)
 # ============================================
 ROBOTSTXT_OBEY = True  # 严格遵循robots.txt
+ROBOTSTXT_ENCODING = 'utf-8'  # 设置robots.txt编码
 
 # 用户代理设置
 USER_AGENT = os.getenv(

@@ -62,7 +62,8 @@ class FinancialNewsSpider(scrapy.Spider):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.logger = logging.getLogger(self.name)
+        # 使用Scrapy内置的logger，而不是直接设置self._logger
+        self._logger = logging.getLogger(self.name)
         self.processed_urls = set()
         self.max_pages_per_domain = 5  # 每个域名最多爬取5页
         
@@ -86,7 +87,7 @@ class FinancialNewsSpider(scrapy.Spider):
         page = response.meta['page']
         start_url = response.meta['start_url']
         
-        self.logger.info(f"解析 {domain} 第 {page} 页: {response.url}")
+        self._logger.info(f"解析 {domain} 第 {page} 页: {response.url}")
         
         # 根据域名选择不同的解析策略
         if 'eastmoney.com' in domain:
@@ -219,14 +220,14 @@ class FinancialNewsSpider(scrapy.Spider):
         try:
             # 提取标题
             title = self.extract_title(response)
-            if not title or len(title.strip()) < 10:
-                self.logger.warning(f"标题过短或为空: {response.url}")
+            if not title or len(title.strip()) < 5:  # 降低标题长度要求
+                self._logger.warning(f"标题过短或为空: {response.url}")
                 return
             
             # 提取内容
             content = self.extract_content(response)
-            if not content or len(content.strip()) < 100:
-                self.logger.warning(f"内容过短或为空: {response.url}")
+            if not content or len(content.strip()) < 50:  # 降低内容长度要求
+                self._logger.warning(f"内容过短或为空: {response.url}")
                 return
             
             # 提取发布时间
@@ -244,10 +245,10 @@ class FinancialNewsSpider(scrapy.Spider):
             item['content'] = content.strip()
             item['url'] = response.url
             item['source'] = response.meta.get('source', 'unknown')
-            item['publish_time'] = publish_time
+            item['published_at'] = publish_time
             item['author'] = author
             item['tags'] = tags
-            item['crawl_time'] = datetime.now().isoformat()
+            item['crawled_at'] = datetime.now().isoformat()
             item['content_length'] = len(content)
             item['category'] = self.classify_news_category(title, content)
             
@@ -255,10 +256,10 @@ class FinancialNewsSpider(scrapy.Spider):
             if self.validate_news_item(item):
                 yield item
             else:
-                self.logger.warning(f"数据质量检查失败: {response.url}")
+                self._logger.warning(f"数据质量检查失败: {response.url}")
                 
         except Exception as e:
-            self.logger.error(f"解析新闻详情失败 {response.url}: {str(e)}")
+            self._logger.error(f"解析新闻详情失败 {response.url}: {str(e)}")
     
     def extract_title(self, response) -> str:
         """提取新闻标题"""

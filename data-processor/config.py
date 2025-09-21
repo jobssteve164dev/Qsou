@@ -52,6 +52,7 @@ class ProcessorConfig(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "allow"  # 允许额外的配置项
 
 
 # 全局配置实例

@@ -10,6 +10,7 @@ import requests
 from typing import Dict, Any, Optional
 from scrapy import Item
 from scrapy.exceptions import DropItem
+from celery import Celery
 
 from qsou_crawler.items import NewsArticleItem, CompanyAnnouncementItem
 
@@ -20,12 +21,10 @@ class DataProcessingPipeline:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         
-        # 数据处理系统API配置（支持环境变量覆盖）
-        import os
-        self.data_processor_url = os.getenv(
-            "DATA_PROCESSOR_URL",
-            "http://localhost:8888/api/v1/process/process"
-        )
+        # 初始化Celery客户端
+        self.celery_app = None
+        self._initialize_celery()
+        
         self.batch_size = 10
         self.batch_items = []
         
@@ -35,6 +34,25 @@ class DataProcessingPipeline:
             'dropped': 0,
             'errors': 0
         }
+    
+    def _initialize_celery(self):
+        """初始化Celery连接"""
+        try:
+            import os
+            self.celery_app = Celery('qsou-data-processor')
+            self.celery_app.config_from_object({
+                'broker_url': os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0'),
+                'result_backend': os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'),
+                'task_serializer': 'json',
+                'result_serializer': 'json',
+                'accept_content': ['json'],
+                'timezone': 'Asia/Shanghai',
+                'enable_utc': True,
+            })
+            self.logger.info("Celery连接初始化成功")
+        except Exception as e:
+            self.logger.error(f"Celery连接初始化失败: {str(e)}")
+            self.celery_app = None
     
     def process_item(self, item: Item, spider) -> Item:
         """处理单个项目"""
@@ -104,46 +122,35 @@ class DataProcessingPipeline:
                 'batch_id': f"batch_{len(self.batch_items)}"
             }
 
+            if not self.celery_app:
+                self.logger.error("Celery客户端未初始化，无法发送数据")
+                self.stats['errors'] += len(self.batch_items)
+                return
+
             self.logger.info(
                 f"发送批次到处理系统",
                 extra={
                     'trace_id': trace_id,
-                    'url': self.data_processor_url,
                     'items': len(self.batch_items)
                 }
             )
 
-            response = requests.post(
-                self.data_processor_url,
-                json=payload,
-                headers={"X-Trace-ID": trace_id, "Content-Type": "application/json"},
-                timeout=30
+            # 调用Celery任务
+            result = self.celery_app.send_task(
+                'data-processor.tasks.process_documents',
+                args=[batch_data, 'crawler', f"batch_{len(self.batch_items)}"],
+                kwargs={'trace_id': trace_id}
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                self.logger.info(
-                    f"成功发送 {len(self.batch_items)} 条数据到数据处理系统",
-                    extra={'trace_id': trace_id, 'processed_count': result.get('processed_count', 0)}
-                )
-                self.logger.info(
-                    f"处理结果: {result.get('message', 'success')}",
-                    extra={'trace_id': trace_id}
-                )
-            else:
-                self.logger.error(
-                    f"数据处理系统响应错误: {response.status_code}",
-                    extra={'trace_id': trace_id}
-                )
-                self.logger.error(
-                    f"响应内容: {response.text}",
-                    extra={'trace_id': trace_id}
-                )
+            self.logger.info(
+                f"成功提交 {len(self.batch_items)} 条数据到数据处理系统",
+                extra={'trace_id': trace_id, 'task_id': result.id}
+            )
+            self.stats['processed'] += len(self.batch_items)
             
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"发送数据到处理系统失败: {str(e)}")
         except Exception as e:
-            self.logger.error(f"处理批次数据失败: {str(e)}")
+            self.logger.error(f"发送数据到处理系统失败: {str(e)}")
+            self.stats['errors'] += len(self.batch_items)
         finally:
             # 清空批次
             self.batch_items = []
