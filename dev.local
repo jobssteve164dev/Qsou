@@ -112,8 +112,8 @@ ENABLE_CRAWLER_TRACE=true
 # AI/ML配置
 # ============================================
 BERT_MODEL_PATH="bert-base-chinese"
-SENTENCE_TRANSFORMER_MODEL="shibing624/text2vec-base-chinese"
-EMBEDDING_DIMENSION=768
+SENTENCE_TRANSFORMER_MODEL="paraphrase-multilingual-MiniLM-L12-v2"
+EMBEDDING_DIMENSION=384
 BATCH_SIZE_EMBEDDING=32
 MAX_SEQUENCE_LENGTH=512
 

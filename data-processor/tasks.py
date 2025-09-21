@@ -10,6 +10,8 @@ Celery异步任务模块
 import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import time
+import uuid
 from celery import Celery, Task
 from celery.result import AsyncResult
 from loguru import logger
@@ -330,32 +332,66 @@ def launch_crawler(self, spider_name: str) -> Dict[str, Any]:
         logs_dir = crawler_dir / 'logs'
         logs_dir.mkdir(parents=True, exist_ok=True)
 
+        # 生成并透传 trace_id 到子进程（爬虫可在其管道或设置中读取）
+        trace_id = str(uuid.uuid4())
+
         cmd = [
             'scrapy', 'crawl', spider_name,
             '-L', 'INFO',
-            '-s', 'LOG_FILE=logs/scrapy.log'
+            '-s', 'LOG_FILE=logs/scrapy.log',
+            '-s', 'LOG_ENABLED=1'
         ]
 
-        logger.info(f"启动爬虫: {spider_name}")
+        # 环境传递（让爬虫侧可读取并用于上游API请求头 X-Trace-ID）
+        env = os.environ.copy()
+        env['TRACE_ID'] = trace_id
+        env['ENABLE_CRAWLER_TRACE'] = env.get('ENABLE_CRAWLER_TRACE', 'true')
+
+        start_ts = time.time()
+        logger.info(
+            f"启动爬虫: {spider_name}",
+            extra={"trace_id": trace_id}
+        )
+
         proc = subprocess.run(
             cmd,
             cwd=str(crawler_dir),
             capture_output=True,
             text=True,
             encoding='utf-8',
-            timeout=60 * 10  # 最长10分钟
+            timeout=60 * 10,  # 最长10分钟
+            env=env,
         )
 
+        duration = round(time.time() - start_ts, 3)
         result = {
             'status': 'success' if proc.returncode == 0 else 'failed',
             'spider': spider_name,
             'returncode': proc.returncode,
+            'trace_id': trace_id,
+            'duration_s': duration,
         }
 
         if proc.returncode != 0:
-            logger.error(f"爬虫执行失败: {spider_name}, rc={proc.returncode}, err={proc.stderr[:500]}")
+            logger.error(
+                f"爬虫执行失败: {spider_name}",
+                extra={
+                    "trace_id": trace_id,
+                    "rc": proc.returncode,
+                    "stderr_head": (proc.stderr or '')[:500]
+                }
+            )
         else:
-            logger.info(f"爬虫执行完成: {spider_name}")
+            # 仅记录输出摘要，避免日志过大
+            stdout_preview = (proc.stdout or '')[-500:]
+            logger.info(
+                f"爬虫执行完成: {spider_name}",
+                extra={
+                    "trace_id": trace_id,
+                    "duration_s": duration,
+                    "stdout_tail": stdout_preview,
+                }
+            )
 
         return result
 

@@ -171,16 +171,18 @@ class VectorStore:
             向量ID列表
         """
         if not self.client or not self.collection_exists:
-            logger.error("向量存储不可用")
+            logger.error("Qdrant向量存储不可用: client={}, collection_exists={}".format(
+                self.client is not None, self.collection_exists))
             return []
         
         if len(vectors) != len(documents):
-            logger.error(f"向量数量 {len(vectors)} 与文档数量 {len(documents)} 不匹配")
+            logger.error(f"Qdrant向量数量 {len(vectors)} 与文档数量 {len(documents)} 不匹配")
             return []
         
-        logger.info(f"开始存储 {len(vectors)} 个向量")
+        logger.info(f"Qdrant开始存储 {len(vectors)} 个向量到集合 {self.collection_name}")
         
         stored_ids = []
+        total_errors = 0
         
         try:
             # 分批存储
@@ -191,14 +193,17 @@ class VectorStore:
                 batch_ids = self._store_batch(batch_vectors, batch_documents)
                 stored_ids.extend(batch_ids)
                 
-                logger.info(f"已存储 {min(i + batch_size, len(vectors))}/{len(vectors)} 个向量")
+                batch_errors = len(batch_documents) - len(batch_ids)
+                total_errors += batch_errors
+                
+                logger.info(f"Qdrant批次存储完成: {min(i + batch_size, len(vectors))}/{len(vectors)}, 成功={len(batch_ids)}, 失败={batch_errors}")
             
-            logger.info(f"向量存储完成，成功存储 {len(stored_ids)} 个向量")
+            logger.info(f"Qdrant向量存储完成: 总成功={len(stored_ids)}, 总失败={total_errors}, 集合={self.collection_name}")
             
             return stored_ids
             
         except Exception as e:
-            logger.error(f"向量存储失败: {str(e)}")
+            logger.error(f"Qdrant向量存储失败: 已存储={len(stored_ids)}, 错误={str(e)}, 集合={self.collection_name}")
             return stored_ids
     
     def _store_batch(self, vectors: np.ndarray, documents: List[Dict[str, Any]]) -> List[str]:

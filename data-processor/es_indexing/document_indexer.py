@@ -322,6 +322,8 @@ class DocumentIndexer:
             索引是否成功
         """
         if not self.client:
+            logger.error("Elasticsearch客户端未初始化，无法索引文档")
+            self.stats['indexing_errors'] += 1
             return False
         
         index_name = index_name or self.default_index
@@ -340,11 +342,11 @@ class DocumentIndexer:
             
             self.stats['documents_indexed'] += 1
             
-            logger.debug(f"文档索引成功: {document_id}, 结果: {response['result']}")
+            logger.info(f"ES文档索引成功: doc_id={document_id}, index={index_name}, result={response['result']}, total_indexed={self.stats['documents_indexed']}")
             return True
             
         except Exception as e:
-            logger.error(f"文档索引失败: {str(e)}")
+            logger.error(f"ES文档索引失败: doc_id={document_id}, index={index_name}, error={str(e)}, total_errors={self.stats['indexing_errors'] + 1}")
             self.stats['indexing_errors'] += 1
             return False
     

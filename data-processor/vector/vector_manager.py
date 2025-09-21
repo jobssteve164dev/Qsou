@@ -86,23 +86,27 @@ class VectorManager:
         start_time = datetime.now()
         batch_size = batch_size or config.batch_size
         
-        logger.info(f"开始处理和存储 {len(documents)} 个文档的向量")
+        logger.info(f"VectorManager开始处理和存储 {len(documents)} 个文档的向量")
         
         try:
             # 验证文档
             valid_documents = self._validate_documents(documents)
             
             if not valid_documents:
-                logger.warning("没有有效的文档需要处理")
+                logger.warning("VectorManager: 没有有效的文档需要处理")
                 return self._create_empty_result()
+            
+            logger.info(f"VectorManager: 验证通过，有效文档 {len(valid_documents)} 个")
             
             # 检查重复文档
             if not update_existing:
                 valid_documents = self._filter_existing_documents(valid_documents)
             
             if not valid_documents:
-                logger.info("所有文档已存在，跳过处理")
+                logger.info("VectorManager: 所有文档已存在，跳过处理")
                 return self._create_empty_result()
+            
+            logger.info(f"VectorManager: 去重后待处理文档 {len(valid_documents)} 个")
             
             # 分批处理
             all_stored_ids = []
