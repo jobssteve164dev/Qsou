@@ -6,7 +6,7 @@
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 from loguru import logger
 
@@ -56,6 +56,7 @@ class ProcessResponse(BaseModel):
 @router.post("/process", response_model=ProcessResponse)
 async def process_documents(
     request: ProcessRequest,
+    http_request: Request,
     background_tasks: BackgroundTasks
 ):
     """
@@ -69,7 +70,8 @@ async def process_documents(
         "开始处理文档数据",
         document_count=len(request.documents),
         source=request.source,
-        batch_id=request.batch_id
+        batch_id=request.batch_id,
+        request_id=getattr(http_request.state, "request_id", None)
     )
     
     try:
@@ -105,7 +107,8 @@ async def process_documents(
             "文档处理完成",
             processed_count=response.processed_count,
             failed_count=response.failed_count,
-            processing_time_ms=processing_time
+            processing_time_ms=processing_time,
+            request_id=getattr(http_request.state, "request_id", None)
         )
         
         return response
@@ -117,7 +120,8 @@ async def process_documents(
             "文档处理失败",
             error=str(e),
             document_count=len(request.documents),
-            processing_time_ms=processing_time
+            processing_time_ms=processing_time,
+            request_id=getattr(http_request.state, "request_id", None)
         )
         
         raise HTTPException(
@@ -125,7 +129,8 @@ async def process_documents(
             detail={
                 "message": "文档处理失败",
                 "error": str(e),
-                "processing_time_ms": processing_time
+                "processing_time_ms": processing_time,
+                "request_id": getattr(http_request.state, "request_id", None)
             }
         )
 

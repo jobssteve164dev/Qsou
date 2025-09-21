@@ -11,6 +11,29 @@ import asyncio
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+@router.get("/stats")
+async def system_stats():
+    """
+    提供给前端首页/监控页的简要系统统计信息。
+    避免 404：路径为 /api/v1/system/stats。
+    """
+    try:
+        # 这里返回最小可用的统计信息；真实实现可对接各服务
+        return {
+            "documents_count": 0,
+            "searches_today": 0,
+            "analysis_reports": 0,
+            "system_status": "healthy",
+            "services": {
+                "elasticsearch": True,
+                "qdrant": True,
+                "crawler": True,
+                "processor": True,
+            },
+        }
+    except Exception as e:
+        logger.error("系统统计获取失败", error=str(e))
+        raise HTTPException(status_code=500, detail="系统统计获取失败")
 
 
 class ServiceStatus(BaseModel):

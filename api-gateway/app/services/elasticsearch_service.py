@@ -126,7 +126,10 @@ class ElasticsearchService:
                 "Elasticsearch搜索完成",
                 query=query,
                 total_hits=response['hits']['total']['value'],
-                search_time_ms=search_time
+                search_time_ms=search_time,
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by
             )
             
             return {
@@ -137,7 +140,7 @@ class ElasticsearchService:
             }
             
         except Exception as e:
-            logger.error("Elasticsearch搜索失败", query=query, error=str(e))
+            logger.error("Elasticsearch搜索失败", query=query, page=page, page_size=page_size, error=str(e))
             raise
     
     async def get_suggestions(self, query: str, size: int = 5) -> List[str]:

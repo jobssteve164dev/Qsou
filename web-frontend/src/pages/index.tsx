@@ -5,8 +5,8 @@ import { Layout } from '@/components/Layout';
 import { UnifiedSearchBar } from '@/components/search/UnifiedSearchBar';
 import { SearchResults } from '@/components/search/SearchResults';
 import { WelcomeScreen } from '@/components/search/WelcomeScreen';
-import { searchApi, systemApi } from '@/services/api';
-import { SearchRequest, SearchResponse, SystemStats } from '@/types';
+import { searchApi } from '@/services/api';
+import { SearchRequest, SearchResponse } from '@/types';
 import { errorUtils, urlUtils } from '@/utils';
 
 const HomePage: React.FC = () => {
@@ -15,7 +15,6 @@ const HomePage: React.FC = () => {
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false); // 新增：是否已经执行过搜索
   
   // 搜索筛选器状态
@@ -49,21 +48,6 @@ const HomePage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 只在组件加载时执行一次
 
-  // 获取系统统计信息
-  useEffect(() => {
-    const fetchSystemStats = async () => {
-      try {
-        const response = await systemApi.getStats();
-        if (response.success && response.data) {
-          setSystemStats(response.data);
-        }
-      } catch (error) {
-        console.error('获取系统统计失败:', error);
-      }
-    };
-
-    fetchSystemStats();
-  }, []);
 
   // 执行搜索
   const performSearch = useCallback(async (searchQuery: string, searchFilters: Partial<SearchRequest>) => {
@@ -170,12 +154,7 @@ const HomePage: React.FC = () => {
                   initialQuery={query}
                   initialFilters={filters}
                   loading={loading}
-                  showStats={true}
-                  statsData={systemStats ? {
-                    documents_count: systemStats.documents_count,
-                    searches_today: systemStats.searches_today,
-                    analysis_reports: systemStats.analysis_reports,
-                  } : undefined}
+                  showStats={false}
                 />
               </div>
             </div>
@@ -189,7 +168,6 @@ const HomePage: React.FC = () => {
             {!hasSearched ? (
               /* 显示欢迎界面 */
               <WelcomeScreen
-                systemStats={systemStats}
                 onSearchSuggestion={handleSearchSuggestion}
               />
             ) : (

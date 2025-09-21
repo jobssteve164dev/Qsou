@@ -4,7 +4,7 @@
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field
 from datetime import datetime
 import structlog
@@ -50,7 +50,7 @@ class SearchResponse(BaseModel):
 
 
 @router.post("/", response_model=SearchResponse)
-async def search_documents(search_query: SearchQuery):
+async def search_documents(search_query: SearchQuery, request: Request):
     """
     执行文档搜索
     支持全文搜索、语义搜索和混合搜索
@@ -61,7 +61,8 @@ async def search_documents(search_query: SearchQuery):
         "执行搜索",
         query=search_query.query,
         search_type=search_query.search_type,
-        page=search_query.page
+        page=search_query.page,
+        request_id=getattr(request.state, "request_id", None)
     )
     
     try:
@@ -92,7 +93,8 @@ async def search_documents(search_query: SearchQuery):
             "搜索完成",
             query=search_query.query,
             total_results=response.total_count,
-            search_time_ms=response.search_time_ms
+            search_time_ms=response.search_time_ms,
+            request_id=getattr(request.state, "request_id", None)
         )
         
         return response
@@ -102,13 +104,15 @@ async def search_documents(search_query: SearchQuery):
         logger.error(
             "搜索失败",
             query=search_query.query,
-            error=str(e)
+            error=str(e),
+            request_id=getattr(request.state, "request_id", None)
         )
         # 在开发环境下，返回更多上下文
         from app.core.config import settings
         detail = {
             "message": "搜索服务异常",
-            "error": str(e)
+            "error": str(e),
+            "request_id": getattr(request.state, "request_id", None)
         } if settings.ENVIRONMENT == "development" else {"message": "搜索服务异常"}
         raise HTTPException(status_code=500, detail=detail)
 

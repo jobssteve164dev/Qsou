@@ -25,8 +25,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """处理请求并记录日志"""
         
-        # 生成请求ID
-        request_id = str(uuid.uuid4())
+        # 接收或生成请求ID（支持从前端透传 X-Trace-ID）
+        incoming_trace_id = request.headers.get("X-Trace-ID") or request.headers.get("x-trace-id")
+        request_id = incoming_trace_id or str(uuid.uuid4())
         request.state.request_id = request_id
         
         # 记录请求开始时间
@@ -65,6 +66,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             
             # 添加响应头
             response.headers["X-Request-ID"] = request_id
+            response.headers["X-Trace-ID"] = request_id
             response.headers["X-Process-Time"] = f"{process_time:.3f}"
             
             return response

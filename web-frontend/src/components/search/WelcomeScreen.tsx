@@ -10,16 +10,12 @@ import {
   Star,
   Target
 } from 'lucide-react';
-import { SystemStats } from '@/types';
-import { numberUtils } from '@/utils';
 
 interface WelcomeScreenProps {
-  systemStats?: SystemStats;
   onSearchSuggestion?: (query: string) => void;
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ 
-  systemStats, 
   onSearchSuggestion 
 }) => {
   // 热门搜索建议
@@ -63,31 +59,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   return (
     <div className="space-y-6">
 
-      {/* 系统统计信息 */}
-      {systemStats && (
-        <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl p-6 border border-primary-100">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-primary-600 mb-1">
-                {numberUtils.formatLargeNumber(systemStats.documents_count)}
-              </div>
-              <div className="text-sm text-gray-600">文档总数</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-primary-600 mb-1">
-                {numberUtils.formatLargeNumber(systemStats.searches_today)}
-              </div>
-              <div className="text-sm text-gray-600">今日搜索</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-primary-600 mb-1">
-                {numberUtils.formatLargeNumber(systemStats.analysis_reports)}
-              </div>
-              <div className="text-sm text-gray-600">分析报告</div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 热门搜索建议 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

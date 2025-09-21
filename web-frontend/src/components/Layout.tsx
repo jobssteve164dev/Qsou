@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Search, BarChart3, Settings, User, LogOut } from 'lucide-react';
 import { Button } from './ui/Button';
+import { StatsFooter } from './ui/StatsFooter';
 import { useAuth } from './auth/AuthContext';
+import { useSystemStats } from '@/hooks/useSystemStats';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,6 +15,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
   const currentPath = router.pathname;
   const { user, logout, hasRole } = useAuth();
+  const { stats, loading: statsLoading } = useSystemStats();
 
   const navigation = [
     {
@@ -139,7 +142,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
-      {/* 底部 */}
+      {/* 统计信息页脚 */}
+      <StatsFooter 
+        statsData={stats ? {
+          documents_count: stats.documents_count,
+          searches_today: stats.searches_today,
+          analysis_reports: stats.analysis_reports,
+        } : undefined}
+        loading={statsLoading}
+      />
+
+      {/* 底部版权信息 */}
       <footer className="bg-white border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="text-center text-sm text-gray-500">

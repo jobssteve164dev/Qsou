@@ -20,8 +20,12 @@ class DataProcessingPipeline:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         
-        # 数据处理系统API配置
-        self.data_processor_url = "http://localhost:8000/api/v1/process/process"
+        # 数据处理系统API配置（支持环境变量覆盖）
+        import os
+        self.data_processor_url = os.getenv(
+            "DATA_PROCESSOR_URL",
+            "http://localhost:8888/api/v1/process/process"
+        )
         self.batch_size = 10
         self.batch_items = []
         
@@ -91,23 +95,50 @@ class DataProcessingPipeline:
                 batch_data.append(self.convert_item_to_dict(item))
             
             # 发送到数据处理系统
+            # 为端到端调试添加 Trace-ID
+            import uuid
+            trace_id = str(uuid.uuid4())
+            payload = {
+                'documents': batch_data,
+                'source': 'crawler',
+                'batch_id': f"batch_{len(self.batch_items)}"
+            }
+
+            self.logger.info(
+                f"发送批次到处理系统",
+                extra={
+                    'trace_id': trace_id,
+                    'url': self.data_processor_url,
+                    'items': len(self.batch_items)
+                }
+            )
+
             response = requests.post(
                 self.data_processor_url,
-                json={
-                    'documents': batch_data,
-                    'source': 'crawler',
-                    'batch_id': f"batch_{len(self.batch_items)}"
-                },
+                json=payload,
+                headers={"X-Trace-ID": trace_id, "Content-Type": "application/json"},
                 timeout=30
             )
             
             if response.status_code == 200:
                 result = response.json()
-                self.logger.info(f"成功发送 {len(self.batch_items)} 条数据到数据处理系统")
-                self.logger.info(f"处理结果: {result.get('message', 'success')}")
+                self.logger.info(
+                    f"成功发送 {len(self.batch_items)} 条数据到数据处理系统",
+                    extra={'trace_id': trace_id, 'processed_count': result.get('processed_count', 0)}
+                )
+                self.logger.info(
+                    f"处理结果: {result.get('message', 'success')}",
+                    extra={'trace_id': trace_id}
+                )
             else:
-                self.logger.error(f"数据处理系统响应错误: {response.status_code}")
-                self.logger.error(f"响应内容: {response.text}")
+                self.logger.error(
+                    f"数据处理系统响应错误: {response.status_code}",
+                    extra={'trace_id': trace_id}
+                )
+                self.logger.error(
+                    f"响应内容: {response.text}",
+                    extra={'trace_id': trace_id}
+                )
             
         except requests.exceptions.RequestException as e:
             self.logger.error(f"发送数据到处理系统失败: {str(e)}")

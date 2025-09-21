@@ -100,6 +100,14 @@ SPIDER_AUTOTHROTTLE_ENABLED=true
 SPIDER_AUTOTHROTTLE_START_DELAY=1
 SPIDER_AUTOTHROTTLE_MAX_DELAY=60
 
+# 数据采集链路调试：爬虫 → API 网关 → 处理/索引
+# 爬虫向数据处理端点投递（指向 API 网关 process 接口）
+DATA_PROCESSOR_URL="http://localhost:8888/api/v1/process/process"
+# 批大小（减小可更快看到端到端效果）
+CRAWLER_BATCH_SIZE=5
+# 启用爬虫侧 Trace 调试日志（随批次生成 X-Trace-ID）
+ENABLE_CRAWLER_TRACE=true
+
 # ============================================
 # AI/ML配置
 # ============================================
@@ -108,6 +116,9 @@ SENTENCE_TRANSFORMER_MODEL="shibing624/text2vec-base-chinese"
 EMBEDDING_DIMENSION=768
 BATCH_SIZE_EMBEDDING=32
 MAX_SEQUENCE_LENGTH=512
+
+# 前端 API 基址（Next.js 读取）
+NEXT_PUBLIC_API_URL="http://localhost:8888/api/v1"
 
 # ============================================
 # 安全配置
