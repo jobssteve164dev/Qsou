@@ -186,7 +186,7 @@ const IntelligencePage: React.FC = () => {
           {/* 统计卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-6 pt-6 flex items-center h-24">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <BarChart3 className="h-8 w-8 text-primary-600" />
@@ -200,7 +200,7 @@ const IntelligencePage: React.FC = () => {
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-6 pt-6 flex items-center h-24">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <Clock className="h-8 w-8 text-yellow-600" />
@@ -216,7 +216,7 @@ const IntelligencePage: React.FC = () => {
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-6 pt-6 flex items-center h-24">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <TrendingUp className="h-8 w-8 text-green-600" />
@@ -232,7 +232,7 @@ const IntelligencePage: React.FC = () => {
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-6 pt-6 flex items-center h-24">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
                     <Eye className="h-8 w-8 text-blue-600" />
