@@ -217,12 +217,11 @@ def process_crawled_data(self, data_id: str, raw_data: Dict[str, Any]) -> Dict[s
         total_processed = stats.get('total_processed', len(documents))
         logger.info(f"数据处理完成: {data_id}, 处理了 {total_processed} 条数据")
         
-        # 如果处理成功，触发后续任务
+        # 如果处理成功，按正确顺序触发任务：先ES索引，ES成功后自动触发向量化
         processed_docs = result.get('processed_documents', [])
         if processed_docs:
-            # 异步启动向量生成和索引更新任务
+            # 第一步：先索引到ES（主存储），ES成功后会自动触发向量化任务
             for doc in processed_docs:
-                generate_embeddings.delay(doc['id'], doc)
                 update_search_index.delay(doc['id'], doc)
         
         return {
@@ -282,18 +281,8 @@ def generate_embeddings(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         
         logger.info(f"文档向量生成并存储完成: {doc_id}, stored_ids={stored_ids}")
         
-        # 保证增量一致性：向量成功后，确保ES也索引/更新
-        try:
-            update_search_index.delay(doc_id, document)
-            logger.info(
-                f"已触发ES索引更新任务",
-                extra={
-                    "doc_id": doc_id,
-                    "category": document.get('category', 'general')
-                }
-            )
-        except Exception as _e:
-            logger.error(f"触发ES索引更新失败: {doc_id}, 错误: {_e}")
+        # 注意：向量化任务不再触发ES更新，因为ES索引应该在向量化之前完成
+        # 这样可以确保ES作为主存储，Qdrant作为辅助存储的正确架构
         
         return {
             'status': 'success',
@@ -474,6 +463,13 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         )
         
         logger.info(f"搜索索引更新完成: {doc_id}")
+        
+        # ES索引成功后，触发向量化任务（正确的架构：ES主存储 → Qdrant辅助存储）
+        try:
+            generate_embeddings.delay(doc_id, document)
+            logger.info(f"已触发向量化任务: {doc_id}")
+        except Exception as _e:
+            logger.error(f"触发向量化任务失败: {doc_id}, 错误: {_e}")
         
         return {
             'status': 'success',
