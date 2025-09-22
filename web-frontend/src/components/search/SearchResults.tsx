@@ -227,7 +227,7 @@ const SearchResultItem: React.FC<{
 
   return (
     <Card className="hover:shadow-md transition-shadow duration-200">
-      <CardContent className="p-6">
+      <CardContent className="p-6 pt-6">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             {/* 标题 */}
