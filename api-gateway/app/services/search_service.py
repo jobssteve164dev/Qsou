@@ -240,7 +240,7 @@ class SearchService:
                 query_vector=query_vector,
                 filters=filters,
                 limit=offset + page_size,
-                score_threshold=0.6
+                score_threshold=0.3
             )
         except Exception as e:
             # 强化错误上下文，暴露核心线索

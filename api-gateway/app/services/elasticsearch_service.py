@@ -9,6 +9,7 @@ from datetime import datetime
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.exceptions import ConnectionError, NotFoundError
 import structlog
+import copy
 
 from app.core.config import settings
 
@@ -25,35 +26,48 @@ class ElasticsearchService:
     async def connect(self) -> bool:
         """连接到Elasticsearch"""
         try:
-            self.client = AsyncElasticsearch(
-                hosts=[{
-                    'host': settings.ELASTICSEARCH_HOST,
-                    'port': settings.ELASTICSEARCH_PORT,
-                    'scheme': 'http'
-                }],
-                max_retries=1,  # 减少重试次数
-                retry_on_timeout=False,  # 禁用超时重试
-                verify_certs=False if settings.SKIP_SSL_VERIFY else True,
-                # 添加连接池配置
-                maxsize=10,
-                # 只使用request_timeout，不能同时指定timeout
-                request_timeout=5
-            )
-            
-            # 测试连接
-            info = await self.client.info()
-            self.is_connected = True
-            
-            logger.info(
-                "Elasticsearch连接成功",
-                cluster_name=info.get('cluster_name'),
-                version=info.get('version', {}).get('number')
-            )
-            
-            # 确保索引存在
-            await self._ensure_indices_exist()
-            
-            return True
+            # 首选配置的主机
+            primary_host = settings.ELASTICSEARCH_HOST
+            port = settings.ELASTICSEARCH_PORT
+            async def _try_connect(host: str) -> bool:
+                # 关闭旧client避免未关闭会话
+                try:
+                    if self.client:
+                        await self.client.close()
+                except Exception:
+                    pass
+                self.client = AsyncElasticsearch(
+                    hosts=[{'host': host, 'port': port, 'scheme': 'http'}],
+                    max_retries=1,
+                    retry_on_timeout=False,
+                    verify_certs=False if settings.SKIP_SSL_VERIFY else True,
+                    maxsize=10,
+                    request_timeout=5
+                )
+                info = await self.client.info()
+                self.is_connected = True
+                logger.info(
+                    "Elasticsearch连接成功",
+                    host=host,
+                    cluster_name=info.get('cluster_name'),
+                    version=info.get('version', {}).get('number')
+                )
+                await self._ensure_indices_exist()
+                return True
+
+            # 尝试主机
+            try:
+                return await _try_connect(primary_host)
+            except Exception as e1:
+                logger.error("Elasticsearch连接失败", error=str(e1), host=primary_host)
+                # 回退到127.0.0.1，规避localhost/IPv6解析问题
+                if primary_host != '127.0.0.1':
+                    try:
+                        return await _try_connect('127.0.0.1')
+                    except Exception as e2:
+                        logger.error("Elasticsearch备用主机连接失败", error=str(e2), host='127.0.0.1')
+                self.is_connected = False
+                return False
             
         except Exception as e:
             logger.error("Elasticsearch连接失败", error=str(e))
@@ -106,8 +120,18 @@ class ElasticsearchService:
         sort_by: str = "relevance"
     ) -> Dict[str, Any]:
         """执行全文搜索"""
+        # 观测优先：在关键路径输出状态
         if not self.client or not self.is_connected:
-            raise ConnectionError("Elasticsearch未连接")
+            logger.error(
+                "Elasticsearch未连接",
+                has_client=bool(self.client),
+                is_connected=self.is_connected
+            )
+            # 轻量重连一次（非简化业务逻辑，只作为连接自愈）
+            try:
+                await self.connect()
+            except Exception as e:
+                raise ConnectionError("Elasticsearch未连接") from e
         
         index_name = index_name or f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"
         
@@ -119,28 +143,24 @@ class ElasticsearchService:
         )
         
         # 计算分页参数
-        from_param = (page - 1) * page_size
-        
+        from datetime import datetime
+        start_time = datetime.now()
+        from elastic_transport import TransportError
         try:
-            start_time = datetime.now()
-            
             response = await self.client.search(
                 index=index_name,
                 body=search_body,
-                from_=from_param,
-                size=page_size,
-                timeout='10s'  # 减少搜索超时时间
+                from_=(page - 1) * page_size,
+                size=page_size
             )
-            
             search_time = int((datetime.now() - start_time).total_seconds() * 1000)
             
-            # 解析搜索结果
             results = self._parse_search_results(response)
             
             logger.info(
                 "Elasticsearch搜索完成",
+                index=index_name,
                 query=query,
-                total_hits=response['hits']['total']['value'],
                 search_time_ms=search_time,
                 page=page,
                 page_size=page_size,
@@ -155,7 +175,60 @@ class ElasticsearchService:
             }
             
         except Exception as e:
-            logger.error("Elasticsearch搜索失败", query=query, page=page, page_size=page_size, error=str(e))
+            logger.error(
+                "Elasticsearch搜索失败",
+                error=str(e),
+                index=index_name,
+                page=page,
+                page_size=page_size,
+                query=query
+            )
+            # 针对映射/fielddata问题的安全回退：移除聚合后重试一次
+            msg = str(e)
+            needs_agg_fallback = any(substr in msg for substr in [
+                'Fielddata is disabled',
+                'no mapping found for field',
+                'search_phase_execution_exception'
+            ])
+            if needs_agg_fallback and isinstance(search_body, dict) and 'aggregations' in search_body:
+                fallback_body = copy.deepcopy(search_body)
+                fallback_body.pop('aggregations', None)
+                try:
+                    logger.warning("Elasticsearch回退查询：去除aggregations后重试", index=index_name)
+                    response = await self.client.search(
+                        index=index_name,
+                        body=fallback_body,
+                        from_=(page - 1) * page_size,
+                        size=page_size
+                    )
+                    results = self._parse_search_results(response)
+                    return {
+                        "total_count": response['hits']['total']['value'],
+                        "results": results,
+                        "search_time_ms": int((datetime.now() - start_time).total_seconds() * 1000),
+                        "aggregations": response.get('aggregations', {})
+                    }
+                except Exception as e2:
+                    logger.error("Elasticsearch回退查询失败", error=str(e2))
+            
+            # 针对连接/超时等错误，进行一次轻量重试
+            try:
+                response = await self.client.search(
+                    index=index_name,
+                    body=search_body,
+                    from_=(page - 1) * page_size,
+                    size=page_size
+                )
+                results = self._parse_search_results(response)
+                return {
+                    "total_count": response['hits']['total']['value'],
+                    "results": results,
+                    "search_time_ms": int((datetime.now() - start_time).total_seconds() * 1000),
+                    "aggregations": response.get('aggregations', {})
+                }
+            except Exception as e2:
+                logger.error("Elasticsearch搜索重试失败", error=str(e2))
+            # 将原始错误抛出，交由上层统一处理
             raise
     
     async def get_suggestions(self, query: str, size: int = 5) -> List[str]:
@@ -192,6 +265,30 @@ class ElasticsearchService:
             
         except Exception as e:
             logger.error("获取搜索建议失败", query=query, error=str(e))
+            # 如果缺少completion字段，回退到title前缀检索
+            if 'no mapping found for field [title_suggest]' in str(e):
+                try:
+                    fallback_body = {
+                        "size": size,
+                        "_source": ["title"],
+                        "query": {
+                            "match_phrase_prefix": {
+                                "title": {
+                                    "query": query
+                                }
+                            }
+                        }
+                    }
+                    resp = await self.client.search(index=index_name, body=fallback_body)
+                    hits = resp.get('hits', {}).get('hits', [])
+                    titles = []
+                    for h in hits:
+                        t = h.get('_source', {}).get('title')
+                        if t:
+                            titles.append(t)
+                    return titles[:size]
+                except Exception as e2:
+                    logger.error("建议回退查询失败", error=str(e2))
             return []
     
     def _build_search_query(
@@ -272,7 +369,11 @@ class ElasticsearchService:
         """解析Elasticsearch搜索结果"""
         results = []
         
-        for hit in response['hits']['hits']:
+        hits_obj = response.get('hits', {})
+        max_score = hits_obj.get('max_score') or 1.0
+        if not max_score or max_score <= 0:
+            max_score = 1.0
+        for hit in hits_obj.get('hits', []):
             source = hit['_source']
             
             # 提取高亮内容
@@ -287,7 +388,7 @@ class ElasticsearchService:
                 "source": source.get('source', ''),
                 "url": source.get('url'),
                 "published_at": source.get('published_at'),
-                "relevance_score": hit['_score'] / 10.0,  # 归一化到0-1
+                "relevance_score": min(1.0, float(hit.get('_score') or 0.0) / float(max_score)),
                 "tags": source.get('tags', [])
             }
             

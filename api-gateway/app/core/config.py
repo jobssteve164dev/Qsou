@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         default="shibing624/text2vec-base-chinese", 
         env="SENTENCE_TRANSFORMER_MODEL"
     )
-    EMBEDDING_DIMENSION: int = Field(default=768, env="EMBEDDING_DIMENSION")
+    EMBEDDING_DIMENSION: int = Field(default=384, env="EMBEDDING_DIMENSION")
     MAX_SEQUENCE_LENGTH: int = Field(default=512, env="MAX_SEQUENCE_LENGTH")
     
     # 爬虫配置

@@ -1632,9 +1632,9 @@ start_all_services() {
     log_info "启动 Celery Worker..."
     if [[ "$OS" == "windows" ]]; then
         # Windows下使用 solo 池避免 WinError 5（billiard 进程/锁权限问题）
-        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,celery"
+        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,ml_processing,indexing,celery"
     else
-        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,celery"
+        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,ml_processing,indexing,celery"
     fi
     
     # 等待Celery Worker完全就绪（关键修复：避免任务丢失）
@@ -2070,10 +2070,10 @@ main() {
                 if [[ "$worker_needs_restart" == "true" ]]; then
                     log_warn "正在重启 celery-worker..."
                     if [[ "$OS" == "windows" ]]; then
-                        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,celery" \
+                        start_service "celery-worker" "cd data-processor && export PYTHONIOENCODING=utf-8 && ../api-gateway/.venv/Scripts/python.exe -m celery -A tasks worker -P solo --concurrency=1 --loglevel=${CELERY_LOGLEVEL:-info} -Q data_processing,ml_processing,indexing,celery" \
                             || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                     else
-                        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,celery" \
+                        start_service "celery-worker" "cd data-processor && PYTHONIOENCODING=utf-8 ../api-gateway/.venv/bin/python -m celery -A tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --concurrency=${CELERY_WORKERS:-4} -Q data_processing,ml_processing,indexing,celery" \
                             || log_warn "celery-worker 自动重启失败，将在下一轮自愈重试（查看 logs/celery-worker.log）"
                     fi
                     

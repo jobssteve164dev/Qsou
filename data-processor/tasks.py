@@ -33,6 +33,7 @@ try:
     from vector.vector_manager import VectorManager
     from es_indexing.document_indexer import DocumentIndexer
     from es_indexing.search_engine import SearchEngine
+    from es_indexing.index_manager import IndexManager
     from config import config
     logger.info("成功导入所有数据处理模块")
 except ImportError as e:
@@ -61,12 +62,12 @@ app.conf.update(
     timezone='Asia/Shanghai',
     enable_utc=True,
     
-    # 任务路由配置
+    # 任务路由配置（与 celeryconfig 对齐，使用实际注册名 'tasks.*'）
     task_routes={
-        'data-processor.tasks.process_crawled_data': {'queue': 'data_processing'},
-        'data-processor.tasks.generate_embeddings': {'queue': 'vector_processing'},
-        'data-processor.tasks.update_search_index': {'queue': 'search_indexing'},
-        'data-processor.tasks.analyze_intelligence': {'queue': 'intelligence_analysis'},
+        'tasks.process_crawled_data': {'queue': 'data_processing'},
+        'tasks.generate_embeddings': {'queue': 'ml_processing'},
+        'tasks.update_search_index': {'queue': 'indexing'},
+        'tasks.analyze_intelligence': {'queue': 'analysis'},
     },
     
     # 工作进程配置
@@ -146,7 +147,14 @@ def get_document_indexer() -> DocumentIndexer:
     """获取文档索引器实例"""
     global _document_indexer
     if _document_indexer is None:
-        _document_indexer = DocumentIndexer()
+        # 优先通过 IndexManager 初始化ES客户端
+        es_client = None
+        try:
+            index_manager = IndexManager()
+            es_client = getattr(index_manager, 'client', None)
+        except Exception as _e:
+            es_client = None
+        _document_indexer = DocumentIndexer(es_client=es_client)
     return _document_indexer
 
 
@@ -204,9 +212,10 @@ def process_crawled_data(self, data_id: str, raw_data: Dict[str, Any]) -> Dict[s
             batch_size=config.batch_size
         )
         
-        # 记录处理统计
-        stats = result.get('stats', {})
-        logger.info(f"数据处理完成: {data_id}, 处理了 {stats.get('total_processed', 0)} 条数据")
+        # 记录处理统计（使用正确的statistics键，并回写真实处理条数）
+        stats = result.get('statistics', {})
+        total_processed = stats.get('total_processed', len(documents))
+        logger.info(f"数据处理完成: {data_id}, 处理了 {total_processed} 条数据")
         
         # 如果处理成功，触发后续任务
         processed_docs = result.get('processed_documents', [])
@@ -259,49 +268,24 @@ def generate_embeddings(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         # 获取向量管理器
         vector_manager = get_vector_manager()
         
-        # 提取文本内容
-        text_content = document.get('content', '')
-        title = document.get('title', '')
+        # 准备文档（确保包含id、title、content等字段，便于批处理接口使用）
+        doc_with_id = dict(document)
+        doc_with_id['id'] = doc_id
         
-        # 组合文本（标题 + 内容）
-        combined_text = f"{title}\n{text_content}".strip()
+        # 复用向量管理器的批处理接口，内部完成向量化与存储
+        result = vector_manager.process_and_store_documents([doc_with_id], batch_size=1, update_existing=True)
+        success = bool(result.get('success')) if isinstance(result, dict) else False
+        stored_ids = result.get('stored_ids', []) if isinstance(result, dict) else []
         
-        if not combined_text:
-            raise ValueError(f"文档 {doc_id} 没有有效的文本内容")
+        if not success:
+            raise ValueError(f"向量生成或存储失败: {doc_id}")
         
-        # 生成向量嵌入
-        embedding_result = vector_manager.generate_embeddings([combined_text])
-        
-        if not embedding_result or not embedding_result.get('embeddings'):
-            raise ValueError(f"向量生成失败: {doc_id}")
-        
-        embedding = embedding_result['embeddings'][0]
-        
-        # 构造向量存储的数据
-        vector_data = {
-            'id': doc_id,
-            'vector': embedding,
-            'metadata': {
-                'title': title,
-                'content_preview': text_content[:200] + '...' if len(text_content) > 200 else text_content,
-                'source': document.get('source', ''),
-                'url': document.get('url', ''),
-                'timestamp': document.get('timestamp', datetime.now().isoformat()),
-                'category': document.get('category', 'general'),
-                'quality_score': document.get('quality_score', 0.0)
-            }
-        }
-        
-        # 存储到向量数据库
-        storage_result = vector_manager.store_vectors([vector_data])
-        
-        logger.info(f"文档向量生成并存储完成: {doc_id}")
+        logger.info(f"文档向量生成并存储完成: {doc_id}, stored_ids={stored_ids}")
         
         return {
             'status': 'success',
             'doc_id': doc_id,
-            'vector_dimension': len(embedding),
-            'storage_result': storage_result,
+            'stored_ids': stored_ids,
             'timestamp': datetime.now().isoformat()
         }
         
@@ -453,13 +437,14 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         elif category == 'announcement':
             index_name = config.es_announcements_index
         else:
-            index_name = f"{config.es_index_prefix}_general"
+            # 统一写入 documents 索引，避免动态创建 general 索引导致映射缺失
+            index_name = f"{config.es_index_prefix}_documents"
         
-        # 索引文档
+        # 索引文档（按签名：document, document_id=None, index_name=None）
         index_result = document_indexer.index_document(
-            index_name=index_name,
             document=index_doc,
-            doc_id=doc_id
+            document_id=doc_id,
+            index_name=index_name
         )
         
         logger.info(f"搜索索引更新完成: {doc_id}")

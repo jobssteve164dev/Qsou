@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 from scrapy import Item
 from scrapy.exceptions import DropItem
 from celery import Celery
+import time
 
 from qsou_crawler.items import NewsArticleItem, CompanyAnnouncementItem
 
@@ -135,11 +136,12 @@ class DataProcessingPipeline:
                 }
             )
 
-            # 调用Celery任务
+            # 调用Celery任务（使用已注册任务名）
+            batch_id = f"batch_{len(self.batch_items)}_{int(time.time())}"
             result = self.celery_app.send_task(
-                'data-processor.tasks.process_documents',
-                args=[batch_data, 'crawler', f"batch_{len(self.batch_items)}"],
-                kwargs={'trace_id': trace_id}
+                'tasks.process_crawled_data',
+                args=[batch_id, batch_data],
+                queue='data_processing'
             )
             
             self.logger.info(
@@ -165,11 +167,11 @@ class DataProcessingPipeline:
                 'content': item.get('content', ''),
                 'url': item.get('url', ''),
                 'source': item.get('source', ''),
-                'publish_time': item.get('publish_time', ''),
+                'publish_time': item.get('publish_time') or item.get('published_at', ''),
                 'author': item.get('author', ''),
                 'tags': item.get('tags', []),
                 'category': item.get('category', ''),
-                'crawl_time': item.get('crawl_time', ''),
+                'crawl_time': item.get('crawl_time') or item.get('crawled_at', ''),
                 'content_length': item.get('content_length', 0),
                 'metadata': {
                     'crawler': 'financial_news_spider',

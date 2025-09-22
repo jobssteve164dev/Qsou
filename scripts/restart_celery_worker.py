@@ -53,7 +53,8 @@ def restart_celery_worker():
         python_exe, '-m', 'celery', '-A', 'tasks', 'worker',
         '-P', 'solo',  # Windows使用solo池
         '--concurrency=1',
-        '--loglevel=info'
+        '--loglevel=info',
+        '-Q', 'data_processing,ml_processing,indexing,celery'
     ]
     
     log_info(f"启动命令: {' '.join(cmd)}")
