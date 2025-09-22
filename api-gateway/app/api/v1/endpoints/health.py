@@ -50,7 +50,8 @@ async def system_stats():
         documents_count = 0
         if elastic_ok:
             try:
-                index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"
+                # 使用通配以兼容索引版本切换（如 qsou_documents_v1）或别名缺失情况
+                index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents*"
                 client = search_service.elasticsearch.client
                 if client:
                     count_resp = await _with_timeout(client.count(index=index_name), 1.5, {"count": 0})

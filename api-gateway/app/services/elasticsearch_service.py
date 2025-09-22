@@ -397,53 +397,67 @@ class ElasticsearchService:
         return results
     
     async def _ensure_indices_exist(self):
-        """确保必要的索引存在"""
-        index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"
-        
+        """确保必要的索引/别名存在并保持稳定
+
+        规范：业务统一使用别名 <prefix>documents（如 qsou_documents）。
+        - 若别名已存在，直接返回。
+        - 若别名不存在：
+            1) 若已存在形如 <alias>_* 的物理索引，则将别名指向其中一个（优先选择字典序最大的）。
+            2) 若不存在任何相关索引，则创建 <alias>_v1 并建立映射，然后将别名指向它。
+        """
+        alias_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"
         try:
-            exists = await self.client.indices.exists(index=index_name)
-            
-            if not exists:
-                # 创建索引映射 - 使用标准分析器替代IK分析器
+            # 1) 别名已存在
+            try:
+                if await self.client.indices.exists_alias(name=alias_name):
+                    return
+            except Exception:
+                # 某些版本在不存在时抛异常，统一按不存在处理
+                pass
+
+            # 2) 查找已有物理索引
+            target_index = None
+            try:
+                existing = await self.client.indices.get(index=f"{alias_name}*")
+                if isinstance(existing, dict) and existing:
+                    # 过滤掉与别名同名的冲突（极少数情况下存在同名索引）
+                    candidates = [k for k in existing.keys() if k != alias_name]
+                    if candidates:
+                        target_index = sorted(candidates)[-1]
+            except Exception:
+                # 没有任何匹配索引也属于正常场景
+                target_index = None
+
+            # 3) 如无可用索引则创建 _v1
+            if not target_index:
+                target_index = f"{alias_name}_v1"
                 mapping = {
                     "mappings": {
                         "properties": {
-                            "title": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "search_analyzer": "standard"
-                            },
-                            "content": {
-                                "type": "text",
-                                "analyzer": "standard",
-                                "search_analyzer": "standard"
-                            },
-                            "summary": {
-                                "type": "text",
-                                "analyzer": "standard"
-                            },
+                            "title": {"type": "text", "analyzer": "standard", "search_analyzer": "standard"},
+                            "content": {"type": "text", "analyzer": "standard", "search_analyzer": "standard"},
+                            "summary": {"type": "text", "analyzer": "standard"},
                             "source": {"type": "keyword"},
                             "url": {"type": "keyword"},
                             "published_at": {"type": "date"},
                             "tags": {"type": "keyword"},
                             "view_count": {"type": "integer"},
-                            "title_suggest": {
-                                "type": "completion",
-                                "analyzer": "standard"
-                            }
+                            "title_suggest": {"type": "completion", "analyzer": "standard"}
                         }
                     },
-                    "settings": {
-                        "number_of_shards": 1,
-                        "number_of_replicas": 0
-                    }
+                    "settings": {"number_of_shards": 1, "number_of_replicas": 0}
                 }
-                
-                await self.client.indices.create(index=index_name, body=mapping)
-                logger.info(f"创建Elasticsearch索引: {index_name}")
-                
+                # 如果索引已存在则跳过创建
+                if not await self.client.indices.exists(index=target_index):
+                    await self.client.indices.create(index=target_index, body=mapping)
+                    logger.info("创建Elasticsearch索引", index=target_index)
+
+            # 4) 绑定别名到物理索引
+            await self.client.indices.put_alias(index=target_index, name=alias_name)
+            logger.info("确保Elasticsearch别名完成", alias=alias_name, target=target_index)
+
         except Exception as e:
-            logger.error("创建Elasticsearch索引失败", error=str(e))
+            logger.error("创建/绑定Elasticsearch别名失败", error=str(e))
             raise
 
 

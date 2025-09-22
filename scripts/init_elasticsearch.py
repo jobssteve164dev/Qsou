@@ -8,6 +8,7 @@ import os
 import sys
 import json
 from elasticsearch import Elasticsearch
+from elasticsearch import helpers
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -241,6 +242,80 @@ def main():
     print(f"  访问 http://localhost:9200/_cat/indices/qsou_* 查看索引")
     print(f"  访问 http://localhost:9200/_template/qsou-investment-template 查看模板")
     
+    return True
+
+
+def backfill_from_qdrant_to_es(es_host: str = None,
+                               es_port: int = None,
+                               qdrant_host: str = None,
+                               qdrant_port: int = None,
+                               collection: str = None,
+                               alias: str = None,
+                               batch_size: int = 500) -> bool:
+    """
+    将Qdrant集合中的payload文档回填到Elasticsearch（幂等）。
+    仅在ES中不存在相同ID时写入，避免重复。
+    """
+    import os
+    from qdrant_client import QdrantClient
+    
+    es_host = es_host or os.getenv('ELASTICSEARCH_HOST', 'localhost')
+    es_port = int(es_port or os.getenv('ELASTICSEARCH_PORT', 9200))
+    qdrant_host = qdrant_host or os.getenv('QDRANT_HOST', 'localhost')
+    qdrant_port = int(qdrant_port or os.getenv('QDRANT_PORT', 6333))
+    collection = collection or os.getenv('QDRANT_COLLECTION_NAME', 'investment_documents')
+    alias = alias or f"{os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'qsou_')}documents"
+
+    es = Elasticsearch([{'host': es_host, 'port': es_port}])
+    qd = QdrantClient(host=qdrant_host, port=qdrant_port)
+
+    # 获取总数
+    info = qd.get_collection(collection)
+    total = getattr(info, 'points_count', 0)
+    if not total:
+        print("No points to backfill from Qdrant.")
+        return True
+
+    print(f"Backfilling from Qdrant '{collection}' -> ES alias '{alias}', total points: {total}")
+
+    offset = 0
+    processed = 0
+    while offset < total:
+        limit = min(batch_size, total - offset)
+        points, next_offset = qd.scroll(collection_name=collection,
+                                        with_payload=True,
+                                        with_vectors=False,
+                                        limit=limit,
+                                        offset=offset)
+        if not points:
+            break
+
+        actions = []
+        for p in points:
+            doc_id = str(p.id)
+            payload = dict(p.payload or {})
+            src = {
+                'title': payload.get('title', ''),
+                'content': payload.get('content', ''),
+                'source': payload.get('source', ''),
+                'url': payload.get('url'),
+                'published_at': payload.get('published_at'),
+                'tags': payload.get('tags', []),
+            }
+            actions.append({
+                '_op_type': 'create',  # 幂等：已存在则忽略
+                '_index': alias,
+                '_id': doc_id,
+                'document': src,
+            })
+
+        if actions:
+            success, _ = helpers.bulk(es, actions, raise_on_error=False)
+            processed += success
+            print(f"Indexed {processed}/{total} (this batch success={success})")
+        offset = next_offset or offset + limit
+
+    print("Backfill completed.")
     return True
 
 

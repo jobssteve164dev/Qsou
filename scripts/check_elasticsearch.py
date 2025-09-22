@@ -9,7 +9,7 @@ import sys
 import os
 import subprocess
 import time
-import requests
+from elasticsearch import Elasticsearch
 from datetime import datetime
 
 def log_info(message):
@@ -25,12 +25,13 @@ def log_success(message):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] [SUCCESS] {message}")
 
 def check_elasticsearch_running():
-    """检查Elasticsearch是否正在运行"""
+    """检查Elasticsearch是否正在运行（使用官方客户端）"""
     try:
-        response = requests.get("http://localhost:9200", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            log_success(f"Elasticsearch正在运行: {data.get('version', {}).get('number', 'unknown')}")
+        es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+        if es.ping():
+            info = es.info() or {}
+            version = (info.get('version') or {}).get('number', 'unknown')
+            log_success(f"Elasticsearch正在运行: {version}")
             return True
     except Exception as e:
         log_info(f"Elasticsearch未运行: {e}")

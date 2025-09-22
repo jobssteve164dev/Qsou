@@ -282,6 +282,19 @@ def generate_embeddings(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         
         logger.info(f"文档向量生成并存储完成: {doc_id}, stored_ids={stored_ids}")
         
+        # 保证增量一致性：向量成功后，确保ES也索引/更新
+        try:
+            update_search_index.delay(doc_id, document)
+            logger.info(
+                f"已触发ES索引更新任务",
+                extra={
+                    "doc_id": doc_id,
+                    "category": document.get('category', 'general')
+                }
+            )
+        except Exception as _e:
+            logger.error(f"触发ES索引更新失败: {doc_id}, 错误: {_e}")
+        
         return {
             'status': 'success',
             'doc_id': doc_id,
@@ -437,8 +450,21 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         elif category == 'announcement':
             index_name = config.es_announcements_index
         else:
-            # 统一写入 documents 索引，避免动态创建 general 索引导致映射缺失
-            index_name = f"{config.es_index_prefix}_documents"
+            # 统一写入 documents 别名，避免动态索引导致统计不一致
+            prefix = (config.es_index_prefix or 'qsou')
+            if not prefix.endswith('_'):
+                prefix = prefix + '_'
+            index_name = f"{prefix}documents"
+
+        logger.info(
+            "计算ES索引名称",
+            extra={
+                "doc_id": doc_id,
+                "category": category,
+                "computed_index": index_name,
+                "config_prefix": getattr(config, 'es_index_prefix', None)
+            }
+        )
         
         # 索引文档（按签名：document, document_id=None, index_name=None）
         index_result = document_indexer.index_document(

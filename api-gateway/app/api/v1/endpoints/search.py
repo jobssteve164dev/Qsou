@@ -33,7 +33,7 @@ class SearchResult(BaseModel):
     content: str = Field(..., description="内容摘要")
     source: str = Field(..., description="数据源")
     url: Optional[str] = Field(None, description="原始URL")
-    published_at: datetime = Field(..., description="发布时间")
+    published_at: Optional[datetime] = Field(default=None, description="发布时间")
     relevance_score: float = Field(..., description="相关性得分", ge=0.0, le=1.0)
     tags: List[str] = Field(default=[], description="标签列表")
 
