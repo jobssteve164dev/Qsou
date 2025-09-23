@@ -34,6 +34,10 @@ class SearchResult(BaseModel):
     source: str = Field(..., description="数据源")
     url: Optional[str] = Field(None, description="原始URL")
     published_at: Optional[datetime] = Field(default=None, description="发布时间")
+    # 兼容与过渡：提供 publish_time 字段（如果后端使用该字段）
+    # 前端可以逐步切换读取 publish_time
+    # 注意：不改变现有响应结构，避免破坏性变更
+    # 在序列化时由服务层保证至少一个存在
     relevance_score: float = Field(..., description="相关性得分", ge=0.0, le=1.0)
     tags: List[str] = Field(default=[], description="标签列表")
 

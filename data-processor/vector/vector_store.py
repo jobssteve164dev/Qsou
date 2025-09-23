@@ -11,6 +11,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Union
 from loguru import logger
 import uuid
+import hashlib
 from datetime import datetime
 import json
 
@@ -212,8 +213,8 @@ class VectorStore:
         batch_ids = []
         
         for vector, document in zip(vectors, documents):
-            # 生成唯一ID
-            point_id = str(uuid.uuid4())
+            # 确定性文档ID：与ES一致（content_hash优先，其次 url|title|publish_time 的MD5）
+            point_id = self._extract_document_id(document)
             batch_ids.append(point_id)
             
             # 准备payload（文档元数据）
@@ -256,20 +257,51 @@ class VectorStore:
             if field in document:
                 value = document[field]
                 
-                # 处理特殊类型
+                # 处理特殊类型，保持原生结构（数组/对象不再字符串化）
                 if isinstance(value, (datetime, )):
                     payload[field] = value.isoformat()
                 elif isinstance(value, (list, dict)):
-                    payload[field] = json.dumps(value, ensure_ascii=False)
+                    payload[field] = value
                 elif isinstance(value, (int, float, str, bool)):
                     payload[field] = value
                 else:
                     payload[field] = str(value)
         
+        # 统一发布时间字段：优先 publish_time，其次 published_at/timestamp
+        if 'publish_time' not in payload:
+            raw_time = document.get('published_at') or document.get('timestamp')
+            if isinstance(raw_time, (datetime, )):
+                payload['publish_time'] = raw_time.isoformat()
+            elif isinstance(raw_time, (int, float)):
+                try:
+                    payload['publish_time'] = datetime.fromtimestamp(float(raw_time)).isoformat()
+                except Exception:
+                    pass
+            elif isinstance(raw_time, str):
+                payload['publish_time'] = raw_time
+        
         # 添加存储时间戳
         payload['stored_at'] = datetime.now().isoformat()
         
         return payload
+
+    def _extract_document_id(self, document: Dict[str, Any]) -> str:
+        """提取与ES一致的文档ID。
+        优先使用 content_hash，其次基于 url|title|publish_time 生成MD5；最后回退到UUID。
+        """
+        try:
+            content_hash = document.get('content_hash')
+            if content_hash and isinstance(content_hash, str) and content_hash.strip():
+                return content_hash
+            url = str(document.get('url') or '')
+            title = str(document.get('title') or '')
+            publish_time = str(document.get('publish_time') or document.get('published_at') or '')
+            id_string = f"{url}|{title}|{publish_time}"
+            if id_string.strip():
+                return hashlib.md5(id_string.encode('utf-8')).hexdigest()
+            return str(uuid.uuid4())
+        except Exception:
+            return str(uuid.uuid4())
     
     def search_similar_vectors(self, 
                              query_vector: np.ndarray,

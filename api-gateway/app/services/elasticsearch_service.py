@@ -358,7 +358,10 @@ class ElasticsearchService:
         
         # 添加排序
         if sort_by == "time":
-            search_body["sort"] = [{"published_at": {"order": "desc"}}]
+            search_body["sort"] = [
+                {"publish_time": {"order": "desc", "unmapped_type": "date"}},
+                {"published_at": {"order": "desc", "unmapped_type": "date"}},
+            ]
         elif sort_by == "popularity":
             search_body["sort"] = [{"view_count": {"order": "desc"}}]
         # relevance排序是默认的，不需要显式指定
@@ -439,6 +442,7 @@ class ElasticsearchService:
                             "summary": {"type": "text", "analyzer": "standard"},
                             "source": {"type": "keyword"},
                             "url": {"type": "keyword"},
+                            "publish_time": {"type": "date"},
                             "published_at": {"type": "date"},
                             "tags": {"type": "keyword"},
                             "view_count": {"type": "integer"},

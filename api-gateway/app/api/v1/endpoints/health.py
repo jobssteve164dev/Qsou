@@ -46,16 +46,27 @@ async def system_stats():
             processor_health.get("checks", {}).get("celery", {}).get("status") == "healthy"
         )
 
-        # 计算文档数量（在ES可用时）
+        # 计算文档数量（在ES可用时）——统一口径：别名 + _search size=0
         documents_count = 0
         if elastic_ok:
             try:
-                # 使用通配以兼容索引版本切换（如 qsou_documents_v1）或别名缺失情况
-                index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents*"
+                alias_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"  # 统一使用别名
                 client = search_service.elasticsearch.client
                 if client:
-                    count_resp = await _with_timeout(client.count(index=index_name), 1.5, {"count": 0})
-                    documents_count = int(count_resp.get("count", 0))
+                    search_coro = client.search(
+                        index=alias_name,
+                        body={
+                            "query": {"match_all": {}},
+                            "size": 0,
+                            "track_total_hits": True,
+                        },
+                    )
+                    search_resp = await _with_timeout(
+                        search_coro, 2.0, {"hits": {"total": {"value": 0}}}
+                    )
+                    documents_count = int(
+                        search_resp.get("hits", {}).get("total", {}).get("value", 0)
+                    )
             except Exception:
                 documents_count = 0
 

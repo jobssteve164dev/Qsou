@@ -9,6 +9,8 @@ import sys
 import json
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
+from datetime import datetime
+from dateutil import parser as date_parser
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -266,20 +268,32 @@ def backfill_from_qdrant_to_es(es_host: str = None,
     collection = collection or os.getenv('QDRANT_COLLECTION_NAME', 'investment_documents')
     alias = alias or f"{os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'qsou_')}documents"
 
-    es = Elasticsearch([{'host': es_host, 'port': es_port}])
+    es = Elasticsearch([{'host': es_host, 'port': es_port, 'scheme': 'http'}])
     qd = QdrantClient(host=qdrant_host, port=qdrant_port)
 
     # 获取总数
     info = qd.get_collection(collection)
-    total = getattr(info, 'points_count', 0)
+    try:
+        total = int(getattr(info, 'points_count', 0) or 0)
+    except Exception:
+        total = 0
     if not total:
         print("No points to backfill from Qdrant.")
         return True
 
     print(f"Backfilling from Qdrant '{collection}' -> ES alias '{alias}', total points: {total}")
 
+    # 统计 & 日志
     offset = 0
     processed = 0
+    already_exists = 0
+    failed = 0
+    errors_by_type = {}
+    failed_log_path = os.path.join('logs', 'backfill_failures.jsonl')
+    try:
+        os.makedirs(os.path.dirname(failed_log_path), exist_ok=True)
+    except Exception:
+        pass
     while offset < total:
         limit = min(batch_size, total - offset)
         points, next_offset = qd.scroll(collection_name=collection,
@@ -291,30 +305,116 @@ def backfill_from_qdrant_to_es(es_host: str = None,
             break
 
         actions = []
+        # 预查询已存在文档，减少409冲突
+        ids = [str(p.id) for p in points]
+        existing_ids = set()
+        try:
+            mget = es.mget(index=alias, ids=ids, _source=False, stored_fields=False)
+            for doc in (mget.get('docs') or []):
+                if doc.get('found') and doc.get('_id'):
+                    existing_ids.add(str(doc['_id']))
+        except Exception:
+            # mget 失败则退化为无预查询
+            existing_ids = set()
+
         for p in points:
             doc_id = str(p.id)
+            if doc_id in existing_ids:
+                already_exists += 1
+                continue
             payload = dict(p.payload or {})
+            # 规范化字段，避免映射冲突
+            title = payload.get('title', '') or ''
+            content = payload.get('content', '') or ''
+            source = payload.get('source', '') or ''
+            url = payload.get('url')
+            tags_val = payload.get('tags', [])
+            if isinstance(tags_val, str):
+                tags = [tags_val]
+            elif isinstance(tags_val, (list, tuple)):
+                tags = [str(t) for t in tags_val]
+            else:
+                tags = []
+
+            # 解析发布时间，落到模板中的 publish_time
+            publish_time = None
+            raw_published_at = payload.get('published_at') or payload.get('timestamp')
+            if isinstance(raw_published_at, (int, float)):
+                try:
+                    publish_time = datetime.fromtimestamp(float(raw_published_at)).strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    publish_time = None
+            elif isinstance(raw_published_at, str) and raw_published_at.strip():
+                try:
+                    dt = date_parser.parse(raw_published_at)
+                    publish_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    publish_time = None
+
             src = {
-                'title': payload.get('title', ''),
-                'content': payload.get('content', ''),
-                'source': payload.get('source', ''),
-                'url': payload.get('url'),
-                'published_at': payload.get('published_at'),
-                'tags': payload.get('tags', []),
+                'title': title,
+                'content': content,
+                'source': source,
+                'url': url,
+                'publish_time': publish_time,
+                'tags': tags,
             }
             actions.append({
                 '_op_type': 'create',  # 幂等：已存在则忽略
                 '_index': alias,
                 '_id': doc_id,
-                'document': src,
+                '_source': src,
             })
 
         if actions:
-            success, _ = helpers.bulk(es, actions, raise_on_error=False)
+            success, error_items = helpers.bulk(es, actions, raise_on_error=False)
             processed += success
-            print(f"Indexed {processed}/{total} (this batch success={success})")
-        offset = next_offset or offset + limit
+            # 统计失败分类
+            if error_items:
+                for item in error_items:
+                    info = item.get('create') or item.get('index') or {}
+                    status = info.get('status')
+                    err = info.get('error') or {}
+                    err_type = (err.get('type') or '').strip()
+                    reason = (err.get('reason') or '').strip()
+                    doc_id = info.get('_id')
+                    if status == 409 or err_type == 'version_conflict_engine_exception':
+                        already_exists += 1
+                        continue
+                    failed += 1
+                    errors_by_type[err_type] = errors_by_type.get(err_type, 0) + 1
+                    # 记录失败详情（精简字段）
+                    try:
+                        with open(failed_log_path, 'a', encoding='utf-8') as flog:
+                            flog.write(json.dumps({
+                                'id': doc_id,
+                                'status': status,
+                                'error_type': err_type,
+                                'reason': reason,
+                                'index': info.get('_index'),
+                            }, ensure_ascii=False) + "\n")
+                    except Exception:
+                        pass
+            print(f"Indexed {processed}/{total} (this batch success={success}, exists={already_exists}, failed={failed})")
+        if next_offset is None:
+            offset = offset + limit
+        else:
+            try:
+                offset = int(next_offset)
+            except Exception:
+                offset = offset + limit
 
+    # 汇总日志
+    if failed > 0:
+        print("\n[Backfill Summary]")
+        print(f"  success_total={processed}, already_exists={already_exists}, failed_total={failed}")
+        print(f"  failure_log={failed_log_path}")
+        if errors_by_type:
+            print("  errors_by_type:")
+            for k, v in errors_by_type.items():
+                print(f"    - {k or 'unknown'}: {v}")
+    else:
+        print("\n[Backfill Summary] no failures detected")
     print("Backfill completed.")
     return True
 
