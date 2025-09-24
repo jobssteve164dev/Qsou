@@ -13,6 +13,17 @@ BOT_NAME = 'qsou_crawler'
 SPIDER_MODULES = ['qsou_crawler.spiders']
 NEWSPIDER_MODULE = 'qsou_crawler.spiders'
 
+# 插件化蜘蛛加载器
+SPIDER_LOADER_CLASS = 'qsou_crawler.plugin_loader.PluginSpiderLoader'
+
+# 插件发现配置
+# - 目录扫描：相对于 crawler/ 根目录
+CRAWLER_PLUGIN_DIRS = [
+    'plugins'
+]
+# - Entry point 分组名
+CRAWLER_PLUGIN_ENTRYPOINT_GROUP = 'qsou_crawler.plugins'
+
 # ============================================
 # 机器人协议遵循 (Robots.txt Compliance)
 # ============================================

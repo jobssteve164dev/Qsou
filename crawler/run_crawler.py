@@ -75,15 +75,30 @@ class CrawlerManager:
             self.logger.error(f"启动爬虫失败: {str(e)}")
             return False
     
+    def list_spiders(self) -> List[str]:
+        """列出所有可用爬虫（包含插件）。"""
+        try:
+            cmd = ['scrapy', 'list']
+            result = subprocess.run(cmd, cwd=self.crawler_dir, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                self.logger.error(f"列出爬虫失败: {result.stderr}")
+                return []
+            spiders = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            return spiders
+        except Exception as e:
+            self.logger.error(f"列出爬虫失败: {str(e)}")
+            return []
+
     def start_all_crawlers(self) -> bool:
-        """启动所有爬虫"""
-        spiders = ['financial_news', 'company_announcement']
+        """启动所有爬虫（动态）"""
+        spiders = self.list_spiders()
+        if not spiders:
+            self.logger.warning("未发现任何爬虫")
+            return False
         success_count = 0
-        
         for spider in spiders:
             if self.start_crawler(spider):
                 success_count += 1
-        
         self.logger.info(f"成功启动 {success_count}/{len(spiders)} 个爬虫")
         return success_count == len(spiders)
     
@@ -155,33 +170,46 @@ def main():
     print()
     
     # 获取用户选择
-    print("请选择要启动的爬虫:")
-    print("1. 财经新闻爬虫 (financial_news)")
-    print("2. 公司公告爬虫 (company_announcement)")
-    print("3. 启动所有爬虫")
-    print("4. 退出")
+    available_spiders = manager.list_spiders()
+    print("可用爬虫列表 (来自核心与插件):")
+    if not available_spiders:
+        print("(无可用爬虫，请确认 Scrapy 安装与设置)")
+    else:
+        for idx, name in enumerate(available_spiders, 1):
+            print(f"{idx}. {name}")
+    print(f"{len(available_spiders)+1}. 启动所有爬虫")
+    print(f"{len(available_spiders)+2}. 退出")
     
     while True:
         try:
-            choice = input("\n请输入选择 (1-4): ").strip()
-            
-            if choice == '1':
-                print("\n🚀 启动财经新闻爬虫...")
-                success = manager.start_crawler('financial_news')
-                break
-            elif choice == '2':
-                print("\n🚀 启动公司公告爬虫...")
-                success = manager.start_crawler('company_announcement')
-                break
-            elif choice == '3':
-                print("\n🚀 启动所有爬虫...")
-                success = manager.start_all_crawlers()
-                break
-            elif choice == '4':
+            choice = input("\n请输入选择序号，或直接输入爬虫名，或输入 q 退出: ").strip()
+
+            if choice.lower() in {'q', 'quit', 'exit'}:
                 print("👋 退出")
                 return True
-            else:
-                print("❌ 无效选择，请输入1-4")
+
+            # 直接输入爬虫名
+            if choice and not choice.isdigit():
+                print(f"\n🚀 启动爬虫: {choice} ...")
+                success = manager.start_crawler(choice)
+                break
+
+            # 输入序号
+            if choice.isdigit():
+                idx = int(choice)
+                if 1 <= idx <= len(available_spiders):
+                    spider_name = available_spiders[idx - 1]
+                    print(f"\n🚀 启动爬虫: {spider_name} ...")
+                    success = manager.start_crawler(spider_name)
+                    break
+                elif idx == len(available_spiders) + 1:
+                    print("\n🚀 启动所有爬虫...")
+                    success = manager.start_all_crawlers()
+                    break
+                elif idx == len(available_spiders) + 2:
+                    print("👋 退出")
+                    return True
+            print("❌ 无效选择，请重试")
                 
         except KeyboardInterrupt:
             print("\n👋 用户取消")
