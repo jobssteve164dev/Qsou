@@ -32,7 +32,7 @@ from typing import Dict, Tuple
 import argparse
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import PointStruct
+from qdrant_client.http.models import PointStruct, PointIdsList
 
 
 def deterministic_id(payload: Dict) -> str:
@@ -79,8 +79,13 @@ def main():
     except OSError:
         pass
 
+    # 确保数值类型
+    try:
+        total = int(total)
+    except Exception:
+        total = 0
     offset = 0
-    while offset < total:
+    while int(offset) < int(total):
         limit = min(args.batch_size, total - offset)
         points, next_offset = qd.scroll(collection_name=args.collection,
                                         with_payload=True,
@@ -112,7 +117,7 @@ def main():
                 # 默认保留已存在点，仅删除旧点（若旧点与新点不同）
                 if not args.dry_run:
                     if old_id != new_id:
-                        qd.delete(collection_name=args.collection, points_selector={'points': [old_id]})
+                        qd.delete(collection_name=args.collection, points_selector=PointIdsList(points=[old_id]))
                         deleted += 1
                 # 记录日志
                 with open(log_path, 'a', encoding='utf-8') as f:
@@ -129,7 +134,7 @@ def main():
                     qd.upsert(collection_name=args.collection,
                               points=[PointStruct(id=new_id, vector=p.vector, payload=payload)])
                     created += 1
-                    qd.delete(collection_name=args.collection, points_selector={'points': [old_id]})
+                    qd.delete(collection_name=args.collection, points_selector=PointIdsList(points=[old_id]))
                     deleted += 1
                 except Exception as e:
                     with open(log_path, 'a', encoding='utf-8') as f:
@@ -146,11 +151,11 @@ def main():
         if args.limit and processed >= args.limit:
             break
 
-        offset = next_offset or (offset + limit)
+        offset = next_offset if next_offset is not None else (int(offset) + int(limit))
         try:
             offset = int(offset)
         except Exception:
-            pass
+            offset = int(offset) if isinstance(offset, int) else 0
 
         print(f"progress: processed={processed} updated={updated} created={created} deleted={deleted} skipped={skipped} conflicts={conflicts}")
 
