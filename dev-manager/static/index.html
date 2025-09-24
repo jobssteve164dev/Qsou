@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Qsou Dev Manager</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px 20px; background: #111827; border-bottom: 1px solid #1f2937; }
+    h1 { margin: 0; font-size: 18px; }
+    .container { padding: 20px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 12px; margin-top: 12px; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:8px; padding:12px; }
+    .muted { color:#94a3b8; font-size: 12px; }
+    .btn { padding:6px 10px; border-radius:6px; border:1px solid #334155; background:#0b1220; color:#e2e8f0; cursor:pointer; }
+    .btn.ghost { background:transparent; }
+    .btn.secondary { background:#1f2937; }
+    .tag { font-size:12px; padding:2px 6px; border-radius:999px; border:1px solid #334155; }
+    .tag.ok { color:#10b981; border-color:#065f46; }
+    .tag.bad { color:#f87171; border-color:#7f1d1d; }
+    pre { background:#000; color:#a7f3d0; padding:10px; border-radius:8px; max-height: 420px; overflow:auto; }
+    input, select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px; }
+  </style>
+  <script>
+    const base = location.origin;
+    async function api(path, options={}){ const r = await fetch(base+path, options); if(!r.ok) throw new Error(r.status); return r.json(); }
+    async function load(){
+      const svcs = await api('/services');
+      const profiles = await api('/profiles');
+      const listEl = document.getElementById('svc-list');
+      const pfEl = document.getElementById('profiles');
+      listEl.innerHTML = '';
+      Object.keys(profiles).forEach(name=>{
+        const b=document.createElement('button'); b.className='btn ghost'; b.innerText=name; b.onclick=()=>applyProfile(name,true); pfEl.appendChild(b);
+      });
+      svcs.forEach(s=>{
+        const card=document.createElement('div'); card.className='card';
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div>${s.name}</div>
+              <div class="muted">${s.running? '运行中 PID='+ (s.pid||''): '未运行'}
+                ${typeof s.healthy !== 'undefined' ? `<span class="tag ${s.healthy? 'ok':'bad'}" style="margin-left:6px;">${s.healthy? '健康':'不健康'}${s.latency_ms? ' '+s.latency_ms+'ms':''}</span>`:''}
+              </div>
+            </div>
+            <div class="row">
+              ${!s.running? `<button class="btn" onclick="startSvc('${s.id}')">Start</button>`:''}
+              ${s.running? `<button class="btn secondary" onclick="stopSvc('${s.id}')">Stop</button>`:''}
+              <button class="btn ghost" onclick="restartSvc('${s.id}')">Restart</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn ghost" onclick="showLogs('${s.id}')">查看日志</button>
+            <a class="btn ghost" href="${base+'/services/'+encodeURIComponent(s.id)+'/logs/download'}" target="_blank">下载日志</a>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+    }
+    async function startSvc(name){ await api('/services/start',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})}); await load(); }
+    async function stopSvc(name){ await api('/services/stop',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})}); await load(); }
+    async function restartSvc(name){ await api('/services/restart',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})}); await load(); }
+    async function showLogs(name){ window.currentLogName=name; window.offset=0; await loadLogs(); }
+    async function loadLogs(){
+      const name = window.currentLogName; if(!name) return;
+      const r = await api(`/services/${encodeURIComponent(name)}/logs/paged?offset=${window.offset||0}&limit=200`);
+      document.getElementById('log-title').innerText = '日志 - '+name;
+      document.getElementById('logs').textContent = (r.lines||[]).join('\n');
+    }
+    async function applyProfile(name, stopOthers){ await api('/profiles/apply',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, stop_others:stopOthers})}); await load(); }
+    async function diagnose(){ const rows = await api('/diagnose/ports'); const box=document.getElementById('diag'); box.innerHTML=''; rows.forEach(r=>{ const d=document.createElement('div'); d.className='muted'; d.innerText=`${r.service} : ${r.port} ${r.occupied? '占用, PID='+r.pid:'空闲'}`; box.appendChild(d); }); }
+    async function killPort(){ const port = parseInt(document.getElementById('port').value||'0',10); const token = document.getElementById('token').value||undefined; if(!port) return; const r = await api('/diagnose/kill_port',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({port, token})}); alert(JSON.stringify(r)); await diagnose(); }
+    window.addEventListener('load', async ()=>{ await load(); await diagnose(); setInterval(load, 4000); });
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Qsou Dev Manager</h1>
+  </header>
+  <div class="container">
+    <div class="row" style="justify-content:space-between;">
+      <div class="row">
+        <span class="muted">Profiles:</span>
+        <div id="profiles" class="row"></div>
+      </div>
+      <button class="btn" onclick="load()">刷新</button>
+    </div>
+
+    <div class="grid" id="svc-list"></div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="justify-content:space-between;">
+        <div id="log-title" class="muted">日志</div>
+        <div class="row">
+          <button class="btn ghost" onclick="window.offset=Math.max(0,(window.offset||0)-200); loadLogs();">上一页</button>
+          <button class="btn ghost" onclick="window.offset=(window.offset||0)+200; loadLogs();">下一页</button>
+        </div>
+      </div>
+      <pre id="logs"></pre>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="row" style="gap:8px;">
+        <span class="muted">端口诊断</span>
+        <button class="btn ghost" onclick="diagnose()">刷新</button>
+      </div>
+      <div id="diag" style="margin-top:8px;"></div>
+      <div class="row" style="margin-top:8px;">
+        <input id="port" placeholder="端口号" />
+        <input id="token" placeholder="管理令牌 (DEVMAN_TOKEN)" />
+        <button class="btn secondary" onclick="killPort()">Kill</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+

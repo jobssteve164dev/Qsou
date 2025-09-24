@@ -55,6 +55,11 @@ source venv/bin/activate
 # 安装依赖
 pip install -r requirements.txt
 
+# 额外：启用 JS 渲染抓取（可选但推荐）
+# 用于 scrapy-playwright 渲染现代站点
+pip install playwright
+python -m playwright install chromium
+
 # 复制环境配置
 cp env.example .env
 # 编辑.env文件，配置数据库密码等参数

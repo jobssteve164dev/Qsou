@@ -1,0 +1,86 @@
+# 统一开发运维控制台 - 受管服务定义
+# 跨平台：命令以 list 形式指定，可在 Windows/Mac/Linux 下工作
+
+services:
+  api:
+    name: API Gateway
+    cwd: api-gateway
+    start: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    stop:
+      port: 8000
+    health:
+      url: http://127.0.0.1:8000/health
+    log: logs/api.log
+
+  frontend:
+    name: Web Frontend
+    cwd: web-frontend
+    start: ["npm", "run", "dev"]
+    stop:
+      port: 3000
+    health:
+      url: http://127.0.0.1:3000
+    log: logs/frontend.log
+
+  celery_worker:
+    name: Celery Worker
+    cwd: data-processor
+    start: ["celery", "-A", "tasks", "worker", "-l", "info"]
+    stop:
+      pidfile: pids/celery-worker.pid
+    log: logs/celery-worker.log
+
+  celery_beat:
+    name: Celery Beat
+    cwd: data-processor
+    start: ["celery", "-A", "tasks", "beat", "-l", "info"]
+    stop:
+      pidfile: pids/celery-beat.pid
+    log: logs/celery-beat.log
+
+  crawler:
+    name: Scrapy Crawler (Menu)
+    cwd: crawler
+    start: ["python", "run_crawler.py"]
+    log: crawler/logs/crawler.log
+
+  redis:
+    name: Redis
+    cwd: .
+    start: ["vendor/redis/redis-server.exe"]
+    stop:
+      port: 6379
+    log: logs/redis.log
+
+  elasticsearch:
+    name: Elasticsearch
+    cwd: vendor/elasticsearch
+    start: ["bin/elasticsearch"]
+    stop:
+      port: 9200
+    log: logs/elasticsearch.log
+
+  qdrant:
+    name: Qdrant
+    cwd: vendor/qdrant
+    start: ["./qdrant"]
+    stop:
+      port: 6333
+    log: logs/qdrant.log
+
+profiles:
+  minimal:
+    - api
+    - frontend
+  backend_only:
+    - api
+    - celery_worker
+    - celery_beat
+  fullstack:
+    - redis
+    - elasticsearch
+    - qdrant
+    - api
+    - celery_worker
+    - celery_beat
+    - frontend

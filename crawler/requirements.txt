@@ -4,6 +4,7 @@
 scrapy==2.11.0
 scrapy-redis==0.7.3
 scrapy-splash==0.8.0
+scrapy-playwright==0.0.33
 
 # HTTP & Networking
 requests==2.31.0
@@ -29,6 +30,7 @@ python-dateutil==2.8.2
 jieba==0.42.1
 newspaper3k==0.2.8
 readability-lxml==0.8.1
+trafilatura==1.9.0
 
 # Anti-Bot & Proxy
 scrapy-user-agents==0.1.1
@@ -47,6 +49,8 @@ tldextract==5.1.1
 
 # Monitoring & Logging
 structlog==23.2.0
+spidermon==1.20.2
+scrapy-deltafetch==2.0.1
 
 # Development & Testing
 pytest==7.4.3

@@ -25,6 +25,42 @@ CRAWLER_PLUGIN_DIRS = [
 CRAWLER_PLUGIN_ENTRYPOINT_GROUP = 'qsou_crawler.plugins'
 
 # ============================================
+# JS渲染 - Playwright 集成
+# ============================================
+TWISTED_REACTOR = 'twisted.internet.asyncioreactor.AsyncioSelectorReactor'
+DOWNLOAD_HANDLERS = {
+    'http': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
+    'https': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
+}
+PLAYWRIGHT_BROWSER_TYPE = 'chromium'
+PLAYWRIGHT_LAUNCH_OPTIONS = {
+    'headless': True
+}
+
+# ============================================
+# 增量抓取 - DeltaFetch
+# ============================================
+EXTENSIONS = {
+    'scrapy.extensions.deltafetch.DeltaFetch': 100,
+}
+DELTAFETCH_ENABLED = True
+DELTAFETCH_DIR = 'deltafetch'
+
+# ============================================
+# 采集质量监控 - Spidermon
+# ============================================
+EXTENSIONS.update({
+    'spidermon.contrib.scrapy.extensions.Spidermon': 500,
+})
+SPIDERMON_ENABLED = True
+SPIDERMON_SPIDER_OPENMONITORS = (
+    'qsou_crawler.monitors.SpiderOpenMonitorSuite',
+)
+SPIDERMON_SPIDER_CLOSEMONITORS = (
+    'qsou_crawler.monitors.SpiderCloseMonitorSuite',
+)
+
+# ============================================
 # 机器人协议遵循 (Robots.txt Compliance)
 # ============================================
 ROBOTSTXT_OBEY = True  # 严格遵循robots.txt
