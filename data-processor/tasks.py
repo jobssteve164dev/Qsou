@@ -346,15 +346,40 @@ def launch_crawler(self, spider_name: str) -> Dict[str, Any]:
             extra={"trace_id": trace_id}
         )
 
-        proc = subprocess.run(
-            cmd,
-            cwd=str(crawler_dir),
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            timeout=60 * 10,  # 最长10分钟
-            env=env,
-        )
+        # 创建日志文件路径 - 同时写入crawler/logs和根目录logs
+        crawler_log_path = logs_dir / 'scrapy.log'
+        root_logs_dir = project_root / 'logs'
+        root_logs_dir.mkdir(parents=True, exist_ok=True)
+        root_log_path = root_logs_dir / f'crawler_{spider_name}.log'
+        
+        # 使用Tee功能同时写入两个日志文件
+        class TeeFile:
+            def __init__(self, *files):
+                self.files = files
+            
+            def write(self, text):
+                for f in self.files:
+                    f.write(text)
+                    f.flush()
+            
+            def flush(self):
+                for f in self.files:
+                    f.flush()
+        
+        # 同时写入crawler/logs和根目录logs
+        with open(crawler_log_path, 'a', encoding='utf-8') as crawler_log, \
+             open(root_log_path, 'a', encoding='utf-8') as root_log:
+            tee_file = TeeFile(crawler_log, root_log)
+            proc = subprocess.run(
+                cmd,
+                cwd=str(crawler_dir),
+                stdout=tee_file,
+                stderr=subprocess.STDOUT,  # 将stderr重定向到stdout
+                text=True,
+                encoding='utf-8',
+                timeout=60 * 10,  # 最长10分钟
+                env=env,
+            )
 
         duration = round(time.time() - start_ts, 3)
         result = {
@@ -371,18 +396,18 @@ def launch_crawler(self, spider_name: str) -> Dict[str, Any]:
                 extra={
                     "trace_id": trace_id,
                     "rc": proc.returncode,
-                    "stderr_head": (proc.stderr or '')[:500]
+                    "crawler_log": str(crawler_log_path),
+                    "root_log": str(root_log_path)
                 }
             )
         else:
-            # 仅记录输出摘要，避免日志过大
-            stdout_preview = (proc.stdout or '')[-500:]
             logger.info(
                 f"爬虫执行完成: {spider_name}",
                 extra={
                     "trace_id": trace_id,
                     "duration_s": duration,
-                    "stdout_tail": stdout_preview,
+                    "crawler_log": str(crawler_log_path),
+                    "root_log": str(root_log_path)
                 }
             )
 

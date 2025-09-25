@@ -40,8 +40,16 @@ class SinaFinanceSpider(scrapy.Spider):
         "AUTOTHROTTLE_ENABLED": True,
         "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
         "ROBOTSTXT_OBEY": True,
-        # 启用JS渲染
-        "PLAYWRIGHT_ENABLED": True,
+        # 禁用Redis调度器，使用默认调度器进行测试
+        "SCHEDULER": "scrapy.core.scheduler.Scheduler",
+        "DUPEFILTER_CLASS": "scrapy.dupefilters.RFPDupeFilter",
+        # 修复Twisted引擎问题：使用默认reactor
+        "TWISTED_REACTOR": "twisted.internet.selectreactor.SelectReactor",
+        # 使用默认下载处理器
+        "DOWNLOAD_HANDLERS": {
+            'http': 'scrapy.core.downloader.handlers.http.HTTPDownloadHandler',
+            'https': 'scrapy.core.downloader.handlers.http.HTTPDownloadHandler',
+        },
     }
     
     def __init__(self, *args, **kwargs):
@@ -59,7 +67,6 @@ class SinaFinanceSpider(scrapy.Spider):
                     'domain': urlparse(url).netloc,
                     'page': 1,
                     'start_url': url,
-                    'playwright': True  # 启用Playwright JS渲染
                 },
                 dont_filter=True
             )
@@ -385,33 +392,39 @@ class SinaFinanceSpider(scrapy.Spider):
         if not url:
             return False
         
-        # 排除非新闻链接
+        # 排除非新闻链接 - 更严格的过滤
         exclude_patterns = [
-            r'/video/',
-            r'/photo/',
-            r'/gallery/',
-            r'/live/',
-            r'/comment/',
-            r'/user/',
-            r'/login',
-            r'/register',
-            r'\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx)$'
+            r'/video/', r'/photo/', r'/gallery/', r'/live/', r'/comment/',
+            r'/user/', r'/login', r'/register', r'/search',
+            r'\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx)$',
+            r'/stock/go\.php',  # 排除股票工具页面
+            r'/money/globalindex',  # 排除全球指数页面
+            r'/stock/message/',  # 排除股票消息页面
+            r'/stock/estate/',  # 排除房地产页面
+            r'/stock/ask',  # 排除问答页面
+            r'/stock/map',  # 排除地图页面
+            r'/stock/sl/',  # 排除股票列表页面
+            r'/stock/hangqing/',  # 排除行情页面
+            r'/stock/usstock/sector',  # 排除美股板块页面
+            r'/stock/thirdmarket/',  # 排除三板市场页面
+            r'/stock/quanshang/',  # 排除券商页面
+            r'/stock/jyts/',  # 排除交易提示页面
+            r'/stock/newstock/',  # 排除新股页面
+            r'/fund/$',  # 排除基金首页
+            r'/money/future/',  # 排除期货页面
         ]
         
         for pattern in exclude_patterns:
             if re.search(pattern, url, re.IGNORECASE):
                 return False
         
-        # 必须包含新闻相关路径
+        # 必须包含新闻相关路径 - 更精确的匹配
         news_patterns = [
-            r'/news/',
-            r'/finance/',
-            r'/stock/',
-            r'/money/',
-            r'/business/',
-            r'/china/',
-            r'/bond/',
-            r'/fund/'
+            r'/stock/.*\d{4}-\d{2}-\d{2}.*\.shtml$',  # 股票新闻文章
+            r'/money/fund/.*\d{4}-\d{2}-\d{2}.*\.shtml$',  # 基金新闻文章
+            r'/money/bond/.*\d{4}-\d{2}-\d{2}.*\.shtml$',  # 债券新闻文章
+            r'/china/.*\d{4}-\d{2}-\d{2}.*\.shtml$',  # 宏观经济新闻文章
+            r'/roll/.*\d{4}-\d{2}-\d{2}.*\.shtml$',  # 滚动新闻文章
         ]
         
         return any(re.search(pattern, url, re.IGNORECASE) for pattern in news_patterns)
@@ -422,16 +435,22 @@ class SinaFinanceSpider(scrapy.Spider):
         if not item.get('title') or not item.get('content'):
             return False
         
-        # 检查内容长度
-        if len(item.get('content', '')) < 100:
+        # 检查内容长度 - 降低要求
+        content = item.get('content', '')
+        if len(content) < 50:
             return False
         
-        # 检查标题长度
-        if len(item.get('title', '')) < 10:
+        # 检查标题长度 - 降低要求
+        title = item.get('title', '')
+        if len(title) < 5:
             return False
         
         # 检查是否为重复内容
-        if self.is_duplicate_content(item.get('title', ''), item.get('content', '')):
+        if self.is_duplicate_content(title, content):
+            return False
+        
+        # 检查是否是纯导航页面
+        if content.count('|') > 20:  # 导航页面通常有很多分隔符
             return False
         
         return True
