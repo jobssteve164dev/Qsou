@@ -5,12 +5,16 @@ services:
   api:
     name: API Gateway
     cwd: api-gateway
-    start: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    start: [".venv/Scripts/python.exe", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     stop:
       port: 8000
     health:
       url: http://127.0.0.1:8000/health
     log: logs/api.log
+    depends_on:
+      - redis
+      - elasticsearch
+      - qdrant
 
   frontend:
     name: Web Frontend
@@ -21,33 +25,54 @@ services:
     health:
       url: http://127.0.0.1:3000
     log: logs/frontend.log
+    depends_on:
+      - api
 
   celery_worker:
     name: Celery Worker
     cwd: data-processor
-    start: ["celery", "-A", "tasks", "worker", "-l", "info"]
+    start: ["../api-gateway/.venv/Scripts/python.exe", "-m", "celery", "-A", "tasks", "worker", "-l", "info", "--pidfile", "../pids/celery-worker.pid"]
     stop:
       pidfile: pids/celery-worker.pid
     log: logs/celery-worker.log
+    depends_on:
+      - redis
+      - elasticsearch
+      - qdrant
+    ready:
+      log_file: logs/celery-worker.log
+      log_pattern: 'completed tasks|ready|beat: Starting|active|prefetch multiplier'  # 宽松匹配
 
   celery_beat:
     name: Celery Beat
     cwd: data-processor
-    start: ["celery", "-A", "tasks", "beat", "-l", "info"]
+    start: ["../api-gateway/.venv/Scripts/python.exe", "-m", "celery", "-A", "tasks", "beat", "-l", "info", "--pidfile", "../pids/celery-beat.pid"]
     stop:
       pidfile: pids/celery-beat.pid
     log: logs/celery-beat.log
+    depends_on:
+      - redis
+      - celery_worker
+    ready:
+      # 通过日志判断：出现 beat: Starting 或 Scheduler 初始化即视为就绪
+      log_file: logs/celery-beat.log
+      log_pattern: "(beat: Starting|Scheduler)"
 
   crawler:
     name: Scrapy Crawler (Menu)
     cwd: crawler
     start: ["python", "run_crawler.py"]
     log: crawler/logs/crawler.log
+    depends_on:
+      - api
+      - redis
 
   redis:
     name: Redis
     cwd: .
-    start: ["vendor/redis/redis-server.exe"]
+    # 由后端在 Windows 上解析并定位最终 exe
+    start_win: ["vendor/redis/redis-server.exe"]
+    start: ["redis-server"]
     stop:
       port: 6379
     log: logs/redis.log
@@ -55,18 +80,28 @@ services:
   elasticsearch:
     name: Elasticsearch
     cwd: vendor/elasticsearch
+    start_win: ["bin/elasticsearch.bat"]
     start: ["bin/elasticsearch"]
     stop:
       port: 9200
     log: logs/elasticsearch.log
+    depends_on: []
+    ready:
+      log_file: logs/elasticsearch.log
+      # 使用单引号避免 YAML 将反斜杠视为转义
+      log_pattern: 'Node\s+started|\[node\]\s*started|finished initialization|stopped and closed'
 
   qdrant:
     name: Qdrant
     cwd: vendor/qdrant
+    start_win: ["qdrant.exe"]
     start: ["./qdrant"]
     stop:
       port: 6333
     log: logs/qdrant.log
+    health:
+      url: http://127.0.0.1:6333/collections
+    depends_on: []
 
 profiles:
   minimal:

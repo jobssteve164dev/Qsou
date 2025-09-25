@@ -21,16 +21,30 @@
     .tag.bad { color:#f87171; border-color:#7f1d1d; }
     pre { background:#000; color:#a7f3d0; padding:10px; border-radius:8px; max-height: 420px; overflow:auto; }
     input, select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:6px 8px; }
+    .progress { height:10px; background:#111827; border:1px solid #334155; border-radius:999px; overflow:hidden; }
+    .bar { height:100%; width:0%; background:linear-gradient(90deg,#2563eb,#22c55e); transition: width .4s ease; }
+    .mini-pre { background:#000; color:#a7f3d0; padding:8px; border-radius:6px; max-height:160px; overflow:auto; font-size:12px; }
   </style>
   <script>
     const base = location.origin;
     async function api(path, options={}){ const r = await fetch(base+path, options); if(!r.ok) throw new Error(r.status); return r.json(); }
+    const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+    function showProgress(){ const el=document.getElementById('progress-wrap'); if(el) el.style.display='block'; }
+    function hideProgress(){ const el=document.getElementById('progress-wrap'); if(el) el.style.display='none'; }
+    function setProgress(profile, msg, pct){
+      const p = Math.max(0, Math.min(100, pct|0));
+      const n = document.getElementById('p-name'); if(n) n.innerText = profile||'';
+      const i = document.getElementById('p-info'); if(i) i.innerText = msg||'';
+      const b = document.getElementById('p-bar'); if(b) b.style.width = p+'%';
+      const t = document.getElementById('p-pct'); if(t) t.innerText = p+'%';
+    }
     async function load(){
       const svcs = await api('/services');
       const profiles = await api('/profiles');
       const listEl = document.getElementById('svc-list');
       const pfEl = document.getElementById('profiles');
       listEl.innerHTML = '';
+      pfEl.innerHTML = '';
       Object.keys(profiles).forEach(name=>{
         const b=document.createElement('button'); b.className='btn ghost'; b.innerText=name; b.onclick=()=>applyProfile(name,true); pfEl.appendChild(b);
       });
@@ -53,9 +67,18 @@
           <div class="row" style="margin-top:8px;">
             <button class="btn ghost" onclick="showLogs('${s.id}')">查看日志</button>
             <a class="btn ghost" href="${base+'/services/'+encodeURIComponent(s.id)+'/logs/download'}" target="_blank">下载日志</a>
+            <button class="btn ghost" onclick="toggleLive('${s.id}')">实时日志</button>
+          </div>
+          <div id="live-${s.id}" style="display:none; margin-top:8px;">
+            <div class="muted" style="margin-bottom:4px;">实时日志（自动滚动）</div>
+            <pre id="livepre-${s.id}" class="mini-pre"></pre>
           </div>
         `;
         listEl.appendChild(card);
+        // 若该服务被标记为实时跟踪，恢复轮询
+        if(window.liveActive && window.liveActive.has(s.id)){
+          startLive(s.id);
+        }
       });
     }
     async function startSvc(name){ await api('/services/start',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})}); await load(); }
@@ -68,10 +91,133 @@
       document.getElementById('log-title').innerText = '日志 - '+name;
       document.getElementById('logs').textContent = (r.lines||[]).join('\n');
     }
-    async function applyProfile(name, stopOthers){ await api('/profiles/apply',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, stop_others:stopOthers})}); await load(); }
+    function toggleLive(name){
+      if(!window.liveActive) window.liveActive = new Set();
+      const wrap = document.getElementById(`live-${name}`);
+      if(!wrap) return;
+      if(wrap.style.display==='none' || wrap.style.display===''){
+        startLive(name);
+      } else {
+        stopLive(name);
+      }
+    }
+    function startLive(name){
+      if(!window.liveTimers) window.liveTimers = {};
+      if(!window.liveActive) window.liveActive = new Set();
+      const wrap = document.getElementById(`live-${name}`);
+      const pre = document.getElementById(`livepre-${name}`);
+      if(!wrap || !pre) return;
+      wrap.style.display='block';
+      const loader = async ()=>{
+        try{
+          const r = await api(`/services/${encodeURIComponent(name)}/logs?lines=200`);
+          pre.textContent = (r.lines||[]).join('\n');
+          pre.scrollTop = pre.scrollHeight;
+        }catch(e){}
+      };
+      loader();
+      window.liveTimers[name] = setInterval(loader, 1200);
+      window.liveActive.add(name);
+    }
+    function stopLive(name){
+      const wrap = document.getElementById(`live-${name}`);
+      if(wrap) wrap.style.display='none';
+      if(window.liveTimers && window.liveTimers[name]){ clearInterval(window.liveTimers[name]); delete window.liveTimers[name]; }
+      if(window.liveActive) window.liveActive.delete(name);
+    }
+    async function showProgressEvents(){
+      try{
+        const r = await api('/progress/events?limit=400');
+        const pre = document.getElementById('logs');
+        document.getElementById('log-title').innerText = '事件 - 最近400条';
+        pre.textContent = (r.events||[]).map(e=>typeof e==='string'? e: JSON.stringify(e)).join('\n');
+      }catch(e){}
+    }
+    function downloadProgress(){
+      const a = document.createElement('a');
+      a.href = base + '/progress/download';
+      a.target = '_blank';
+      a.click();
+    }
+    async function applyProfile(name, stopOthers){
+      // 获取目标服务列表用于进度统计
+      let targets = [];
+      try {
+        const profiles = await api('/profiles');
+        targets = profiles[name] || [];
+      } catch {}
+      const total = targets.length || 1;
+      showProgress();
+      setProgress(name, '开始启动环境…', 3);
+      // 触发后端应用配置（改为服务端等待就绪：避免依赖型服务未就绪导致后续崩溃）
+      // 采用“fire-and-forget”方式，不阻塞前端进度轮询
+      fetch(base+'/profiles/apply', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, stop_others: !!stopOthers, wait_ready: true, timeout_sec: 240 })
+      }).catch(()=>{});
+      // 轮询服务状态与后端进度，计算已健康数量
+      const t0 = Date.now(); const timeout = 240000; // 4min
+      for(;;){
+        try {
+          const prog = await api('/progress');
+          const states = prog.states || {};
+          const ids = targets.length? targets: Object.keys(states);
+          let healthy = 0; let running = 0; let waiting = [];
+          ids.forEach(id=>{
+            const s = states[id] || {};
+            if(s.running) running++; if(s.healthy===true) healthy++; else waiting.push(id);
+          });
+          const pct = Math.floor((healthy/total)*100);
+          const lastEvent = (prog.events||[]).slice(-1)[0];
+          const msg = lastEvent? `${lastEvent.service||''} ${lastEvent.action||''} ${lastEvent.message||''}`.trim():
+              `运行中: ${running}/${total}，健康: ${healthy}/${total}${waiting.length? '，等待：'+waiting.slice(0,3).join('、'):''}`;
+          setProgress(name, msg, Math.max(5,pct));
+          if(prog.status==='failed'){ setProgress(name, '失败: '+(prog.error||'未知错误'), pct); break; }
+          if(healthy >= total && (prog.status==='ok' || prog.status==='running')) break;
+        } catch {}
+        if(Date.now()-t0>timeout){ setProgress(name, '超过超时阈值，部分服务未就绪', 95); break; }
+        await sleep(1200);
+      }
+      setProgress(name, '环境已启动', 100);
+      await sleep(800);
+      hideProgress();
+      await load();
+    }
     async function diagnose(){ const rows = await api('/diagnose/ports'); const box=document.getElementById('diag'); box.innerHTML=''; rows.forEach(r=>{ const d=document.createElement('div'); d.className='muted'; d.innerText=`${r.service} : ${r.port} ${r.occupied? '占用, PID='+r.pid:'空闲'}`; box.appendChild(d); }); }
     async function killPort(){ const port = parseInt(document.getElementById('port').value||'0',10); const token = document.getElementById('token').value||undefined; if(!port) return; const r = await api('/diagnose/kill_port',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({port, token})}); alert(JSON.stringify(r)); await diagnose(); }
     window.addEventListener('load', async ()=>{ await load(); await diagnose(); setInterval(load, 4000); });
+
+    // ---- Quick open helpers ----
+    function openFrontend(){
+      const host = location.hostname;
+      const w = window.open('about:blank', '_blank');
+      fetch(base+'/diagnose/frontend_url').then(r=>r.json()).then(r=>{
+        const url = (r && r.url) ? r.url : `http://${host}:3333/`;
+        if (w) w.location.href = url; else window.open(url, '_blank');
+      }).catch(()=>{
+        const url = `http://${host}:3333/`;
+        if (w) w.location.href = url; else window.open(url, '_blank');
+      });
+    }
+    function openCelery(){
+      const host = location.hostname;
+      // 默认 Celery Flower 端口 5555
+      window.open(`http://${host}:5555/`, '_blank');
+    }
+    function openApiDocs(){
+      const host = location.hostname;
+      const w = window.open('about:blank', '_blank');
+      fetch(base+'/diagnose/ports').then(r=>r.json()).then(rows=>{
+        let p = 8888; // 与 dev.local 默认一致
+        try { rows.forEach(r=>{ if(r.service==='api' && r.port) p=r.port; }); } catch{}
+        const url = `http://${host}:${p}/docs`;
+        if (w) w.location.href = url; else window.open(url, '_blank');
+      }).catch(()=>{
+        const url = `http://${host}:8888/docs`;
+        if (w) w.location.href = url; else window.open(url, '_blank');
+      });
+    }
   </script>
 </head>
 <body>
@@ -84,7 +230,28 @@
         <span class="muted">Profiles:</span>
         <div id="profiles" class="row"></div>
       </div>
-      <button class="btn" onclick="load()">刷新</button>
+      <div class="row">
+        <button class="btn ghost" onclick="openFrontend()">打开前端</button>
+        <button class="btn ghost" onclick="openCelery()">Celery监控</button>
+        <button class="btn ghost" onclick="openApiDocs()">API文档</button>
+        <button class="btn" onclick="load()">刷新</button>
+      </div>
+    </div>
+
+    <!-- 内联进度条（固定在服务列表上方，不再使用弹窗） -->
+    <div id="progress-wrap" class="card" style="display:none;margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div class="muted">正在启动 Profile：<span id="p-name"></span></div>
+        <div id="p-pct" class="muted">0%</div>
+      </div>
+      <div class="progress" style="margin-top:6px;">
+        <div id="p-bar" class="bar"></div>
+      </div>
+      <div id="p-info" class="muted" style="margin-top:6px;min-height:18px;"></div>
+      <div class="row" style="margin-top:6px;gap:8px;">
+        <button class="btn ghost" onclick="downloadProgress()">下载启动报告</button>
+        <button class="btn ghost" onclick="showProgressEvents()">查看事件</button>
+      </div>
     </div>
 
     <div class="grid" id="svc-list"></div>
@@ -113,6 +280,7 @@
       </div>
     </div>
   </div>
+  
 </body>
 </html>
 
