@@ -41,7 +41,7 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
 # 增量抓取 - DeltaFetch
 # ============================================
 EXTENSIONS = {
-    'scrapy.extensions.deltafetch.DeltaFetch': 100,
+    'scrapy_deltafetch.DeltaFetch': 100,
 }
 DELTAFETCH_ENABLED = True
 DELTAFETCH_DIR = 'deltafetch'
