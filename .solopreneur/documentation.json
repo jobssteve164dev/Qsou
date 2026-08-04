@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-04T02:53:55.020Z",
+  "updatedAt": "2026-08-04T03:12:37Z",
   "documents": [
     {
       "path": "README.md",
@@ -8,7 +8,15 @@
       "status": "active",
       "solves": "说明项目是什么、服务谁、成功标准和对外表达。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-06-14T12:29:52.377Z"
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
+    },
+    {
+      "path": "docs/data-sovereignty-design-guidelines.md",
+      "role": "direction",
+      "status": "active",
+      "solves": "定义自主数据资产的项目方向、数据权威、来源治理、时间版本模型与验收边界。",
+      "lastReviewedAt": "2026-08-04T03:12:37Z",
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
     },
     {
       "path": ".solopreneur/README.md",
@@ -22,17 +30,17 @@
       "path": "docs/crawler-plugins.md",
       "role": "reference",
       "status": "active",
-      "solves": "保存项目长期解释性背景。",
+      "solves": "说明数据源连接器的开发、安装、来源契约与验证方式。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
     },
     {
       "path": "docs/data-flow-architecture.md",
       "role": "data_ownership",
       "status": "active",
-      "solves": "说明项目数据、缓存、运行记录和 Git 管理边界。",
+      "solves": "说明自主数据资产的目标数据流、组件职责和当前实现差距。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
     },
     {
       "path": "docs/dev-script-usage.md",
@@ -52,11 +60,11 @@
     },
     {
       "path": "docs/legal-compliance-guide.md",
-      "role": "ui_guideline",
+      "role": "reference",
       "status": "active",
-      "solves": "约束长期 UI 或治理面如何服务用户动作。",
+      "solves": "提供数据源访问、保存、处理和分发边界的合规检查参考。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
     },
     {
       "path": "docs/local-development-setup.md",
@@ -76,9 +84,9 @@
     },
     {
       "path": "docs/QUICK_START.md",
-      "role": "ui_guideline",
+      "role": "operation",
       "status": "active",
-      "solves": "约束长期 UI 或治理面如何服务用户动作。",
+      "solves": "说明当前项目的快速安装、启动和服务验证方式。",
       "lastReviewedAt": "",
       "lastTouchedAt": "2026-06-14T12:29:52.386Z"
     },
@@ -86,9 +94,9 @@
       "path": "docs/tech-stack-design.md",
       "role": "reference",
       "status": "active",
-      "solves": "保存项目长期解释性背景。",
+      "solves": "保存历史技术选型与实现背景，不定义数据权威或完成状态。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+      "lastTouchedAt": "2026-08-04T03:12:37Z"
     },
     {
       "path": "docs/unified-logging.md",
