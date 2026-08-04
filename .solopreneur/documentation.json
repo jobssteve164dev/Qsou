@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-04T02:40:31.769Z",
+  "documents": [
+    {
+      "path": "README.md",
+      "role": "direction",
+      "status": "active",
+      "solves": "说明项目是什么、服务谁、成功标准和对外表达。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.377Z"
+    },
+    {
+      "path": ".solopreneur/README.md",
+      "role": "data_ownership",
+      "status": "active",
+      "solves": "说明项目数据、缓存、运行记录和 Git 管理边界。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:28:02.015Z"
+    },
+    {
+      "path": "docs/crawler-plugins.md",
+      "role": "reference",
+      "status": "active",
+      "solves": "保存项目长期解释性背景。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/data-flow-architecture.md",
+      "role": "data_ownership",
+      "status": "active",
+      "solves": "说明项目数据、缓存、运行记录和 Git 管理边界。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/dev-script-usage.md",
+      "role": "reference",
+      "status": "active",
+      "solves": "保存项目长期解释性背景。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/implementation-roadmap.md",
+      "role": "reference",
+      "status": "active",
+      "solves": "保存项目长期解释性背景。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/legal-compliance-guide.md",
+      "role": "ui_guideline",
+      "status": "active",
+      "solves": "约束长期 UI 或治理面如何服务用户动作。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/local-development-setup.md",
+      "role": "operation",
+      "status": "active",
+      "solves": "说明开发、验证、发布、安装、回滚或排障方式。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/log-collector-lifecycle.md",
+      "role": "methodology",
+      "status": "active",
+      "solves": "说明项目生命周期、推进模型或 Harness 判断方法。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/QUICK_START.md",
+      "role": "ui_guideline",
+      "status": "active",
+      "solves": "约束长期 UI 或治理面如何服务用户动作。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/tech-stack-design.md",
+      "role": "reference",
+      "status": "active",
+      "solves": "保存项目长期解释性背景。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    },
+    {
+      "path": "docs/unified-logging.md",
+      "role": "reference",
+      "status": "active",
+      "solves": "保存项目长期解释性背景。",
+      "lastReviewedAt": "",
+      "lastTouchedAt": "2026-06-14T12:29:52.386Z"
+    }
+  ],
+  "pendingReview": [
+    {
+      "path": "docs/crawler-plugins.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/data-flow-architecture.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/dev-script-usage.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/implementation-roadmap.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/legal-compliance-guide.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/local-development-setup.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/log-collector-lifecycle.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/QUICK_START.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/tech-stack-design.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    },
+    {
+      "path": "docs/unified-logging.md",
+      "reason": "文档缺少长期判断结构，建议确认它解决的项目判断和适用范围。",
+      "severity": "info",
+      "detectedAt": "2026-06-14T12:34:15.504Z",
+      "source": "documentation_audit"
+    }
+  ],
+  "lastAudit": {
+    "auditedAt": "2026-06-14T12:34:15.504Z",
+    "runKind": "solo",
+    "nodeId": "__solo__",
+    "status": "Completed",
+    "action": "needs_review",
+    "touchedDocuments": [
+      "docs/crawler-plugins.md",
+      "docs/data-flow-architecture.md",
+      "docs/dev-script-usage.md",
+      "docs/implementation-roadmap.md",
+      "docs/legal-compliance-guide.md",
+      "docs/local-development-setup.md",
+      "docs/log-collector-lifecycle.md",
+      "docs/QUICK_START.md",
+      "docs/tech-stack-design.md",
+      "docs/unified-logging.md",
+      "README.md"
+    ],
+    "pendingReviewCount": 10
+  }
+}

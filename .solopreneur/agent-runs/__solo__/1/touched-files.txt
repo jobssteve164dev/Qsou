@@ -1,0 +1,219 @@
+A .env
+A .gitignore
+A .qdrant-initialized
+A api-gateway/app/__init__.py
+A api-gateway/app/api/__init__.py
+A api-gateway/app/api/v1/__init__.py
+A api-gateway/app/api/v1/endpoints/__init__.py
+A api-gateway/app/api/v1/endpoints/auth.py
+A api-gateway/app/api/v1/endpoints/data_processing.py
+A api-gateway/app/api/v1/endpoints/documents.py
+A api-gateway/app/api/v1/endpoints/health.py
+A api-gateway/app/api/v1/endpoints/intelligence.py
+A api-gateway/app/api/v1/endpoints/search.py
+A api-gateway/app/api/v1/router.py
+A api-gateway/app/core/__init__.py
+A api-gateway/app/core/config.py
+A api-gateway/app/core/database.py
+A api-gateway/app/core/logging.py
+A api-gateway/app/main.py
+A api-gateway/app/middleware/__init__.py
+A api-gateway/app/middleware/metrics.py
+A api-gateway/app/middleware/request_logging.py
+A api-gateway/app/services/__init__.py
+A api-gateway/app/services/data_processing_service.py
+A api-gateway/app/services/elasticsearch_service.py
+A api-gateway/app/services/intelligence_service.py
+A api-gateway/app/services/qdrant_service.py
+A api-gateway/app/services/search_service.py
+A api-gateway/requirements.txt
+A config/dev_services.yaml
+A config/elasticsearch/index_template.json
+A config/qdrant/config.yaml
+A crawler/plugins/example_news_plugin/__init__.py
+A crawler/plugins/example_news_plugin/spiders/__init__.py
+A crawler/plugins/example_news_plugin/spiders/example_yicai_spider.py
+A crawler/plugins/sina_finance_plugin/__init__.py
+A crawler/plugins/sina_finance_plugin/spiders/__init__.py
+A crawler/plugins/sina_finance_plugin/spiders/sina_finance_spider.py
+A crawler/qsou_crawler/__init__.py
+A crawler/qsou_crawler/items.py
+A crawler/qsou_crawler/middlewares.py
+A crawler/qsou_crawler/monitors.py
+A crawler/qsou_crawler/pipelines.py
+A crawler/qsou_crawler/pipelines/__init__.py
+A crawler/qsou_crawler/pipelines/data_processing_pipeline.py
+A crawler/qsou_crawler/plugin_loader.py
+A crawler/qsou_crawler/settings.py
+A crawler/qsou_crawler/spiders/__init__.py
+A crawler/qsou_crawler/spiders/company_announcement_spider.py
+A crawler/qsou_crawler/spiders/financial_news_spider.py
+A crawler/qsou_crawler/spiders/yicai_test_spider.py
+A crawler/requirements.txt
+A crawler/run_crawler.py
+A crawler/scrapy.cfg
+A data-processor/__init__.py
+A data-processor/celerybeat-schedule.dat
+A data-processor/celerybeat-schedule.dir
+A data-processor/celeryconfig.py
+A data-processor/config.py
+A data-processor/demo.py
+A data-processor/es_indexing/__init__.py
+A data-processor/es_indexing/document_indexer.py
+A data-processor/es_indexing/index_manager.py
+A data-processor/es_indexing/search_engine.py
+A data-processor/incremental_processing/__init__.py
+A data-processor/incremental_processing/change_detector.py
+A data-processor/incremental_processing/incremental_processor.py
+A data-processor/incremental_processing/sync_manager.py
+A data-processor/main.py
+A data-processor/nlp/__init__.py
+A data-processor/nlp/entity_recognition.py
+A data-processor/nlp/nlp_processor.py
+A data-processor/nlp/segmentation.py
+A data-processor/nlp/sentiment_analysis.py
+A data-processor/nlp/text_classifier.py
+A data-processor/pipeline.py
+A data-processor/processors/__init__.py
+A data-processor/processors/cleaner.py
+A data-processor/processors/deduplicator.py
+A data-processor/processors/extractor.py
+A data-processor/processors/quality_assessor.py
+A data-processor/README.md
+A data-processor/requirements.txt
+A data-processor/tasks.py
+A data-processor/test_celery_simple.py
+A data-processor/test_pipeline.py
+A data-processor/vector/__init__.py
+A data-processor/vector/embeddings.py
+A data-processor/vector/similarity_search.py
+A data-processor/vector/vector_manager.py
+A data-processor/vector/vector_store.py
+A dev-manager/dev-manager.md
+A dev-manager/main.py
+A dev-manager/static/index.html
+A dev.local
+A dev.sh
+A docs/crawler-plugins.md
+A docs/data-flow-architecture.md
+A docs/dev-script-usage.md
+A docs/implementation-roadmap.md
+A docs/legal-compliance-guide.md
+A docs/local-development-setup.md
+A docs/log-collector-lifecycle.md
+A docs/QUICK_START.md
+A docs/tech-stack-design.md
+A docs/unified-logging.md
+A dump.rdb
+A emergency_stop.bat
+A env.example
+A LOG
+A Makefile
+A plan report/20250127120000_投资情报搜索引擎系统.md
+A plan report/20250924192901_数据采集插件化架构.md
+A plan report/20250924194500_抓取增强落地123.md
+A plan report/20250924201500_统一开发运维控制台DevManager.md
+A progress report/20250127143000_阶段二数据采集系统开发完成.md
+A progress report/20250915083500_阶段一本地开发环境搭建.md
+A progress report/20250915090000_阶段三数据处理与索引系统开发完成.md
+A progress report/20250915105700_阶段四搜索引擎核心开发完成.md
+A progress report/20250915120000_阶段五智能情报分析系统开发完成.md
+A progress report/20250915170000_阶段六前端用户界面开发完成.md
+A progress report/20250916110213_修复Celery服务及依赖问题.md
+A progress report/20250916113224_搜索页面重新设计与静默登录优化.md
+A progress report/20250917071048_搜索错误调试与后端日志增强.md
+A progress report/20250917080332_修复搜索服务IK分析器问题.md
+A progress report/20250917092300_前端欢迎界面优化完成.md
+A progress report/20250921161918_搜索链路全链路调试信息增强完成.md
+A progress report/20250921173436_修复统一日志错误与增强开发环境稳定性.md
+A progress report/20250921181113_开发环境静默登录功能修复完成.md
+A progress report/20250921212736_系统监控服务状态真实健康检查实现完成.md
+A progress report/20250921221132_爬虫系统调试与修复完成.md
+A progress report/20250921232238_修复Elasticsearch连接超时问题.md
+A progress report/20250921235734_修复Celery任务路由与Broker配置问题.md
+A progress report/20250922073735_数据收集机制调试与问题诊断.md
+A progress report/20250923001440_搜索系统根因修复与数据流重建完成.md
+A progress report/20250923074825_ES与Qdrant数据同步问题诊断与修复.md
+A progress report/20250924191443_Qdrant与ES数据一致性修复与ID迁移完成.md
+A progress report/20250924213353_DevManager增强功能与内置Web界面开发完成.md
+A progress report/20250925231902_DevManager按钮跳转修复与Celery编码优化完成.md
+A progress report/20250925232650_爬虫增强功能修复完成.md
+A progress report/20250925233756_新浪财经插件开发与插件机制验证完成.md
+A progress report/20250926072930_新浪财经爬虫插件开发与验证完成.md
+A PROJECT_MEMORY.md
+A README.md
+A requirements.txt
+A scripts/analyze_backfill.py
+A scripts/backfill_bash.sh
+A scripts/backfill_curl.sh
+A scripts/backfill_final.sh
+A scripts/backfill_manual.sh
+A scripts/backfill_simple.py
+A scripts/check_data_counts.py
+A scripts/check_elasticsearch.py
+A scripts/check_services.py
+A scripts/curl_sync.sh
+A scripts/debug_celery_crawler.py
+A scripts/fix_dev_script.py
+A scripts/fix_flower.sh
+A scripts/init_database.py
+A scripts/init_elasticsearch.py
+A scripts/init_qdrant.py
+A scripts/lightweight_log_collector.sh
+A scripts/migrate_indices_to_v1.py
+A scripts/migrate_qdrant_ids.py
+A scripts/quick_start.py
+A scripts/restart_celery_services.py
+A scripts/restart_celery_worker.py
+A scripts/service_manager.py
+A scripts/simple_sync.py
+A scripts/sync_qdrant_to_es.py
+A scripts/test_celery_scheduler.py
+A scripts/test_celery_simple.py
+A scripts/test_celery_task.py
+A scripts/test_crawler_debug.py
+A scripts/test_crawler_integration.py
+A scripts/test_dev_script.py
+A scripts/test_encoding.py
+A scripts/unified_logger.py
+A scripts/verify_env.py
+A scripts/verify_setup.py
+A scripts/verify_stage2.py
+A stop_all.bat
+A web-frontend/.deps_hash
+A web-frontend/.eslintrc.json
+A web-frontend/next-env.d.ts
+A web-frontend/next.config.js
+A web-frontend/package-lock.json
+A web-frontend/package.json
+A web-frontend/postcss.config.js
+A web-frontend/src/components/auth/AuthContext.tsx
+A web-frontend/src/components/Layout.tsx
+A web-frontend/src/components/search/SearchBox.tsx
+A web-frontend/src/components/search/SearchFilters.tsx
+A web-frontend/src/components/search/SearchResults.tsx
+A web-frontend/src/components/search/UnifiedSearchBar.tsx
+A web-frontend/src/components/search/WelcomeScreen.tsx
+A web-frontend/src/components/ui/Button.tsx
+A web-frontend/src/components/ui/Card.tsx
+A web-frontend/src/components/ui/Input.tsx
+A web-frontend/src/components/ui/Loading.tsx
+A web-frontend/src/components/ui/StatsFooter.tsx
+A web-frontend/src/hooks/useAuth.tsx
+A web-frontend/src/hooks/useSystemStats.ts
+A web-frontend/src/pages/_app.tsx
+A web-frontend/src/pages/403.tsx
+A web-frontend/src/pages/index.tsx
+A web-frontend/src/pages/intelligence/create.tsx
+A web-frontend/src/pages/intelligence/index.tsx
+A web-frontend/src/pages/intelligence/reports/[id].tsx
+A web-frontend/src/pages/login.tsx
+A web-frontend/src/pages/monitor/dev.tsx
+A web-frontend/src/pages/monitor/index.tsx
+A web-frontend/src/services/api.ts
+A web-frontend/src/services/devManager.ts
+A web-frontend/src/styles/globals.css
+A web-frontend/src/types/index.ts
+A web-frontend/src/utils/index.ts
+A web-frontend/tailwind.config.js
+A web-frontend/tsconfig.json
