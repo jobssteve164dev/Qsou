@@ -1,15 +1,17 @@
 {
-  "schemaVersion": 1,
-  "updatedAt": "2026-06-14T12:34:15.514Z",
-  "runCount": 1,
+  "schemaVersion": 2,
+  "updatedAt": "2026-08-04T02:51:45.893Z",
+  "runCount": 2,
   "indexes": {
     "byNode": {
       "__solo__": [
+        "__solo__-2",
         "__solo__-1"
       ]
     },
     "byAgent": {
       "/usr/local/bin/codex": [
+        "__solo__-2",
         "__solo__-1"
       ]
     },
@@ -92,17 +94,356 @@
     },
     "byStatus": {
       "Completed": [
+        "__solo__-2",
         "__solo__-1"
       ]
     },
     "byFailure": {},
     "byCommand": {
+      "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --da...": [
+        "__solo__-2"
+      ],
       "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --da...": [
+        "__solo__-1"
+      ]
+    },
+    "byExperience": {
+      "exp-reusable-signal-bbd83203f5340823": [
+        "__solo__-2",
+        "__solo__-1"
+      ],
+      "exp-handoff-action-d9b3b4576bef2d8f": [
+        "__solo__-2"
+      ],
+      "exp-verification-7ec9e0bbe782415c": [
+        "__solo__-1"
+      ],
+      "exp-reusable-signal-d0176685095947d2": [
+        "__solo__-1"
+      ],
+      "exp-handoff-action-0697f6a925b4d1ea": [
+        "__solo__-1"
+      ],
+      "exp-handoff-action-bed3387868078ebc": [
         "__solo__-1"
       ]
     }
   },
+  "experienceNodes": {
+    "exp-reusable-signal-bbd83203f5340823": {
+      "id": "exp-reusable-signal-bbd83203f5340823",
+      "type": "reusable_signal",
+      "centralMeaning": "Completion: Solo 对话已完成，等待用户决定是否关联到路线图环节。",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-2",
+        "__solo__-1"
+      ],
+      "appliesWhen": [
+        "同一路线图入口：__solo__",
+        "后续任务出现相同目标、文件或验证需求",
+        ".solopreneur/",
+        ".env",
+        ".gitignore",
+        ".qdrant-initialized",
+        "api-gateway/app/__init__.py"
+      ],
+      "doThis": "在下一次执行前召回这条经验，并转成具体动作或验证。",
+      "avoidThis": "不要只复述历史摘要；必须用当前证据确认适用性。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 2,
+        "wins": 2,
+        "losses": 0,
+        "neutral": 0,
+        "alpha": 3,
+        "beta": 1,
+        "winRate": 0.75,
+        "lastUsed": "2026-08-04T02:51:44.118Z"
+      }
+    },
+    "exp-handoff-action-d9b3b4576bef2d8f": {
+      "id": "exp-handoff-action-d9b3b4576bef2d8f",
+      "type": "handoff_action",
+      "centralMeaning": "- 前端生产构建无法执行：当前工作区没有安装依赖，`next` 命令不存在。",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-2"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-04T02:51:44.118Z"
+      }
+    },
+    "exp-verification-7ec9e0bbe782415c": {
+      "id": "exp-verification-7ec9e0bbe782415c",
+      "type": "verification",
+      "centralMeaning": "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-1"
+      ],
+      "appliesWhen": [
+        ".solopreneur/",
+        ".env",
+        ".gitignore",
+        ".qdrant-initialized",
+        "api-gateway/app/__init__.py",
+        "同一路线图入口：__solo__"
+      ],
+      "doThis": "优先复用或改写这组验证动作，并验证最终产物。",
+      "avoidThis": "不要只凭实现描述或完成摘要宣称闭环。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 1,
+        "losses": 0,
+        "neutral": 0,
+        "alpha": 2,
+        "beta": 1,
+        "winRate": 0.6667,
+        "lastUsed": "2026-06-14T12:34:15.504Z"
+      }
+    },
+    "exp-reusable-signal-d0176685095947d2": {
+      "id": "exp-reusable-signal-d0176685095947d2",
+      "type": "reusable_signal",
+      "centralMeaning": "Changed files: .solopreneur/",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-1"
+      ],
+      "appliesWhen": [
+        ".solopreneur/",
+        ".env",
+        ".gitignore",
+        ".qdrant-initialized",
+        "api-gateway/app/__init__.py",
+        "同一路线图入口：__solo__"
+      ],
+      "doThis": "在下一次执行前召回这条经验，并转成具体动作或验证。",
+      "avoidThis": "不要只复述历史摘要；必须用当前证据确认适用性。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 1,
+        "losses": 0,
+        "neutral": 0,
+        "alpha": 2,
+        "beta": 1,
+        "winRate": 0.6667,
+        "lastUsed": "2026-06-14T12:34:15.504Z"
+      }
+    },
+    "exp-handoff-action-0697f6a925b4d1ea": {
+      "id": "exp-handoff-action-0697f6a925b4d1ea",
+      "type": "handoff_action",
+      "centralMeaning": "先阅读上一轮改动/触达文件：.solopreneur/, .env, .gitignore, .qdrant-initialized",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-1"
+      ],
+      "appliesWhen": [
+        ".solopreneur/",
+        ".env",
+        ".gitignore",
+        ".qdrant-initialized",
+        "api-gateway/app/__init__.py",
+        "接手同一路线图入口：__solo__"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-06-14T12:34:15.504Z"
+      }
+    },
+    "exp-handoff-action-bed3387868078ebc": {
+      "id": "exp-handoff-action-bed3387868078ebc",
+      "type": "handoff_action",
+      "centralMeaning": "复用或复跑验证信号：Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-appr...",
+      "sourceKinds": [
+        "solo"
+      ],
+      "sourceRefs": [
+        "__solo__-1"
+      ],
+      "appliesWhen": [
+        ".solopreneur/",
+        ".env",
+        ".gitignore",
+        ".qdrant-initialized",
+        "api-gateway/app/__init__.py",
+        "接手同一路线图入口：__solo__"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-06-14T12:34:15.504Z"
+      }
+    }
+  },
+  "usageEdges": [
+    {
+      "runId": "__solo__-2",
+      "experienceId": "exp-reusable-signal-bbd83203f5340823",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-2.json",
+        "execution_logs:2",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-08-04T02:51:44.118Z"
+    },
+    {
+      "runId": "__solo__-2",
+      "experienceId": "exp-handoff-action-d9b3b4576bef2d8f",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-2.json",
+        "execution_logs:2",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-08-04T02:51:44.118Z"
+    },
+    {
+      "runId": "__solo__-1",
+      "experienceId": "exp-verification-7ec9e0bbe782415c",
+      "phase": "verified",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-1.json",
+        "execution_logs:1",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "check:Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-06-14T12:34:15.504Z"
+    },
+    {
+      "runId": "__solo__-1",
+      "experienceId": "exp-reusable-signal-bbd83203f5340823",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-1.json",
+        "execution_logs:1",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "check:Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-06-14T12:34:15.504Z"
+    },
+    {
+      "runId": "__solo__-1",
+      "experienceId": "exp-reusable-signal-d0176685095947d2",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-1.json",
+        "execution_logs:1",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "check:Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-06-14T12:34:15.504Z"
+    },
+    {
+      "runId": "__solo__-1",
+      "experienceId": "exp-handoff-action-0697f6a925b4d1ea",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-1.json",
+        "execution_logs:1",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "check:Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-06-14T12:34:15.504Z"
+    },
+    {
+      "runId": "__solo__-1",
+      "experienceId": "exp-handoff-action-bed3387868078ebc",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-1.json",
+        "execution_logs:1",
+        "check:cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -",
+        "check:Command: cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/1/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -"
+      ],
+      "createdAt": "2026-06-14T12:34:15.504Z"
+    }
+  ],
   "runs": [
+    {
+      "runId": "__solo__-2",
+      "executionLogId": 2,
+      "nodeId": "__solo__",
+      "runKind": "solo",
+      "agentCli": "/usr/local/bin/codex",
+      "status": "Completed",
+      "finishedAt": "2026-08-04T02:51:44.118Z",
+      "changedFiles": [],
+      "touchedFiles": [],
+      "failures": [],
+      "handoffSummary": "Solo 对话已完成，等待用户决定是否关联到路线图环节。 建议验证：cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -。"
+    },
     {
       "runId": "__solo__-1",
       "executionLogId": 1,
