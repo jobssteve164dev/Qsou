@@ -2,6 +2,8 @@
 
 本指南说明如何为 Qsou 数据采集层编写与安装“插件化”爬虫。
 
+> 设计边界：插件是已登记数据源的连接器，不是独立的数据权威。新增插件必须遵循[自主数据资产设计指导](./data-sovereignty-design-guidelines.md)中的来源契约、原始证据、时间与版本规则。当前代码尚未完成原始响应归档时，应明确记录该差距，不得把结构化 Item 当成完整原始证据。
+
 ## 1. 目标与能力
 
 - 可插拔：将插件包放入 `crawler/plugins/`（或通过 Python entry point 安装）即可自动被发现。
@@ -83,6 +85,9 @@ news_plugin = "your_pkg.spiders"
 
 ## 6. 最佳实践
 
+- 接入前登记来源身份、入口、覆盖范围、采集频率、权利状态和责任人。
+- 采集结果应保留来源文档标识、来源发布时间、实际抓取时间、最终 URL 和内容哈希。
+- 目标链路完成后，必须先确认原始响应持久化，再把结构化 Item 交给后续处理。
 - 与核心 Item 对齐，确保数据在 `pipelines` 中能被验证、去重并提交到处理系统。
 - 合理控制抓取速率，遵守 `robots.txt` 与站点条款。
 - 对接新增站点时，优先以插件形式扩展，避免修改核心仓库。
@@ -102,4 +107,3 @@ cd crawler
 scrapy list | cat
 scrapy crawl example_yicai -L INFO -s LOG_FILE=logs/scrapy.log
 ```
-
