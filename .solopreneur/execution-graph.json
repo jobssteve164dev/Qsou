@@ -1,16 +1,18 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-08-04T02:51:45.893Z",
-  "runCount": 2,
+  "updatedAt": "2026-08-04T03:25:41.476Z",
+  "runCount": 3,
   "indexes": {
     "byNode": {
       "__solo__": [
+        "__solo__-3",
         "__solo__-2",
         "__solo__-1"
       ]
     },
     "byAgent": {
       "/usr/local/bin/codex": [
+        "__solo__-3",
         "__solo__-2",
         "__solo__-1"
       ]
@@ -93,6 +95,9 @@
       ]
     },
     "byStatus": {
+      "Recorded": [
+        "__solo__-3"
+      ],
       "Completed": [
         "__solo__-2",
         "__solo__-1"
@@ -100,6 +105,9 @@
     },
     "byFailure": {},
     "byCommand": {
+      "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'": [
+        "__solo__-3"
+      ],
       "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --da...": [
         "__solo__-2"
       ],
@@ -108,6 +116,12 @@
       ]
     },
     "byExperience": {
+      "exp-reusable-signal-1477c0bd97fdae96": [
+        "__solo__-3"
+      ],
+      "exp-reusable-signal-4bf40b5596a2f2e5": [
+        "__solo__-3"
+      ],
       "exp-reusable-signal-bbd83203f5340823": [
         "__solo__-2",
         "__solo__-1"
@@ -130,6 +144,66 @@
     }
   },
   "experienceNodes": {
+    "exp-reusable-signal-1477c0bd97fdae96": {
+      "id": "exp-reusable-signal-1477c0bd97fdae96",
+      "type": "reusable_signal",
+      "centralMeaning": "Completion: 续聊已记录；不参与任务完成、失败或进行中判断。",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-3"
+      ],
+      "appliesWhen": [
+        "同一路线图入口：__solo__",
+        "后续任务出现相同目标、文件或验证需求"
+      ],
+      "doThis": "在下一次执行前召回这条经验，并转成具体动作或验证。",
+      "avoidThis": "不要只复述历史摘要；必须用当前证据确认适用性。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 1,
+        "losses": 0,
+        "neutral": 0,
+        "alpha": 2,
+        "beta": 1,
+        "winRate": 0.6667,
+        "lastUsed": "2026-08-04T03:25:41.469Z"
+      }
+    },
+    "exp-reusable-signal-4bf40b5596a2f2e5": {
+      "id": "exp-reusable-signal-4bf40b5596a2f2e5",
+      "type": "reusable_signal",
+      "centralMeaning": "• Updated Plan",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-3"
+      ],
+      "appliesWhen": [
+        "同一路线图入口：__solo__",
+        "后续任务出现相同目标、文件或验证需求"
+      ],
+      "doThis": "在下一次执行前召回这条经验，并转成具体动作或验证。",
+      "avoidThis": "不要只复述历史摘要；必须用当前证据确认适用性。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 1,
+        "losses": 0,
+        "neutral": 0,
+        "alpha": 2,
+        "beta": 1,
+        "winRate": 0.6667,
+        "lastUsed": "2026-08-04T03:25:41.469Z"
+      }
+    },
     "exp-reusable-signal-bbd83203f5340823": {
       "id": "exp-reusable-signal-bbd83203f5340823",
       "type": "reusable_signal",
@@ -341,6 +415,30 @@
   },
   "usageEdges": [
     {
+      "runId": "__solo__-3",
+      "experienceId": "exp-reusable-signal-1477c0bd97fdae96",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-3.json",
+        "execution_logs:3",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-04T03:25:41.469Z"
+    },
+    {
+      "runId": "__solo__-3",
+      "experienceId": "exp-reusable-signal-4bf40b5596a2f2e5",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-3.json",
+        "execution_logs:3",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-04T03:25:41.469Z"
+    },
+    {
       "runId": "__solo__-2",
       "experienceId": "exp-reusable-signal-bbd83203f5340823",
       "phase": "observed",
@@ -431,6 +529,19 @@
     }
   ],
   "runs": [
+    {
+      "runId": "__solo__-3",
+      "executionLogId": 3,
+      "nodeId": "__solo__",
+      "runKind": "solo_continue",
+      "agentCli": "/usr/local/bin/codex",
+      "status": "Recorded",
+      "finishedAt": "2026-08-04T03:25:41.469Z",
+      "changedFiles": [],
+      "touchedFiles": [],
+      "failures": [],
+      "handoffSummary": "续聊已记录；不参与任务完成、失败或进行中判断。"
+    },
     {
       "runId": "__solo__-2",
       "executionLogId": 2,

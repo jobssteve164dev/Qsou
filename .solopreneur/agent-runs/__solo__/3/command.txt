@@ -1,0 +1,1 @@
+'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'
