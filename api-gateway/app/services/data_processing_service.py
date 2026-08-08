@@ -9,8 +9,6 @@ import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from loguru import logger
-import requests
-from celery import Celery
 
 from app.core.config import settings
 from app.services.search_service import search_service
@@ -22,11 +20,13 @@ class DataProcessingService:
 	def __init__(self):
 		self.logger = logger
 		self.celery_app = None
-		self._initialize_celery()
+		if settings.ENABLE_DERIVED_PROCESSING:
+			self._initialize_celery()
 	
 	def _initialize_celery(self):
 		"""初始化Celery连接"""
 		try:
+			from celery import Celery
 			self.celery_app = Celery('qsou-data-processor')
 			self.celery_app.config_from_object({
 				'broker_url': settings.CELERY_BROKER_URL,

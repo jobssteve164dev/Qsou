@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { Search, BarChart3, Settings, User, LogOut } from 'lucide-react';
+import { Search, BarChart3, Settings, Database, LogOut } from 'lucide-react';
 import { Button } from './ui/Button';
 import { StatsFooter } from './ui/StatsFooter';
 import { useAuth } from './auth/AuthContext';
@@ -23,6 +23,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       href: '/',
       icon: Search,
       current: currentPath === '/',
+    },
+    {
+      name: '我的数据',
+      href: '/data',
+      icon: Database,
+      current: currentPath.startsWith('/data'),
     },
     {
       name: '智能分析',
@@ -156,7 +162,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <footer className="bg-white border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="text-center text-sm text-gray-500">
-            <p>© 2025 QSou 投资情报搜索引擎. All rights reserved.</p>
+            <p>© 2026 QSou 自主投资数据</p>
           </div>
         </div>
       </footer>

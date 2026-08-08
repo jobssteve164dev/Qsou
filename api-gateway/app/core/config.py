@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     
     # 性能配置
     ENABLE_METRICS: bool = Field(default=True, env="ENABLE_METRICS")
+    ENABLE_DERIVED_SEARCH: bool = Field(default=True, env="ENABLE_DERIVED_SEARCH")
+    ENABLE_DERIVED_PROCESSING: bool = Field(default=True, env="ENABLE_DERIVED_PROCESSING")
     HEALTH_CHECK_INTERVAL: int = Field(default=30, env="HEALTH_CHECK_INTERVAL")
     SERVICE_TIMEOUT: int = Field(default=60, env="SERVICE_TIMEOUT")
     
@@ -91,6 +93,10 @@ class Settings(BaseSettings):
     )
     DOWNLOAD_DELAY: float = Field(default=1.0, env="DOWNLOAD_DELAY")
     SPIDER_CONCURRENCY: int = Field(default=8, env="SPIDER_CONCURRENCY")
+
+    # 自主数据资产
+    QSOU_DATA_ROOT: str = Field(default="data/qsou", env="QSOU_DATA_ROOT")
+    QSOU_SOURCE_REGISTRY: str = Field(default="config/sources.json", env="QSOU_SOURCE_REGISTRY")
     
     # 开发配置
     SKIP_SSL_VERIFY: bool = Field(default=True, env="SKIP_SSL_VERIFY")
@@ -100,6 +106,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = [".env", "dev.local"]
         case_sensitive = True
+        # 根环境文件同时服务前端、爬虫和数据处理器；API 只读取自己声明的配置。
+        extra = "ignore"
 
 
 @lru_cache()

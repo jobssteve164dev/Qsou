@@ -24,6 +24,7 @@ MANIFEST
 
 # Virtual environments
 .env
+deploy/baseline.env
 .venv
 env/
 venv/
@@ -133,6 +134,8 @@ temp/
 
 # Data storage
 data/
+!web-frontend/src/pages/data/
+!web-frontend/src/pages/data/index.tsx
 qdrant_storage/
 elasticsearch_data/
 

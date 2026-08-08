@@ -106,11 +106,13 @@ DOWNLOADER_MIDDLEWARES = {
     # 自定义中间件 
     'qsou_crawler.middlewares.RotateUserAgentMiddleware': 400,  # 用户代理轮换
     'qsou_crawler.middlewares.ProxyMiddleware': 350,  # 代理中间件
+    'qsou_crawler.middlewares.RawEvidenceDownloaderMiddleware': 540,  # 解析前归档原始证据
     'qsou_crawler.middlewares.RetryMiddleware': 550,  # 重试中间件
     'qsou_crawler.middlewares.AntiDetectionMiddleware': 600,  # 反检测中间件
 }
 
 SPIDER_MIDDLEWARES = {
+    'qsou_crawler.middlewares.EvidenceLinkMiddleware': 100,  # 关联响应证据与产出文档
     'qsou_crawler.middlewares.DuplicateFilterMiddleware': 543,  # 去重过滤
     'qsou_crawler.middlewares.StatisticsMiddleware': 900,  # 统计中间件
 }
@@ -128,13 +130,20 @@ ITEM_PIPELINES = {
 # ============================================
 # 分布式爬虫配置 (Scrapy-Redis)
 # ============================================
-# 启用分布式
-SCHEDULER = "scrapy_redis.scheduler.Scheduler"
-DUPEFILTER_CLASS = "scrapy_redis.dupefilter.RFPDupeFilter"
-SCHEDULER_PERSIST = True
+# 默认沿用分布式调度；容器基线可使用单机调度，避免把 Redis 变成数据落地前置条件。
+if os.getenv('QSOU_STANDALONE_CRAWLER', 'false').lower() != 'true':
+    SCHEDULER = "scrapy_redis.scheduler.Scheduler"
+    DUPEFILTER_CLASS = "scrapy_redis.dupefilter.RFPDupeFilter"
+    SCHEDULER_PERSIST = True
 
 # Redis连接设置
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+
+# 自主数据资产基线
+QSOU_DATA_ROOT = os.getenv('QSOU_DATA_ROOT', '')
+QSOU_SOURCE_REGISTRY = os.getenv('QSOU_SOURCE_REGISTRY', '')
+QSOU_OUTBOX_DISPATCH_ENABLED = os.getenv('QSOU_OUTBOX_DISPATCH_ENABLED', 'true').lower() == 'true'
+QSOU_OUTBOX_BATCH_SIZE = int(os.getenv('QSOU_OUTBOX_BATCH_SIZE', 10))
 
 # ============================================
 # 缓存设置

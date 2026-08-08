@@ -1,4 +1,19 @@
-# 🚀 Qsou 投资情报搜索引擎 - 快速开始指南
+# Qsou 快速开始
+
+> 当前推荐入口是[自主数据基线部署](./baseline-deployment.md)。基线只需要 API、前端和共享数据目录；Elasticsearch、Qdrant、Redis、PostgreSQL 与 AI 模型均为可选扩展。本文后续内容保留完整历史开发栈的启动方式，不代表最小部署依赖。
+
+## 当前基线
+
+在专用部署主机或 CI 构建：
+
+```bash
+cp deploy/baseline.env.example deploy/baseline.env
+docker compose --env-file deploy/baseline.env up -d --build api web
+```
+
+远程部署前先修改 `QSOU_PUBLIC_API_URL` 和 `QSOU_CORS_ORIGINS`。不要在资源敏感的共享开发机直接构建容器。验证步骤和宿主机运行方式见[自主数据基线部署](./baseline-deployment.md)。
+
+## 历史完整开发栈
 
 ## ⚡ 一键快速启动
 

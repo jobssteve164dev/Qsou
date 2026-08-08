@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { devManagerApi, ServiceInfo } from '@/services/devManager';
-import Layout from '@/components/Layout';
+import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
@@ -110,5 +110,4 @@ const DevConsolePage: React.FC = () => {
 };
 
 export default DevConsolePage;
-
 

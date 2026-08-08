@@ -151,6 +151,11 @@ const SearchResults: React.FC<SearchResultsProps> = ({
     return null;
   }
 
+  // 上面的空结果分支已经覆盖正常路径；保留显式守卫，避免异常状态下解引用空值。
+  if (!results) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       {/* 搜索统计信息 */}

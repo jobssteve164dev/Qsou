@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { 
-  Activity, Database, Search, Zap, AlertTriangle, 
-  CheckCircle, Clock, TrendingUp, Server, Cpu,
-  HardDrive, Wifi, RefreshCw
+  Activity, Database, Search, Zap, AlertTriangle,
+  CheckCircle, Clock, Server, Cpu, RefreshCw
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -38,16 +37,6 @@ const MonitorPage: React.FC = () => {
       setError(errorUtils.getErrorMessage(err));
     } finally {
       setLoading(false);
-    }
-  };
-
-  // 检查健康状态
-  const checkHealth = async () => {
-    try {
-      const response = await systemApi.health();
-      console.log('健康检查:', response);
-    } catch (err) {
-      console.error('健康检查失败:', err);
     }
   };
 
@@ -89,12 +78,29 @@ const MonitorPage: React.FC = () => {
     }
   };
 
-  const getServiceStatusColor = (status: boolean) => {
-    return status ? 'text-green-600' : 'text-red-600';
+  type ServiceState = 'healthy' | 'disabled' | 'idle' | 'unavailable';
+
+  const getServiceState = (name: keyof SystemStats['services']): ServiceState => {
+    return stats?.service_states?.[name] || (stats?.services[name] ? 'healthy' : 'unavailable');
   };
 
-  const getServiceStatusIcon = (status: boolean) => {
-    return status ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />;
+  const getServiceStatusColor = (state: ServiceState) => {
+    if (state === 'healthy') return 'text-green-600';
+    if (state === 'disabled' || state === 'idle') return 'text-gray-500';
+    return 'text-red-600';
+  };
+
+  const getServiceStatusIcon = (state: ServiceState) => {
+    if (state === 'healthy') return <CheckCircle className="h-4 w-4" />;
+    if (state === 'disabled' || state === 'idle') return <Clock className="h-4 w-4" />;
+    return <AlertTriangle className="h-4 w-4" />;
+  };
+
+  const getServiceStatusLabel = (state: ServiceState) => {
+    if (state === 'healthy') return '正常';
+    if (state === 'disabled') return '未启用';
+    if (state === 'idle') return '待运行';
+    return '异常';
   };
 
   return (
@@ -200,9 +206,9 @@ const MonitorPage: React.FC = () => {
                     
                     <div className="text-center">
                       <div className="text-3xl font-bold text-blue-600 mb-2">
-                        99.9%
+                        {stats.services.data_assets ? '可用' : '异常'}
                       </div>
-                      <div className="text-sm text-gray-600">系统可用性</div>
+                      <div className="text-sm text-gray-600">数据资产状态</div>
                     </div>
                   </div>
                 </CardContent>
@@ -222,17 +228,17 @@ const MonitorPage: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <Database className="h-6 w-6 text-blue-600" />
                         <div>
-                          <div className="font-medium text-gray-900">Elasticsearch</div>
-                          <div className="text-sm text-gray-500">搜索引擎</div>
+                          <div className="font-medium text-gray-900">全文检索加速</div>
+                          <div className="text-sm text-gray-500">可选增强</div>
                         </div>
                       </div>
                       <div
-                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.elasticsearch)}`}
-                        title={!stats.services.elasticsearch && stats.service_messages?.elasticsearch ? stats.service_messages.elasticsearch : ''}
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(getServiceState('elasticsearch'))}`}
+                        title={stats.service_messages?.elasticsearch || ''}
                       >
-                        {getServiceStatusIcon(stats.services.elasticsearch)}
+                        {getServiceStatusIcon(getServiceState('elasticsearch'))}
                         <span className="text-sm font-medium">
-                          {stats.services.elasticsearch ? '正常' : '异常'}
+                          {getServiceStatusLabel(getServiceState('elasticsearch'))}
                         </span>
                       </div>
                     </div>
@@ -241,17 +247,17 @@ const MonitorPage: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <Zap className="h-6 w-6 text-purple-600" />
                         <div>
-                          <div className="font-medium text-gray-900">Qdrant</div>
-                          <div className="text-sm text-gray-500">向量数据库</div>
+                          <div className="font-medium text-gray-900">语义检索增强</div>
+                          <div className="text-sm text-gray-500">可选增强</div>
                         </div>
                       </div>
                       <div
-                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.qdrant)}`}
-                        title={!stats.services.qdrant && stats.service_messages?.qdrant ? stats.service_messages.qdrant : ''}
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(getServiceState('qdrant'))}`}
+                        title={stats.service_messages?.qdrant || ''}
                       >
-                        {getServiceStatusIcon(stats.services.qdrant)}
+                        {getServiceStatusIcon(getServiceState('qdrant'))}
                         <span className="text-sm font-medium">
-                          {stats.services.qdrant ? '正常' : '异常'}
+                          {getServiceStatusLabel(getServiceState('qdrant'))}
                         </span>
                       </div>
                     </div>
@@ -265,12 +271,12 @@ const MonitorPage: React.FC = () => {
                         </div>
                       </div>
                       <div
-                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.crawler)}`}
-                        title={!stats.services.crawler && stats.service_messages?.crawler ? stats.service_messages.crawler : ''}
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(getServiceState('crawler'))}`}
+                        title={stats.service_messages?.crawler || ''}
                       >
-                        {getServiceStatusIcon(stats.services.crawler)}
+                        {getServiceStatusIcon(getServiceState('crawler'))}
                         <span className="text-sm font-medium">
-                          {stats.services.crawler ? '正常' : '异常'}
+                          {getServiceStatusLabel(getServiceState('crawler'))}
                         </span>
                       </div>
                     </div>
@@ -279,17 +285,17 @@ const MonitorPage: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <Cpu className="h-6 w-6 text-orange-600" />
                         <div>
-                          <div className="font-medium text-gray-900">数据处理</div>
-                          <div className="text-sm text-gray-500">内容分析</div>
+                          <div className="font-medium text-gray-900">内容增强处理</div>
+                          <div className="text-sm text-gray-500">可选增强</div>
                         </div>
                       </div>
                       <div
-                        className={`flex items-center space-x-1 ${getServiceStatusColor(stats.services.processor)}`}
-                        title={!stats.services.processor && stats.service_messages?.processor ? stats.service_messages.processor : ''}
+                        className={`flex items-center space-x-1 ${getServiceStatusColor(getServiceState('processor'))}`}
+                        title={stats.service_messages?.processor || ''}
                       >
-                        {getServiceStatusIcon(stats.services.processor)}
+                        {getServiceStatusIcon(getServiceState('processor'))}
                         <span className="text-sm font-medium">
-                          {stats.services.processor ? '正常' : '异常'}
+                          {getServiceStatusLabel(getServiceState('processor'))}
                         </span>
                       </div>
                     </div>
@@ -297,84 +303,6 @@ const MonitorPage: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {/* 性能指标 */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <TrendingUp className="h-5 w-5" />
-                      <span>性能指标</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Search className="h-4 w-4 text-blue-600" />
-                          <span className="text-sm text-gray-600">平均搜索响应时间</span>
-                        </div>
-                        <span className="text-sm font-medium text-green-600">156ms</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Database className="h-4 w-4 text-purple-600" />
-                          <span className="text-sm text-gray-600">数据库查询时间</span>
-                        </div>
-                        <span className="text-sm font-medium text-green-600">23ms</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Cpu className="h-4 w-4 text-orange-600" />
-                          <span className="text-sm text-gray-600">CPU使用率</span>
-                        </div>
-                        <span className="text-sm font-medium text-yellow-600">45%</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <HardDrive className="h-4 w-4 text-gray-600" />
-                          <span className="text-sm text-gray-600">磁盘使用率</span>
-                        </div>
-                        <span className="text-sm font-medium text-green-600">32%</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <Wifi className="h-5 w-5" />
-                      <span>网络状态</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">入站流量</span>
-                        <span className="text-sm font-medium">1.2 MB/s</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">出站流量</span>
-                        <span className="text-sm font-medium">850 KB/s</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">活跃连接</span>
-                        <span className="text-sm font-medium">127</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">错误率</span>
-                        <span className="text-sm font-medium text-green-600">0.1%</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           ) : null}
         </div>

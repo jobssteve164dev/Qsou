@@ -4,29 +4,31 @@
 将爬虫采集的数据发送到数据处理系统进行清洗、分析和索引
 """
 
-import json
 import logging
-import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from scrapy import Item
 from scrapy.exceptions import DropItem
 from celery import Celery
 import time
 
 from qsou_crawler.items import NewsArticleItem, CompanyAnnouncementItem
+from qsou_data import DataAssetStore
 
 
 class DataProcessingPipeline:
     """数据处理管道"""
     
-    def __init__(self):
+    def __init__(self, asset_store=None, batch_size=10, dispatch_enabled=True):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.asset_store = asset_store or DataAssetStore()
+        self.dispatch_enabled = dispatch_enabled
         
         # 初始化Celery客户端
         self.celery_app = None
-        self._initialize_celery()
+        if self.dispatch_enabled:
+            self._initialize_celery()
         
-        self.batch_size = 10
+        self.batch_size = batch_size
         self.batch_items = []
         
         # 统计信息
@@ -35,6 +37,14 @@ class DataProcessingPipeline:
             'dropped': 0,
             'errors': 0
         }
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(
+            asset_store=DataAssetStore(),
+            batch_size=crawler.settings.getint('QSOU_OUTBOX_BATCH_SIZE', 10),
+            dispatch_enabled=crawler.settings.getbool('QSOU_OUTBOX_DISPATCH_ENABLED', True),
+        )
     
     def _initialize_celery(self):
         """初始化Celery连接"""
@@ -63,8 +73,9 @@ class DataProcessingPipeline:
                 self.stats['dropped'] += 1
                 raise DropItem(f"数据验证失败: {item.get('url', 'unknown')}")
             
-            # 添加到批次
-            self.batch_items.append(item)
+            # 原始响应已在下载器中间件归档；此处登记标准文档和可靠待处理记录。
+            standard_document = self.asset_store.register_document(self.convert_item_to_dict(item))
+            self.batch_items.append(standard_document)
             
             # 如果达到批次大小，发送到数据处理系统
             if len(self.batch_items) >= self.batch_size:
@@ -85,6 +96,11 @@ class DataProcessingPipeline:
         
         # 输出统计信息
         self.logger.info(f"数据处理管道统计: {self.stats}")
+
+    def open_spider(self, spider):
+        """优先恢复上次未成功提交的待处理文档。"""
+        if self.dispatch_enabled:
+            self.dispatch_pending()
     
     def validate_item(self, item: Item) -> bool:
         """验证数据项"""
@@ -108,58 +124,74 @@ class DataProcessingPipeline:
             return
         
         try:
-            # 准备数据
-            batch_data = []
-            for item in self.batch_items:
-                batch_data.append(self.convert_item_to_dict(item))
-            
-            # 发送到数据处理系统
-            # 为端到端调试添加 Trace-ID
-            import uuid
-            trace_id = str(uuid.uuid4())
-            payload = {
-                'documents': batch_data,
-                'source': 'crawler',
-                'batch_id': f"batch_{len(self.batch_items)}"
-            }
+            batch_data = list(self.batch_items)
 
-            if not self.celery_app:
-                self.logger.error("Celery客户端未初始化，无法发送数据")
-                self.stats['errors'] += len(self.batch_items)
+            if not self.dispatch_enabled:
+                self.logger.info("派生处理未启用，文档已安全保存在待处理队列")
                 return
 
-            self.logger.info(
-                f"发送批次到处理系统",
-                extra={
-                    'trace_id': trace_id,
-                    'items': len(self.batch_items)
-                }
-            )
-
-            # 调用Celery任务（使用已注册任务名）
-            batch_id = f"batch_{len(self.batch_items)}_{int(time.time())}"
-            result = self.celery_app.send_task(
-                'tasks.process_crawled_data',
-                args=[batch_id, batch_data],
-                queue='data_processing'
-            )
-            
-            self.logger.info(
-                f"成功提交 {len(self.batch_items)} 条数据到数据处理系统",
-                extra={'trace_id': trace_id, 'task_id': result.id}
-            )
-            self.stats['processed'] += len(self.batch_items)
+            import uuid
+            trace_id = str(uuid.uuid4())
+            self._dispatch_documents(batch_data, trace_id)
             
         except Exception as e:
             self.logger.error(f"发送数据到处理系统失败: {str(e)}")
             self.stats['errors'] += len(self.batch_items)
+            self.asset_store.mark_failed(
+                [document.get('content_version_id') for document in self.batch_items],
+                str(e),
+            )
         finally:
-            # 清空批次
+            # 内存批次可清空；SQLite 待处理记录只在提交成功后改变状态。
             self.batch_items = []
+
+    def dispatch_pending(self):
+        """重试持久化队列，避免上一次 Celery 故障造成数据丢失。"""
+        pending = self.asset_store.pending_documents(self.batch_size)
+        if not pending:
+            return
+        try:
+            import uuid
+            self._dispatch_documents(pending, str(uuid.uuid4()))
+        except Exception as exc:
+            self.asset_store.mark_failed(
+                [document.get('content_version_id') for document in pending],
+                str(exc),
+            )
+            self.logger.error(f"恢复待处理文档失败: {exc}")
+
+    def _dispatch_documents(self, documents, trace_id):
+        if not self.celery_app:
+            raise RuntimeError("Celery客户端未初始化")
+        if not documents:
+            return
+
+        self.logger.info(
+            "发送批次到处理系统",
+            extra={'trace_id': trace_id, 'items': len(documents)},
+        )
+        batch_id = f"batch_{len(documents)}_{int(time.time())}"
+        result = self.celery_app.send_task(
+            'tasks.process_crawled_data',
+            args=[batch_id, documents],
+            queue='data_processing',
+        )
+        content_version_ids = [document['content_version_id'] for document in documents]
+        self.asset_store.mark_dispatched(content_version_ids, result.id)
+        self.logger.info(
+            f"成功提交 {len(documents)} 条数据到处理系统",
+            extra={'trace_id': trace_id, 'task_id': result.id},
+        )
     
     def convert_item_to_dict(self, item: Item) -> Dict[str, Any]:
         """将Scrapy项目转换为字典"""
         if isinstance(item, NewsArticleItem):
+            metadata = dict(item.get('metadata') or {})
+            metadata.update({
+                'crawler': 'financial_news_spider',
+                'domain': self.extract_domain(item.get('url', '')),
+                'language': 'zh-CN'
+            })
             return {
                 'id': self.generate_item_id(item),
                 'type': 'news',
@@ -173,13 +205,19 @@ class DataProcessingPipeline:
                 'category': item.get('category', ''),
                 'crawl_time': item.get('crawl_time') or item.get('crawled_at', ''),
                 'content_length': item.get('content_length', 0),
-                'metadata': {
-                    'crawler': 'financial_news_spider',
-                    'domain': self.extract_domain(item.get('url', '')),
-                    'language': 'zh-CN'
-                }
+                'metadata': metadata,
+                'raw_object_id': metadata.get('raw_object_id'),
+                'source_id': metadata.get('source_id'),
+                'fetched_at': metadata.get('fetched_at'),
+                'parser_version': metadata.get('parser_version'),
             }
         elif isinstance(item, CompanyAnnouncementItem):
+            metadata = dict(item.get('metadata') or {})
+            metadata.update({
+                'crawler': 'company_announcement_spider',
+                'domain': self.extract_domain(item.get('url', '')),
+                'language': 'zh-CN'
+            })
             return {
                 'id': self.generate_item_id(item),
                 'type': 'announcement',
@@ -196,11 +234,11 @@ class DataProcessingPipeline:
                 'crawl_time': item.get('crawl_time', ''),
                 'content_length': item.get('content_length', 0),
                 'is_important': item.get('is_important', False),
-                'metadata': {
-                    'crawler': 'company_announcement_spider',
-                    'domain': self.extract_domain(item.get('url', '')),
-                    'language': 'zh-CN'
-                }
+                'metadata': metadata,
+                'raw_object_id': metadata.get('raw_object_id'),
+                'source_id': metadata.get('source_id'),
+                'fetched_at': metadata.get('fetched_at'),
+                'parser_version': metadata.get('parser_version'),
             }
         else:
             # 通用转换

@@ -19,39 +19,40 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
   → 搜索、订阅、证据查看、分析与导出
 ```
 
-## 2. 当前实现（Observed in code）
+## 2. 当前基线（Observed in code）
 
 当前主要代码路径是：
 
 ```text
-Scrapy Spider
-  → crawler/qsou_crawler/pipelines/data_processing_pipeline.py
-  → data-processor.tasks.process_crawled_data
-  → data-processor.tasks.update_search_index
-  → Elasticsearch
-  → data-processor.tasks.generate_embeddings
-  → Qdrant
+来源登记 config/sources.json
+  → Scrapy Downloader Middleware 归档原始响应
+  → Spider 解析并关联 raw_object_id
+  → DataProcessingPipeline 登记身份、时间和内容版本
+  → SQLite processing_outbox
+  → 可选 Celery / Elasticsearch / Qdrant 派生链
+  → FastAPI 自有数据搜索、证据查看、导出与回放
 ```
 
-- `crawler/qsou_crawler/` 负责 Spider、插件加载、字段验证、去重和任务提交。
-- `data-processor/tasks.py` 负责数据处理、Elasticsearch 索引和向量任务。
-- `api-gateway/app/services/elasticsearch_service.py` 提供全文检索。
-- `api-gateway/app/services/qdrant_service.py` 提供语义检索。
+- `qsou_data/registry.py` 负责版本化来源登记与 URL 归属校验。
+- `qsou_data/store.py` 负责原始文件、SQLite 目录、身份版本、可靠待处理状态、本地搜索、导出和回放。
+- `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
+- `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 先登记标准文档，再按配置提交派生处理；提交失败不会删除本地待处理记录。
+- `data-processor/tasks.py` 将处理、过滤、索引和失败状态回写数据资产目录。
+- `api-gateway/app/api/v1/endpoints/data_assets.py` 提供来源、证据、版本、导出与回放入口。
 
-这条路径已经建立了“先全文索引、后向量索引”的服务顺序，但尚不能证明自主数据资产已经闭环。
+基线默认关闭派生搜索和派生处理，API 会直接搜索自有标准文档；这使 Elasticsearch、Qdrant 和 Redis 不再是最小部署的硬依赖。
 
-## 3. 当前差距（Inference based on code audit）
+## 3. 基线之后的差距（Inference based on code audit）
 
-本次代码审计尚未发现以下完整能力：
+当前仍没有以下完整能力：
 
-- 在解析和任务确认之前持久化 HTTP 响应、附件与采集上下文的不可变原始归档。
-- 统一的来源登记、覆盖契约、权利状态和来源健康模型。
-- `source_published_at`、`first_seen_at`、`fetched_at`、`processed_at`、`indexed_at` 的完整时间语义。
-- 逻辑文档、来源文档、内容版本和原始对象之间的稳定身份关系。
-- 不访问外部来源即可按时间窗口或解析器版本重放数据。
-- 从原始证据重建标准文档、Elasticsearch 与 Qdrant 的全链路恢复演练。
+- 自动验证来源分页、公告编号、游标和连续时间窗口是否完整。
+- 保存请求上下文、附件关系及 WARC 级会话证据；当前基线保存响应正文和安全响应头。
+- 仅从原始响应按指定解析器版本重建标准文档；当前回放从已保存标准文档开始。
+- 从原始证据恢复标准文档、全文索引与向量索引的定期演练和差异报告。
+- 跨节点对象存储、多实例目录服务、用户知识资产、实体事件层和订阅闭环。
 
-因此，当前 Elasticsearch 是主要在线全文存储，但不应继续被定义为长期唯一主存储。索引中的数据量也不能单独作为来源完整性的证明。
+当前基线已经改变了事实权威，但还不能仅凭保存数量证明来源完整覆盖。
 
 ## 4. 目标组件职责
 
