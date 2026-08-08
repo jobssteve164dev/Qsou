@@ -24,6 +24,11 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from qsou_data import DataAssetStore
 
 # 导入现有的数据处理模块
 try:
@@ -99,6 +104,15 @@ _nlp_processor = None
 _vector_manager = None
 _document_indexer = None
 _search_engine = None
+_asset_store = None
+
+
+def get_asset_store() -> DataAssetStore:
+    """获取自主数据资产目录。"""
+    global _asset_store
+    if _asset_store is None:
+        _asset_store = DataAssetStore()
+    return _asset_store
 
 
 def get_processor_manager() -> DataProcessorManager:
@@ -203,6 +217,12 @@ def process_crawled_data(self, data_id: str, raw_data: Dict[str, Any]) -> Dict[s
         
         # 转换数据格式
         documents = [raw_data] if isinstance(raw_data, dict) else raw_data
+        content_version_ids = [
+            document.get('content_version_id') or document.get('id')
+            for document in documents
+            if isinstance(document, dict)
+        ]
+        get_asset_store().mark_processing(content_version_ids)
         
         # 执行数据处理管道
         result = pipeline.process_documents(
@@ -220,9 +240,16 @@ def process_crawled_data(self, data_id: str, raw_data: Dict[str, Any]) -> Dict[s
         # 如果处理成功，按正确顺序触发任务：先ES索引，ES成功后自动触发向量化
         processed_docs = result.get('processed_documents', [])
         if processed_docs:
-            # 第一步：先索引到ES（主存储），ES成功后会自动触发向量化任务
+            processed_at = datetime.utcnow().isoformat() + 'Z'
             for doc in processed_docs:
+                doc['processed_at'] = processed_at
                 update_search_index.delay(doc['id'], doc)
+            get_asset_store().mark_processed([doc['id'] for doc in processed_docs])
+
+        processed_ids = {doc.get('id') for doc in processed_docs}
+        filtered_ids = [content_id for content_id in content_version_ids if content_id not in processed_ids]
+        if filtered_ids:
+            get_asset_store().mark_filtered(filtered_ids, 'deduplicated_or_quality_filtered')
         
         return {
             'status': 'success',
@@ -240,6 +267,15 @@ def process_crawled_data(self, data_id: str, raw_data: Dict[str, Any]) -> Dict[s
         if self.request.retries < self.max_retries:
             logger.info(f"准备重试任务: {data_id}")
             raise self.retry(exc=exc)
+
+        try:
+            failed_documents = [raw_data] if isinstance(raw_data, dict) else raw_data
+            get_asset_store().mark_failed(
+                [document.get('content_version_id') or document.get('id') for document in failed_documents],
+                str(exc),
+            )
+        except Exception as state_exc:
+            logger.error(f"记录处理失败状态时发生错误: {state_exc}")
         
         return {
             'status': 'failed',
@@ -281,8 +317,7 @@ def generate_embeddings(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         
         logger.info(f"文档向量生成并存储完成: {doc_id}, stored_ids={stored_ids}")
         
-        # 注意：向量化任务不再触发ES更新，因为ES索引应该在向量化之前完成
-        # 这样可以确保ES作为主存储，Qdrant作为辅助存储的正确架构
+        # 向量化任务不再触发全文索引更新；两者都是可从标准文档重建的派生能力。
         
         return {
             'status': 'success',
@@ -454,7 +489,17 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
             'quality_score': document.get('quality_score', 0.0),
             'sentiment': document.get('sentiment', {}),
             'entities': document.get('entities', []),
-            'keywords': document.get('keywords', [])
+            'keywords': document.get('keywords', []),
+            'source_id': document.get('source_id'),
+            'source_document_id': document.get('source_document_id'),
+            'canonical_document_id': document.get('canonical_document_id'),
+            'content_version_id': document.get('content_version_id', doc_id),
+            'raw_object_id': document.get('raw_object_id'),
+            'source_published_at': document.get('source_published_at'),
+            'first_seen_at': document.get('first_seen_at'),
+            'fetched_at': document.get('fetched_at'),
+            'processed_at': document.get('processed_at'),
+            'parser_version': document.get('parser_version'),
         }
         
         # 根据文档类型选择索引
@@ -486,10 +531,14 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
             document_id=doc_id,
             index_name=index_name
         )
+        if not index_result:
+            raise RuntimeError(f"Elasticsearch 未确认写入成功: {doc_id}")
+
+        get_asset_store().mark_indexed([document.get('content_version_id') or doc_id])
         
         logger.info(f"搜索索引更新完成: {doc_id}")
         
-        # ES索引成功后，触发向量化任务（正确的架构：ES主存储 → Qdrant辅助存储）
+        # 全文索引与向量索引都是可重建派生层；先完成全文索引，再触发向量化。
         try:
             generate_embeddings.delay(doc_id, document)
             logger.info(f"已触发向量化任务: {doc_id}")
@@ -512,6 +561,11 @@ def update_search_index(self, doc_id: str, document: Dict[str, Any]) -> Dict[str
         if self.request.retries < self.max_retries:
             logger.info(f"准备重试索引更新任务: {doc_id}")
             raise self.retry(exc=exc)
+
+        try:
+            get_asset_store().mark_failed([document.get('content_version_id') or doc_id], str(exc))
+        except Exception as state_exc:
+            logger.error(f"记录索引失败状态时发生错误: {state_exc}")
         
         return {
             'status': 'failed',

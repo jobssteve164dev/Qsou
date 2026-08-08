@@ -1077,7 +1077,7 @@ class IntelligenceService:
         """创建空报告"""
         return {
             'topic': topic,
-            'summary': f"在指定的{time_range}天时间范围内，未找到与"{topic}"相关的足够信息。建议扩大时间范围或调整搜索关键词。",
+            'summary': f'在指定的{time_range}天时间范围内，未找到与“{topic}”相关的足够信息。建议扩大时间范围或调整搜索关键词。',
             'sentiment': {
                 'avg_score': 0.0,
                 'label_distribution': {

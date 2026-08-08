@@ -9,7 +9,10 @@ import {
   AnalysisReport,
   LoginRequest,
   LoginResponse,
-  SystemStats
+  SystemStats,
+  DataAssetStatus,
+  DataSourceStatus,
+  EvidenceRecord
 } from '@/types';
 
 // 创建axios实例
@@ -169,6 +172,26 @@ export const searchApi = {
   // 热门搜索
   trending: async (): Promise<ApiResponse<string[]>> => {
     return apiRequest<string[]>('get', '/search/trending');
+  },
+};
+
+export const dataAssetApi = {
+  status: async (): Promise<ApiResponse<DataAssetStatus>> => {
+    return apiRequest<DataAssetStatus>('get', '/data/status');
+  },
+  sources: async (): Promise<ApiResponse<{ sources: DataSourceStatus[] }>> => {
+    return apiRequest<{ sources: DataSourceStatus[] }>('get', '/data/sources');
+  },
+  evidence: async (limit = 20): Promise<ApiResponse<{ evidence: EvidenceRecord[] }>> => {
+    return apiRequest<{ evidence: EvidenceRecord[] }>('get', `/data/evidence?limit=${limit}`);
+  },
+  evidenceContentUrl: (rawObjectId: string): string => {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1';
+    return `${base}/data/evidence/${encodeURIComponent(rawObjectId)}/content`;
+  },
+  exportUrl: (): string => {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1';
+    return `${base}/data/export`;
   },
 };
 

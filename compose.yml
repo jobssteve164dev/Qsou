@@ -1,0 +1,68 @@
+name: qsou-baseline
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      API_RELOAD: "false"
+      ENABLE_DERIVED_SEARCH: "false"
+      ENABLE_DERIVED_PROCESSING: "false"
+      QSOU_DATA_ROOT: /var/lib/qsou
+      QSOU_SOURCE_REGISTRY: /app/config/sources.json
+      CORS_ORIGINS: '${QSOU_CORS_ORIGINS:-["http://localhost:3000"]}'
+    ports:
+      - "${QSOU_API_PORT:-8000}:8000"
+    volumes:
+      - qsou-data:/var/lib/qsou
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${QSOU_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    environment:
+      NEXT_PUBLIC_API_URL: ${QSOU_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN: "true"
+    ports:
+      - "${QSOU_WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  collector:
+    profiles: ["collector"]
+    build:
+      context: .
+      dockerfile: deploy/crawler.Dockerfile
+    environment:
+      QSOU_STANDALONE_CRAWLER: "true"
+      QSOU_OUTBOX_DISPATCH_ENABLED: "false"
+      QSOU_DATA_ROOT: /var/lib/qsou
+      QSOU_SOURCE_REGISTRY: /app/config/sources.json
+      LOG_FILE: /app/crawler/logs/scrapy.log
+    volumes:
+      - qsou-data:/var/lib/qsou
+      - qsou-crawler-logs:/app/crawler/logs
+    command: ["crawl", "${QSOU_SPIDER:-financial_news}"]
+    restart: "no"
+
+volumes:
+  qsou-data:
+  qsou-crawler-logs:

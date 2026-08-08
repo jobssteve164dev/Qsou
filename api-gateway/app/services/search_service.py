@@ -5,42 +5,73 @@
 
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
-from .elasticsearch_service import elasticsearch_service
-from .qdrant_service import qdrant_service
 from app.core.config import settings
+from qsou_data import DataAssetStore
 
 logger = structlog.get_logger(__name__)
+
+
+class DisabledDerivedService:
+    """基线模式下明确表示派生索引未启用。"""
+
+    is_connected = False
+    client = None
+
+    async def connect(self) -> bool:
+        return False
+
+    async def disconnect(self):
+        return None
+
+    async def health_check(self) -> Dict[str, Any]:
+        return {"status": "disabled"}
+
+    async def get_suggestions(self, query: str, size: int = 5) -> List[str]:
+        return []
+
+    async def find_similar_documents(self, document_id: str, limit: int = 10):
+        raise RuntimeError("派生向量检索未启用")
 
 
 class SearchService:
     """统一搜索服务管理器"""
     
     def __init__(self):
-        self.elasticsearch = elasticsearch_service
-        self.qdrant = qdrant_service
+        if settings.ENABLE_DERIVED_SEARCH:
+            from .elasticsearch_service import elasticsearch_service
+            from .qdrant_service import qdrant_service
+            self.elasticsearch = elasticsearch_service
+            self.qdrant = qdrant_service
+        else:
+            self.elasticsearch = DisabledDerivedService()
+            self.qdrant = DisabledDerivedService()
+        self.data_assets = DataAssetStore()
         
     async def initialize(self) -> bool:
         """初始化搜索服务"""
         try:
+            if not settings.ENABLE_DERIVED_SEARCH:
+                self.data_assets.health()
+                logger.info("派生搜索未启用，使用自主数据基线检索")
+                return True
+
             # 并行连接两个服务
             es_task = asyncio.create_task(self.elasticsearch.connect())
             qdrant_task = asyncio.create_task(self.qdrant.connect())
             
             es_connected, qdrant_connected = await asyncio.gather(es_task, qdrant_task)
             
-            if es_connected and qdrant_connected:
-                logger.info("搜索服务初始化成功")
-                return True
-            else:
-                logger.error(
-                    "搜索服务初始化失败",
-                    elasticsearch_connected=es_connected,
-                    qdrant_connected=qdrant_connected
-                )
-                return False
+            self.data_assets.health()
+            logger.info(
+                "搜索服务初始化完成",
+                elasticsearch_connected=es_connected,
+                qdrant_connected=qdrant_connected,
+                local_data_ready=True,
+            )
+            return True
                 
         except Exception as e:
             logger.error("搜索服务初始化异常", error=str(e))
@@ -57,22 +88,27 @@ class SearchService:
     async def health_check(self) -> Dict[str, Any]:
         """搜索服务健康检查"""
         try:
-            # 并行检查两个服务
-            es_task = asyncio.create_task(self.elasticsearch.health_check())
-            qdrant_task = asyncio.create_task(self.qdrant.health_check())
+            if settings.ENABLE_DERIVED_SEARCH:
+                es_task = asyncio.create_task(self.elasticsearch.health_check())
+                qdrant_task = asyncio.create_task(self.qdrant.health_check())
+                es_health, qdrant_health = await asyncio.gather(es_task, qdrant_task)
+            else:
+                es_health = {"status": "disabled"}
+                qdrant_health = {"status": "disabled"}
             
-            es_health, qdrant_health = await asyncio.gather(es_task, qdrant_task)
-            
-            overall_status = "healthy" if (
-                es_health.get("status") == "connected" and 
-                qdrant_health.get("status") == "connected"
-            ) else "unhealthy"
+            data_health = self.data_assets.health()
+            derived_ready = (
+                es_health.get("status") == "connected"
+                and qdrant_health.get("status") == "connected"
+            )
             
             return {
-                "status": overall_status,
+                "status": "healthy" if data_health.get("status") == "healthy" else "unhealthy",
+                "mode": "derived" if derived_ready else "local_baseline",
+                "data_assets": data_health,
                 "elasticsearch": es_health,
                 "qdrant": qdrant_health,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
         except Exception as e:
@@ -80,7 +116,7 @@ class SearchService:
             return {
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
     
     async def search(
@@ -115,19 +151,22 @@ class SearchService:
         
         try:
             if search_type == "keyword":
-                # 纯关键词搜索
-                result = await self._keyword_search(
-                    query, filters, page, page_size, sort_by
+                result = (
+                    await self._keyword_search(query, filters, page, page_size, sort_by)
+                    if self.elasticsearch.is_connected
+                    else self._local_search(query, filters, page, page_size)
                 )
             elif search_type == "semantic":
-                # 纯语义搜索
-                result = await self._semantic_search(
-                    query, filters, page, page_size
+                result = (
+                    await self._semantic_search(query, filters, page, page_size)
+                    if self.qdrant.is_connected
+                    else self._local_search(query, filters, page, page_size)
                 )
             elif search_type == "hybrid":
-                # 混合搜索
-                result = await self._hybrid_search(
-                    query, filters, page, page_size, sort_by
+                result = (
+                    await self._hybrid_search(query, filters, page, page_size, sort_by)
+                    if self.elasticsearch.is_connected and self.qdrant.is_connected
+                    else self._local_search(query, filters, page, page_size)
                 )
             else:
                 raise ValueError(f"不支持的搜索类型: {search_type}")
@@ -146,8 +185,37 @@ class SearchService:
             return result
             
         except Exception as e:
-            logger.error("搜索执行失败", query=query, search_type=search_type, error=str(e))
-            raise
+            logger.warning("派生搜索不可用，改用自有标准文档检索", query=query, error=str(e))
+            result = self._local_search(query, filters, page, page_size)
+            result["search_time_ms"] = int((datetime.now() - start_time).total_seconds() * 1000)
+            result["derived_warning"] = str(e)
+            return result
+
+    def _local_search(
+        self,
+        query: str,
+        filters: Optional[Dict],
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        source_id = None
+        if filters:
+            candidate = filters.get("source_id") or filters.get("source")
+            if candidate:
+                try:
+                    self.data_assets.registry.get(candidate)
+                    source_id = candidate
+                except ValueError:
+                    source_id = None
+        result = self.data_assets.search_documents(
+            query,
+            source_id=source_id,
+            page=page,
+            page_size=page_size,
+        )
+        result["search_type"] = "local_baseline"
+        result["aggregations"] = {}
+        return result
     
     async def get_suggestions(self, query: str, size: int = 5) -> List[str]:
         """获取搜索建议"""

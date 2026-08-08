@@ -108,10 +108,18 @@ export interface SystemStats {
   analysis_reports: number;
   system_status: 'healthy' | 'warning' | 'error';
   services: {
+    data_assets?: boolean;
     elasticsearch: boolean;
     qdrant: boolean;
     crawler: boolean;
     processor: boolean;
+  };
+  service_states?: {
+    data_assets?: 'healthy' | 'disabled' | 'idle' | 'unavailable';
+    elasticsearch?: 'healthy' | 'disabled' | 'idle' | 'unavailable';
+    qdrant?: 'healthy' | 'disabled' | 'idle' | 'unavailable';
+    crawler?: 'healthy' | 'disabled' | 'idle' | 'unavailable';
+    processor?: 'healthy' | 'disabled' | 'idle' | 'unavailable';
   };
   service_messages?: {
     elasticsearch?: string;
@@ -119,4 +127,33 @@ export interface SystemStats {
     crawler?: string;
     processor?: string;
   };
+}
+
+export interface DataAssetStatus {
+  status: 'healthy' | 'unhealthy';
+  registered_sources: number;
+  raw_objects: number;
+  document_versions: number;
+  active_documents: number;
+  processing: Record<string, number>;
+}
+
+export interface DataSourceStatus {
+  source_id: string;
+  source_name: string;
+  authority_tier: 'primary' | 'secondary' | 'discovery';
+  document_types: string[];
+  health_state: string;
+  raw_count: number;
+  last_fetched_at?: string | null;
+}
+
+export interface EvidenceRecord {
+  raw_object_id: string;
+  source_id: string;
+  url: string;
+  content_type: string;
+  first_fetched_at: string;
+  last_fetched_at: string;
+  fetch_count: number;
 }

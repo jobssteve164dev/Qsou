@@ -1,5 +1,7 @@
 # 本地开发环境搭建指南
 
+> 本文说明包含 Elasticsearch、Qdrant、Redis 和 PostgreSQL 的历史完整开发栈。验证自主数据基线不需要安装这些可选派生组件；请优先使用[自主数据基线部署](./baseline-deployment.md)中的宿主机验证步骤。
+
 ## 系统要求
 
 - **操作系统**: Windows 10/11, macOS 10.15+, 或 Linux (Ubuntu 18.04+)

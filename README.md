@@ -28,6 +28,7 @@ Qsou 要建立的是一套不依赖传统搜索引擎才能持续运转的数据
 |---|---|
 | [自主数据资产设计指导](./docs/data-sovereignty-design-guidelines.md) | 项目方向、数据权威、来源治理、时间模型与验收标准 |
 | [数据流架构](./docs/data-flow-architecture.md) | 目标数据流以及当前实现差距 |
+| [基线部署](./docs/baseline-deployment.md) | 部署 API、前端、采集器并验证数据资产闭环 |
 | [爬虫插件指南](./docs/crawler-plugins.md) | 数据源连接器的开发与验证方式 |
 | [法律合规指南](./docs/legal-compliance-guide.md) | 来源接入和数据使用的合规检查参考 |
 | [技术栈设计](./docs/tech-stack-design.md) | 历史技术选型与实现参考，不定义数据权威 |
@@ -52,56 +53,26 @@ flowchart LR
 
 ## 当前实现与主要差距
 
-**Observed in code：** 仓库已经包含 Scrapy 采集及插件机制、Celery 数据处理、Elasticsearch 全文检索、Qdrant 语义检索、FastAPI 接口和 Next.js 前端。
+**Observed in code：** 当前基线已经在 Scrapy 解析之前保存原始响应，按来源、逻辑文档和内容版本登记标准文档，并把待处理状态持久化到 SQLite。FastAPI 提供自有数据搜索、来源状态、证据查看、开放导出和回放接口；Next.js 提供“搜索”和“我的数据”入口。Elasticsearch、Qdrant 与 Celery 是可选派生能力，关闭后基线仍可运行。
 
-**尚未形成闭环：** 当前处理链主要将爬虫产出的结构化条目交给数据处理任务，再写入 Elasticsearch 和 Qdrant；原始响应不可变归档、来源覆盖契约、统一时间与版本模型、从原始数据全链路重建等能力仍属于目标设计。
+**仍待完成：** 当前回放从已保存标准文档开始，尚未完成仅凭原始响应重新执行解析器并重建所有派生层的恢复演练；来源登记也尚未自动证明分页、编号和时间窗口完整性。多实例存储、用户知识资产、实体事件层和订阅仍在基线之外。
 
-因此，现阶段不能把 Elasticsearch 视为项目的唯一主存储，也不能仅凭索引中的文档数量证明数据已经完整掌握。
+因此，不能把 Elasticsearch 视为项目主存储，也不能仅凭文档数量声明来源已经完整覆盖。
 
 ## 快速开始
 
-### 开发环境启动
+### 可部署基线
 ```bash
-# 克隆项目
-git clone <repository-url>
-cd Qsou
-
-# 运行快速启动脚本
-python scripts/quick_start.py
+cp deploy/baseline.env.example deploy/baseline.env
+# 在专用部署主机或 CI 构建，不在资源敏感的共享开发机执行
+docker compose --env-file deploy/baseline.env up -d --build api web
 ```
-详细说明见 [docs/QUICK_START.md](./docs/QUICK_START.md) 和 [docs/local-development-setup.md](./docs/local-development-setup.md)。
-
-### 环境要求
-- Python 3.8+
-- Java 11+ (Elasticsearch需要)
-- PostgreSQL
-- Redis  
-- Elasticsearch 8.x (含IK中文分词器)
-- Qdrant向量数据库
-- 可用内存 >= 8GB
-- 可用存储 >= 20GB
-
-### 开发环境搭建
-```bash
-# 完整环境搭建
-make dev-setup
-
-# 验证环境
-make verify
-
-# 初始化数据存储
-make init
-
-# 启动开发服务
-make dev-api        # API服务 (端口8000)
-make dev-frontend   # 前端服务 (端口3000)
-```
+远程部署前必须在 `deploy/baseline.env` 中设置浏览器可访问的 API 地址和 CORS 来源。完整步骤、宿主机验证和数据备份边界见 [基线部署](./docs/baseline-deployment.md)。历史完整开发栈说明见 [快速开始](./docs/QUICK_START.md) 和 [本地开发环境](./docs/local-development-setup.md)。
 
 ### 验证部署
 - 前端界面: http://localhost:3000
 - API文档: http://localhost:8000/docs  
-- Elasticsearch: http://localhost:9200
-- Qdrant Dashboard: http://localhost:6333/dashboard
+- 我的数据: http://localhost:3000/data
 
 ## 当前设计优先级
 

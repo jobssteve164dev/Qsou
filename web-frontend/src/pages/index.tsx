@@ -126,8 +126,8 @@ const HomePage: React.FC = () => {
   return (
     <Layout>
       <Head>
-        <title>QSou - 投资情报搜索引擎</title>
-        <meta name="description" content="专业的投资情报搜索引擎，为量化交易提供实时、准确的财经资讯检索服务" />
+        <title>QSou - 搜索我的投资数据</title>
+        <meta name="description" content="搜索自己持续采集、保存并可追溯的投资数据" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -140,10 +140,10 @@ const HomePage: React.FC = () => {
             <div className="py-6 sm:py-8 lg:py-10">
               <div className="text-center mb-6 sm:mb-8">
                 <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-                  智能搜索
+                  搜索我的数据
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto px-4">
-                  搜索最新财经资讯、公司公告、行业报告，为您的投资决策提供数据支持
+                  每条结果都来自已经保存的数据，并可回到来源证据
                 </p>
               </div>
 

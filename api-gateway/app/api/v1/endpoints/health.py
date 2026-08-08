@@ -14,9 +14,13 @@ import shutil
 from app.services.search_service import search_service
 from app.services.data_processing_service import data_processing_service
 from app.core.config import settings
+from qsou_data import DataAssetStore
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
+data_asset_store = DataAssetStore()
+
+
 @router.get("/stats")
 async def system_stats():
     """
@@ -25,12 +29,16 @@ async def system_stats():
     """
     try:
         # 并行执行健康检查并记录耗时（暴露调试信息）
-        es_health, es_ms = await _with_timeout_timed(
-            search_service.elasticsearch.health_check(), 2.0, {"status": "timeout"}
-        )
-        qdrant_health, qdrant_ms = await _with_timeout_timed(
-            search_service.qdrant.health_check(), 2.0, {"status": "timeout"}
-        )
+        if settings.ENABLE_DERIVED_SEARCH:
+            es_health, es_ms = await _with_timeout_timed(
+                search_service.elasticsearch.health_check(), 2.0, {"status": "timeout"}
+            )
+            qdrant_health, qdrant_ms = await _with_timeout_timed(
+                search_service.qdrant.health_check(), 2.0, {"status": "timeout"}
+            )
+        else:
+            es_health, es_ms = {"status": "disabled"}, 0
+            qdrant_health, qdrant_ms = {"status": "disabled"}, 0
         processor_health, processor_ms = await _with_timeout_timed(
             data_processing_service.health_check(),
             2.0,
@@ -39,6 +47,9 @@ async def system_stats():
         crawler_ok, crawler_ms = await _with_timeout_timed(
             _check_crawler_service(), 1.0, False
         )
+        data_asset_health = data_asset_store.health()
+        data_asset_status = data_asset_store.status()
+        data_asset_ok = data_asset_health.get("status") == "healthy"
 
         elastic_ok = es_health.get("status") == "connected"
         qdrant_ok = qdrant_health.get("status") == "connected"
@@ -47,7 +58,8 @@ async def system_stats():
         )
 
         # 计算文档数量（在ES可用时）——统一口径：别名 + _search size=0
-        documents_count = 0
+        documents_count = data_asset_status.get("active_documents", 0)
+        derived_documents_count = 0
         if elastic_ok:
             try:
                 alias_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}documents"  # 统一使用别名
@@ -64,20 +76,14 @@ async def system_stats():
                     search_resp = await _with_timeout(
                         search_coro, 2.0, {"hits": {"total": {"value": 0}}}
                     )
-                    documents_count = int(
+                    derived_documents_count = int(
                         search_resp.get("hits", {}).get("total", {}).get("value", 0)
                     )
             except Exception:
-                documents_count = 0
+                derived_documents_count = 0
 
         # 汇总系统状态
-        service_ok_flags = [elastic_ok, qdrant_ok, bool(crawler_ok), processor_ok]
-        if all(service_ok_flags):
-            overall = "healthy"
-        elif any(service_ok_flags):
-            overall = "warning"
-        else:
-            overall = "error"
+        overall = "healthy" if data_asset_ok else "error"
 
         # 生成服务异常消息（用于前端悬浮提示）
         def _es_msg():
@@ -117,16 +123,39 @@ async def system_stats():
             "analysis_reports": 0,
             "system_status": overall,
             "services": {
+                "data_assets": data_asset_ok,
                 "elasticsearch": elastic_ok,
                 "qdrant": qdrant_ok,
                 "crawler": bool(crawler_ok),
                 "processor": processor_ok,
             },
+            "service_states": {
+                "data_assets": "healthy" if data_asset_ok else "unavailable",
+                "elasticsearch": (
+                    "healthy" if elastic_ok else "disabled" if not settings.ENABLE_DERIVED_SEARCH else "unavailable"
+                ),
+                "qdrant": (
+                    "healthy" if qdrant_ok else "disabled" if not settings.ENABLE_DERIVED_SEARCH else "unavailable"
+                ),
+                "crawler": "healthy" if crawler_ok else "idle",
+                "processor": (
+                    "healthy" if processor_ok else "disabled" if not settings.ENABLE_DERIVED_PROCESSING else "unavailable"
+                ),
+            },
             "service_messages": {
-                "elasticsearch": _es_msg(),
-                "qdrant": _q_msg(),
-                "crawler": _c_msg(),
-                "processor": _p_msg(),
+                "elasticsearch": (
+                    "可选全文检索加速未启用，当前使用自有数据检索"
+                    if not settings.ENABLE_DERIVED_SEARCH else _es_msg()
+                ),
+                "qdrant": (
+                    "可选语义检索增强未启用"
+                    if not settings.ENABLE_DERIVED_SEARCH else _q_msg()
+                ),
+                "crawler": "采集器当前未运行" if not crawler_ok else "",
+                "processor": (
+                    "可选内容增强处理未启用，采集数据仍会进入可靠待处理队列"
+                    if not settings.ENABLE_DERIVED_PROCESSING else _p_msg()
+                ),
             },
             "diagnostics": {
                 "durations_ms": {
@@ -136,6 +165,8 @@ async def system_stats():
                     "crawler": crawler_ms,
                 },
                 "raw": {
+                    "data_assets": data_asset_status,
+                    "derived_documents_count": derived_documents_count,
                     "elasticsearch": es_health,
                     "qdrant": qdrant_health,
                     "processor": processor_health,

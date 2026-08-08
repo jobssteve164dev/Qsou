@@ -5,6 +5,11 @@ Qsou Investment Intelligence Engine - API Gateway
 
 import os
 import sys
+from pathlib import Path
+
+project_root = str(Path(__file__).resolve().parents[2])
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 # Windows环境设置UTF-8编码
 if sys.platform == 'win32':
     os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -15,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.config import settings
 # from app.core.database import engine, create_tables
@@ -35,7 +40,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """应用启动和关闭时的生命周期管理"""
     # 启动时执行
-    logger.info("🚀 启动 Qsou Investment Intelligence Engine API Gateway")
+    logger.info("🚀 启动 Qsou 自主投资数据服务")
     logger.info(f"🔧 环境: {settings.ENVIRONMENT}")
     logger.info(f"🐛 调试模式: {settings.DEBUG}")
     
@@ -52,15 +57,18 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️  搜索服务初始化失败，部分功能可能不可用")
         
-        # 初始化数据处理服务
-        try:
-            data_processing_status = await data_processing_service.get_status()
-            if data_processing_status.get("status") == "running":
-                logger.info("📊 数据处理服务初始化成功")
-            else:
-                logger.warning("⚠️  数据处理服务初始化失败，爬虫数据可能无法处理")
-        except Exception as e:
-            logger.warning(f"⚠️  数据处理服务检查失败: {e}")
+        # 可选派生处理不影响原始证据与标准文档落地。
+        if settings.ENABLE_DERIVED_PROCESSING:
+            try:
+                data_processing_status = await data_processing_service.get_status()
+                if data_processing_status.get("status") == "running":
+                    logger.info("📊 派生数据处理服务初始化成功")
+                else:
+                    logger.warning("⚠️  派生数据处理服务未就绪")
+            except Exception as e:
+                logger.warning(f"⚠️  派生数据处理服务检查失败: {e}")
+        else:
+            logger.info("📊 派生数据处理未启用，标准文档保留在可靠待处理队列")
         
         logger.info("🔗 外部服务连接检查完成")
     except Exception as e:
@@ -77,9 +85,9 @@ async def lifespan(app: FastAPI):
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="Qsou Investment Intelligence Engine API",
-    description="自部署的投资情报搜索引擎 - 为量化交易提供实时数据源",
-    version="1.0.0",
+    title="Qsou 自主投资数据 API",
+    description="采集、保存、搜索和导出自己掌握的投资数据",
+    version="0.2.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
@@ -108,16 +116,16 @@ app.include_router(api_router, prefix="/api/v1")
 async def root():
     """根路径 - 系统状态检查"""
     return {
-        "service": "Qsou Investment Intelligence Engine API Gateway",
-        "version": "1.0.0",
+        "service": "Qsou 自主投资数据 API",
+        "version": "0.2.0",
         "status": "running",
         "environment": settings.ENVIRONMENT,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "features": [
-            "🔍 实时金融数据搜索",
-            "🤖 智能情报分析",
-            "📊 向量化知识库",
-            "⚡ 高性能API接口"
+            "来源登记",
+            "原始证据归档",
+            "自有数据搜索",
+            "开放格式导出"
         ]
     }
 
@@ -133,14 +141,13 @@ async def health_check():
         # TODO: 添加Redis连接检查
         
         # 判断整体健康状态
-        overall_status = "healthy" if search_health.get("status") == "healthy" else "unhealthy"
+        overall_status = "healthy" if search_health.get("data_assets", {}).get("status") == "healthy" else "unhealthy"
         
         return {
             "status": overall_status,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "services": {
-                "database": "connected",
-                "redis": "checking...",
+                "data_assets": search_health.get("data_assets"),
                 "search_engine": search_health
             }
         }
