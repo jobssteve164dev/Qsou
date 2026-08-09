@@ -6,7 +6,9 @@ RUN npm ci
 COPY web-frontend ./
 
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+ARG API_INTERNAL_URL=http://api:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    API_INTERNAL_URL=${API_INTERNAL_URL} \
     NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN=true
 
 RUN npm run build
