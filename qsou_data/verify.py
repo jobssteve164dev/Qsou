@@ -5,10 +5,53 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Mapping, Sequence
 
-from .migrate import BATCH_SIZE, MIGRATION_TABLES, _cursor_digest
+from .catalog import normalize_catalog_value
+from .schema import metadata
 from .store import DataAssetError, DataAssetStore
+
+
+BATCH_SIZE = 100
+VERIFICATION_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("raw_objects", ("raw_object_id",)),
+    ("standard_documents", ("content_version_id",)),
+    ("document_evidence", ("content_version_id", "raw_object_id")),
+    ("processing_outbox", ("content_version_id",)),
+    ("adapter_runs", ("run_id",)),
+    ("source_cursors", ("source_id",)),
+    ("adapter_run_requests", ("request_id",)),
+)
+
+
+def _update_digest(
+    digest,
+    rows: Iterable[Mapping[str, Any]],
+    columns: Sequence[str],
+) -> int:
+    count = 0
+    for row in rows:
+        encoded = json.dumps(
+            [normalize_catalog_value(row[column]) for column in columns],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+        count += 1
+    return count
+
+
+def _cursor_digest(cursor, columns: Sequence[str]) -> tuple[int, str]:
+    count = 0
+    digest = hashlib.sha256()
+    while True:
+        rows = cursor.fetchmany(BATCH_SIZE)
+        if not rows:
+            break
+        count += _update_digest(digest, rows, columns)
+    return count, digest.hexdigest()
 
 
 def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Dict[str, Any]:
@@ -19,9 +62,8 @@ def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Di
         raise DataAssetError("生产验收要求备份桶，但当前对象存储未配置备份桶")
 
     with store._connection() as connection:
-        for table, keys in MIGRATION_TABLES:
-            probe = connection.execute(f"SELECT * FROM {table} LIMIT 0")
-            columns = [description[0] for description in probe.description]
+        for table, keys in VERIFICATION_TABLES:
+            columns = [column.name for column in metadata.tables[table].columns]
             cursor = connection.execute(
                 f"SELECT {', '.join(columns)} FROM {table} ORDER BY {', '.join(keys)}"
             )

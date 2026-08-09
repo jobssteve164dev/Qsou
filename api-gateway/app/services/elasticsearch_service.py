@@ -12,6 +12,7 @@ import structlog
 import copy
 
 from app.core.config import settings
+from qsou_data.search_index import INDEX_MAPPINGS, INDEX_SETTINGS
 
 logger = structlog.get_logger(__name__)
 
@@ -26,48 +27,31 @@ class ElasticsearchService:
     async def connect(self) -> bool:
         """连接到Elasticsearch"""
         try:
-            # 首选配置的主机
             primary_host = settings.ELASTICSEARCH_HOST
             port = settings.ELASTICSEARCH_PORT
-            async def _try_connect(host: str) -> bool:
-                # 关闭旧client避免未关闭会话
-                try:
-                    if self.client:
-                        await self.client.close()
-                except Exception:
-                    pass
-                self.client = AsyncElasticsearch(
-                    hosts=[{'host': host, 'port': port, 'scheme': 'http'}],
-                    max_retries=1,
-                    retry_on_timeout=False,
-                    verify_certs=False if settings.SKIP_SSL_VERIFY else True,
-                    maxsize=10,
-                    request_timeout=5
-                )
-                info = await self.client.info()
-                self.is_connected = True
-                logger.info(
-                    "Elasticsearch连接成功",
-                    host=host,
-                    cluster_name=info.get('cluster_name'),
-                    version=info.get('version', {}).get('number')
-                )
-                await self._ensure_indices_exist()
-                return True
-
-            # 尝试主机
             try:
-                return await _try_connect(primary_host)
-            except Exception as e1:
-                logger.error("Elasticsearch连接失败", error=str(e1), host=primary_host)
-                # 回退到127.0.0.1，规避localhost/IPv6解析问题
-                if primary_host != '127.0.0.1':
-                    try:
-                        return await _try_connect('127.0.0.1')
-                    except Exception as e2:
-                        logger.error("Elasticsearch备用主机连接失败", error=str(e2), host='127.0.0.1')
-                self.is_connected = False
-                return False
+                if self.client:
+                    await self.client.close()
+            except Exception:
+                pass
+            self.client = AsyncElasticsearch(
+                hosts=[{"host": primary_host, "port": port, "scheme": "http"}],
+                max_retries=1,
+                retry_on_timeout=False,
+                verify_certs=not settings.SKIP_SSL_VERIFY,
+                connections_per_node=10,
+                request_timeout=5,
+            )
+            info = await self.client.info()
+            await self._ensure_indices_exist()
+            self.is_connected = True
+            logger.info(
+                "Elasticsearch连接成功",
+                host=primary_host,
+                cluster_name=info.get("cluster_name"),
+                version=info.get("version", {}).get("number"),
+            )
+            return True
             
         except Exception as e:
             logger.error("Elasticsearch连接失败", error=str(e))
@@ -317,8 +301,11 @@ class ElasticsearchService:
         # 添加过滤器
         must_clauses = [query_body]
         filter_clauses = []
+        filter_clauses.append({"term": {"active": True}})
         
         if filters:
+            if "source_id" in filters:
+                filter_clauses.append({"term": {"source_id": filters["source_id"]}})
             if "source" in filters:
                 filter_clauses.append({"term": {"source": filters["source"]}})
             
@@ -389,10 +376,12 @@ class ElasticsearchService:
                 "title": highlighted_title,
                 "content": highlighted_content[:500] + "..." if len(highlighted_content) > 500 else highlighted_content,
                 "source": source.get('source', ''),
+                "source_id": source.get('source_id', ''),
                 "url": source.get('url'),
                 "published_at": source.get('published_at'),
                 "relevance_score": min(1.0, float(hit.get('_score') or 0.0) / float(max_score)),
-                "tags": source.get('tags', [])
+                "tags": source.get('tags', []),
+                "raw_object_id": source.get('raw_object_id'),
             }
             
             results.append(result)
@@ -417,6 +406,8 @@ class ElasticsearchService:
             except Exception:
                 # 某些版本在不存在时抛异常，统一按不存在处理
                 pass
+            if await self.client.indices.exists(index=alias_name):
+                return
 
             # 2) 查找已有物理索引
             target_index = None
@@ -434,26 +425,13 @@ class ElasticsearchService:
             # 3) 如无可用索引则创建 _v1
             if not target_index:
                 target_index = f"{alias_name}_v1"
-                mapping = {
-                    "mappings": {
-                        "properties": {
-                            "title": {"type": "text", "analyzer": "standard", "search_analyzer": "standard"},
-                            "content": {"type": "text", "analyzer": "standard", "search_analyzer": "standard"},
-                            "summary": {"type": "text", "analyzer": "standard"},
-                            "source": {"type": "keyword"},
-                            "url": {"type": "keyword"},
-                            "publish_time": {"type": "date"},
-                            "published_at": {"type": "date"},
-                            "tags": {"type": "keyword"},
-                            "view_count": {"type": "integer"},
-                            "title_suggest": {"type": "completion", "analyzer": "standard"}
-                        }
-                    },
-                    "settings": {"number_of_shards": 1, "number_of_replicas": 0}
-                }
                 # 如果索引已存在则跳过创建
                 if not await self.client.indices.exists(index=target_index):
-                    await self.client.indices.create(index=target_index, body=mapping)
+                    await self.client.indices.create(
+                        index=target_index,
+                        mappings=INDEX_MAPPINGS,
+                        settings=INDEX_SETTINGS,
+                    )
                     logger.info("创建Elasticsearch索引", index=target_index)
 
             # 4) 绑定别名到物理索引

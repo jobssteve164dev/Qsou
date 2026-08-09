@@ -16,6 +16,7 @@ if sys.platform == 'win32':
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
@@ -30,6 +31,7 @@ from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.metrics import MetricsMiddleware
 from app.services.search_service import search_service
 from app.services.data_processing_service import data_processing_service
+from qsou_data.migration_state import migration_state
 
 # 设置日志
 setup_logging()
@@ -50,7 +52,7 @@ async def lifespan(app: FastAPI):
     
     # 连接外部服务
     try:
-        # 初始化搜索服务（Elasticsearch + Qdrant）
+        # 初始化已配置的可重建搜索服务。
         search_initialized = await search_service.initialize()
         if search_initialized:
             logger.info("🔍 搜索服务初始化成功")
@@ -108,6 +110,21 @@ app.add_middleware(RequestLoggingMiddleware)
 if settings.ENABLE_METRICS:
     app.add_middleware(MetricsMiddleware)
 
+
+@app.middleware("http")
+async def migration_write_gate(request, call_next):
+    if (
+        request.method not in {"GET", "HEAD", "OPTIONS"}
+        and request.url.path != "/api/v1/auth/login"
+    ):
+        state = migration_state(search_service.data_assets)
+        if state["status"] != "ready":
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "数据升级正在完成，请稍后重试"},
+            )
+    return await call_next(request)
+
 # 注册路由
 app.include_router(api_router, prefix="/api/v1")
 
@@ -140,10 +157,9 @@ async def health_check():
         # 检查数据库连接
         # TODO: 添加Redis连接检查
         
-        # 判断整体健康状态
-        overall_status = "healthy" if search_health.get("data_assets", {}).get("status") == "healthy" else "unhealthy"
+        overall_status = search_health.get("status", "unhealthy")
         
-        return {
+        payload = {
             "status": overall_status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "services": {
@@ -151,9 +167,21 @@ async def health_check():
                 "search_engine": search_health
             }
         }
+        if overall_status != "healthy":
+            return JSONResponse(status_code=503, content=payload)
+        return payload
     except Exception as e:
         logger.error(f"健康检查失败: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
+
+
+@app.get("/live")
+async def liveness_check():
+    """Process liveness for staged GitOps rollout; readiness remains on /health."""
+    return {
+        "status": "alive",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/metrics")

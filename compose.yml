@@ -10,14 +10,15 @@ services:
       ENVIRONMENT: production
       DEBUG: "false"
       API_RELOAD: "false"
-      ENABLE_DERIVED_SEARCH: "false"
+      ENABLE_ELASTICSEARCH: "true"
+      ENABLE_QDRANT: "false"
       ENABLE_DERIVED_PROCESSING: "false"
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
-      QSOU_CATALOG_BACKEND: ${QSOU_CATALOG_BACKEND:-sqlite}
-      DATABASE_URL: ${DATABASE_URL:-}
-      QSOU_MIGRATION_PHASE: ${QSOU_MIGRATION_PHASE:-off}
-      QSOU_SQLITE_WRITES_FROZEN: ${QSOU_SQLITE_WRITES_FROZEN:-false}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_INDEX_PREFIX: qsou_
       QSOU_OBJECT_STORAGE_BACKEND: ${QSOU_OBJECT_STORAGE_BACKEND:-file}
       QSOU_OBJECT_STORAGE_ENDPOINT: ${QSOU_OBJECT_STORAGE_ENDPOINT:-}
       QSOU_OBJECT_STORAGE_REGION: ${QSOU_OBJECT_STORAGE_REGION:-us-east-1}
@@ -39,11 +40,14 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/live', timeout=3)"
       interval: 10s
       timeout: 5s
       retries: 6
       start_period: 300s
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     restart: unless-stopped
 
   web:
@@ -72,8 +76,7 @@ services:
       QSOU_OUTBOX_DISPATCH_ENABLED: "false"
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
-      QSOU_CATALOG_BACKEND: ${QSOU_CATALOG_BACKEND:-sqlite}
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       QSOU_OBJECT_STORAGE_BACKEND: ${QSOU_OBJECT_STORAGE_BACKEND:-file}
       QSOU_OBJECT_STORAGE_ENDPOINT: ${QSOU_OBJECT_STORAGE_ENDPOINT:-}
       QSOU_OBJECT_STORAGE_REGION: ${QSOU_OBJECT_STORAGE_REGION:-us-east-1}
@@ -90,6 +93,67 @@ services:
       - qsou-crawler-logs:/app/crawler/logs
     restart: unless-stopped
 
+  indexer:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/indexer.Dockerfile
+    environment:
+      QSOU_DATA_ROOT: /var/lib/qsou
+      QSOU_SOURCE_REGISTRY: /app/config/sources.json
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      QSOU_OBJECT_STORAGE_BACKEND: ${QSOU_OBJECT_STORAGE_BACKEND:-file}
+      QSOU_OBJECT_STORAGE_ENDPOINT: ${QSOU_OBJECT_STORAGE_ENDPOINT:-}
+      QSOU_OBJECT_STORAGE_REGION: ${QSOU_OBJECT_STORAGE_REGION:-us-east-1}
+      QSOU_OBJECT_STORAGE_BUCKET: ${QSOU_OBJECT_STORAGE_BUCKET:-}
+      QSOU_OBJECT_BACKUP_BUCKET: ${QSOU_OBJECT_BACKUP_BUCKET:-}
+      QSOU_OBJECT_STORAGE_ACCESS_KEY: ${QSOU_OBJECT_STORAGE_ACCESS_KEY:-}
+      QSOU_OBJECT_STORAGE_SECRET_KEY: ${QSOU_OBJECT_STORAGE_SECRET_KEY:-}
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_INDEX_ALIAS: qsou_documents
+      QSOU_INDEXER_POLL_SECONDS: "5"
+      QSOU_INDEXER_RECONCILE_SECONDS: "3600"
+      QSOU_INDEXER_BATCH_SIZE: "100"
+      QSOU_INDEXER_MAX_HEALTH_AGE_SECONDS: "60"
+    volumes:
+      - qsou-data:/var/lib/qsou
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "qsou_data.indexer_state"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    restart: unless-stopped
+
+  elasticsearch:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: deploy/elasticsearch.Dockerfile
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ingest.geoip.downloader.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    expose:
+      - "9200"
+    volumes:
+      - qsou-elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' >/dev/null"
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
 volumes:
   qsou-data:
   qsou-crawler-logs:
+  qsou-elasticsearch-data:

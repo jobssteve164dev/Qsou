@@ -10,6 +10,7 @@ import structlog
 
 from app.core.config import settings
 from qsou_data import DataAssetStore
+from qsou_data.indexer_state import read_indexer_state
 
 logger = structlog.get_logger(__name__)
 
@@ -40,29 +41,30 @@ class SearchService:
     """统一搜索服务管理器"""
     
     def __init__(self):
-        if settings.ENABLE_DERIVED_SEARCH:
+        if settings.ENABLE_ELASTICSEARCH:
             from .elasticsearch_service import elasticsearch_service
-            from .qdrant_service import qdrant_service
             self.elasticsearch = elasticsearch_service
-            self.qdrant = qdrant_service
         else:
             self.elasticsearch = DisabledDerivedService()
+        if settings.ENABLE_QDRANT:
+            from .qdrant_service import qdrant_service
+            self.qdrant = qdrant_service
+        else:
             self.qdrant = DisabledDerivedService()
         self.data_assets = DataAssetStore()
         
     async def initialize(self) -> bool:
         """初始化搜索服务"""
         try:
-            if not settings.ENABLE_DERIVED_SEARCH:
+            if not settings.ENABLE_ELASTICSEARCH and not settings.ENABLE_QDRANT:
                 self.data_assets.health()
                 logger.info("派生搜索未启用，使用自主数据基线检索")
                 return True
 
-            # 并行连接两个服务
-            es_task = asyncio.create_task(self.elasticsearch.connect())
-            qdrant_task = asyncio.create_task(self.qdrant.connect())
-            
-            es_connected, qdrant_connected = await asyncio.gather(es_task, qdrant_task)
+            es_connected, qdrant_connected = await asyncio.gather(
+                self.elasticsearch.connect(),
+                self.qdrant.connect(),
+            )
             
             self.data_assets.health()
             logger.info(
@@ -71,7 +73,10 @@ class SearchService:
                 qdrant_connected=qdrant_connected,
                 local_data_ready=True,
             )
-            return True
+            return (
+                (not settings.ENABLE_ELASTICSEARCH or es_connected)
+                and (not settings.ENABLE_QDRANT or qdrant_connected)
+            )
                 
         except Exception as e:
             logger.error("搜索服务初始化异常", error=str(e))
@@ -88,25 +93,41 @@ class SearchService:
     async def health_check(self) -> Dict[str, Any]:
         """搜索服务健康检查"""
         try:
-            if settings.ENABLE_DERIVED_SEARCH:
-                es_task = asyncio.create_task(self.elasticsearch.health_check())
-                qdrant_task = asyncio.create_task(self.qdrant.health_check())
-                es_health, qdrant_health = await asyncio.gather(es_task, qdrant_task)
-            else:
-                es_health = {"status": "disabled"}
-                qdrant_health = {"status": "disabled"}
+            es_health, qdrant_health = await asyncio.gather(
+                self.elasticsearch.health_check(),
+                self.qdrant.health_check(),
+            )
             
             data_health = self.data_assets.health()
-            derived_ready = (
-                es_health.get("status") == "connected"
-                and qdrant_health.get("status") == "connected"
+            indexer_health = (
+                read_indexer_state()
+                if settings.ENABLE_ELASTICSEARCH
+                else {"status": "disabled"}
+            )
+            elasticsearch_ready = es_health.get("status") == "connected"
+            indexer_ready = indexer_health.get("status") == "healthy"
+            qdrant_ready = qdrant_health.get("status") == "connected"
+            if elasticsearch_ready and qdrant_ready:
+                mode = "hybrid"
+            elif elasticsearch_ready:
+                mode = "elasticsearch"
+            elif qdrant_ready:
+                mode = "qdrant"
+            else:
+                mode = "local_baseline"
+            required_services_ready = (
+                data_health.get("status") == "healthy"
+                and (not settings.ENABLE_ELASTICSEARCH or elasticsearch_ready)
+                and (not settings.ENABLE_ELASTICSEARCH or indexer_ready)
+                and (not settings.ENABLE_QDRANT or qdrant_ready)
             )
             
             return {
-                "status": "healthy" if data_health.get("status") == "healthy" else "unhealthy",
-                "mode": "derived" if derived_ready else "local_baseline",
+                "status": "healthy" if required_services_ready else "unhealthy",
+                "mode": mode,
                 "data_assets": data_health,
                 "elasticsearch": es_health,
+                "indexer": indexer_health,
                 "qdrant": qdrant_health,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -163,11 +184,20 @@ class SearchService:
                     else self._local_search(query, filters, page, page_size)
                 )
             elif search_type == "hybrid":
-                result = (
-                    await self._hybrid_search(query, filters, page, page_size, sort_by)
-                    if self.elasticsearch.is_connected and self.qdrant.is_connected
-                    else self._local_search(query, filters, page, page_size)
-                )
+                if self.elasticsearch.is_connected and self.qdrant.is_connected:
+                    result = await self._hybrid_search(
+                        query, filters, page, page_size, sort_by
+                    )
+                elif self.elasticsearch.is_connected:
+                    result = await self._keyword_search(
+                        query, filters, page, page_size, sort_by
+                    )
+                elif self.qdrant.is_connected:
+                    result = await self._semantic_search(
+                        query, filters, page, page_size
+                    )
+                else:
+                    result = self._local_search(query, filters, page, page_size)
             else:
                 raise ValueError(f"不支持的搜索类型: {search_type}")
             

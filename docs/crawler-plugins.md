@@ -48,7 +48,7 @@ class ExampleAdapter(NewsHTMLAdapter):
 - 来源配置权威：`config/sources.json`。
 - 实现注册权威：`crawler/qsou_crawler/adapters/registry.py`。
 - 调度权威：`crawler/run_schedule.py`，按每个来源的 `schedule` 独立判断是否到期。
-- 运行事实权威：SQLite `adapter_runs` 和 `source_cursors`。
+- 运行事实权威：PostgreSQL `adapter_runs` 和 `source_cursors`。
 - 用户可见状态：认证后的 `/api/v1/data/sources`、`/api/v1/data/adapter-runs` 和“数据资产”页面。
 - 逐源操作入口：`POST /api/v1/data/adapter-runs/{source_id}/trigger`；持久请求由同一调度器认领，禁用或待授权来源不能触发。
 

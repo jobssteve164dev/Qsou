@@ -93,194 +93,27 @@ class DataAssetStore:
         self.object_store = configured_object_store(self.root)
         self.objects_dir = self.root / "objects"
         self.object_cache_dir = self.root / "object-cache"
-        self.catalog_path = self.catalog.sqlite_path
         self.root.mkdir(parents=True, exist_ok=True)
-        self._initialize_catalog()
 
     @contextmanager
     def _connection(self) -> Iterator[Any]:
         with self.catalog.connection() as connection:
             yield connection
 
-    def _initialize_catalog(self) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        with self._connection() as connection:
-            if self.catalog.backend == "sqlite":
-                connection.execute("PRAGMA journal_mode = WAL")
-            connection.execute("BEGIN IMMEDIATE")
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS raw_objects (
-                    raw_object_id TEXT PRIMARY KEY,
-                    source_id TEXT NOT NULL,
-                    url TEXT NOT NULL,
-                    status_code INTEGER NOT NULL,
-                    content_hash TEXT NOT NULL,
-                    body_path TEXT NOT NULL,
-                    content_type TEXT NOT NULL,
-                    encoding TEXT,
-                    response_headers_json TEXT NOT NULL,
-                    collector TEXT NOT NULL,
-                    first_fetched_at TEXT NOT NULL,
-                    last_fetched_at TEXT NOT NULL,
-                    fetch_count INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_raw_source_time
-                    ON raw_objects(source_id, first_fetched_at DESC);
-
-                CREATE TABLE IF NOT EXISTS standard_documents (
-                    content_version_id TEXT PRIMARY KEY,
-                    canonical_document_id TEXT NOT NULL,
-                    source_document_id TEXT NOT NULL,
-                    raw_object_id TEXT NOT NULL,
-                    source_id TEXT NOT NULL,
-                    document_type TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    url TEXT NOT NULL,
-                    content_hash TEXT NOT NULL,
-                    source_published_at TEXT,
-                    first_seen_at TEXT NOT NULL,
-                    fetched_at TEXT NOT NULL,
-                    processed_at TEXT,
-                    indexed_at TEXT,
-                    superseded_at TEXT,
-                    parser_version TEXT NOT NULL,
-                    document_json TEXT NOT NULL,
-                    active INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(raw_object_id) REFERENCES raw_objects(raw_object_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_docs_canonical
-                    ON standard_documents(canonical_document_id, first_seen_at);
-                CREATE INDEX IF NOT EXISTS idx_docs_source_time
-                    ON standard_documents(source_id, first_seen_at DESC);
-
-                CREATE TABLE IF NOT EXISTS document_evidence (
-                    content_version_id TEXT NOT NULL,
-                    raw_object_id TEXT NOT NULL,
-                    observed_at TEXT NOT NULL,
-                    PRIMARY KEY(content_version_id, raw_object_id),
-                    FOREIGN KEY(content_version_id) REFERENCES standard_documents(content_version_id),
-                    FOREIGN KEY(raw_object_id) REFERENCES raw_objects(raw_object_id)
-                );
-                INSERT OR IGNORE INTO document_evidence (
-                    content_version_id, raw_object_id, observed_at
-                )
-                SELECT content_version_id, raw_object_id, fetched_at FROM standard_documents;
-
-                CREATE TABLE IF NOT EXISTS processing_outbox (
-                    content_version_id TEXT PRIMARY KEY,
-                    state TEXT NOT NULL,
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    task_id TEXT,
-                    last_error TEXT,
-                    updated_at TEXT NOT NULL,
-                    FOREIGN KEY(content_version_id) REFERENCES standard_documents(content_version_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_outbox_state
-                    ON processing_outbox(state, updated_at);
-
-                CREATE TABLE IF NOT EXISTS adapter_runs (
-                    run_id TEXT PRIMARY KEY,
-                    source_id TEXT NOT NULL,
-                    adapter_id TEXT NOT NULL,
-                    adapter_version TEXT NOT NULL,
-                    trigger TEXT NOT NULL,
-                    state TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    entrypoints_total INTEGER NOT NULL DEFAULT 0,
-                    entrypoints_succeeded INTEGER NOT NULL DEFAULT 0,
-                    detail_discovered INTEGER NOT NULL DEFAULT 0,
-                    detail_fetched INTEGER NOT NULL DEFAULT 0,
-                    documents_emitted INTEGER NOT NULL DEFAULT 0,
-                    evidence_archived INTEGER NOT NULL DEFAULT 0,
-                    failures INTEGER NOT NULL DEFAULT 0,
-                    cursor_before_json TEXT,
-                    cursor_after_json TEXT,
-                    error_summary_json TEXT,
-                    metrics_json TEXT NOT NULL DEFAULT '{}'
-                );
-                CREATE INDEX IF NOT EXISTS idx_adapter_runs_source_time
-                    ON adapter_runs(source_id, started_at DESC);
-
-                CREATE TABLE IF NOT EXISTS source_cursors (
-                    source_id TEXT PRIMARY KEY,
-                    adapter_id TEXT NOT NULL,
-                    adapter_version TEXT NOT NULL,
-                    cursor_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS adapter_run_requests (
-                    request_id TEXT PRIMARY KEY,
-                    source_id TEXT NOT NULL,
-                    requested_by TEXT NOT NULL,
-                    state TEXT NOT NULL,
-                    requested_at TEXT NOT NULL,
-                    claimed_at TEXT,
-                    finished_at TEXT,
-                    run_id TEXT,
-                    result_state TEXT,
-                    error TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_adapter_requests_state_time
-                    ON adapter_run_requests(state, requested_at ASC);
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_adapter_requests_one_active
-                    ON adapter_run_requests(source_id)
-                    WHERE state IN ('queued', 'running');
-
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    version TEXT PRIMARY KEY,
-                    applied_at TEXT NOT NULL,
-                    details_json TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS migration_audits (
-                    migration_id TEXT PRIMARY KEY,
-                    source_backend TEXT NOT NULL,
-                    target_backend TEXT NOT NULL,
-                    phase TEXT NOT NULL,
-                    state TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    table_counts_json TEXT,
-                    catalog_digest TEXT,
-                    object_count INTEGER NOT NULL DEFAULT 0,
-                    object_bytes INTEGER NOT NULL DEFAULT 0,
-                    error TEXT
-                );
-                """
-            )
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO schema_migrations (version, applied_at, details_json)
-                VALUES (?, ?, ?)
-                """,
-                (
-                    "2026-08-postgres-object-storage-v1",
-                    utc_now(),
-                    _json(
-                        {
-                            "catalog_backends": ["sqlite", "postgres"],
-                            "object_backends": ["file", "s3"],
-                        }
-                    ),
-                ),
-            )
-
     def health(self) -> Dict[str, Any]:
         with self._connection() as connection:
             connection.execute("SELECT 1").fetchone()
+        from .migration_state import migration_state
+
+        migrations = migration_state(self)
         object_storage = self.object_store.health()
         return {
-            "status": "healthy",
+            "status": "healthy" if migrations["status"] == "ready" else "unavailable",
             "data_root": str(self.root),
             "catalog_backend": self.catalog.backend,
             "catalog": self.catalog.label,
             "object_storage": object_storage,
+            "migrations": migrations,
         }
 
     def archive_response(
@@ -346,15 +179,15 @@ class DataAssetStore:
 
         with self._connection() as connection:
             existing = connection.execute(
-                "SELECT raw_object_id FROM raw_objects WHERE raw_object_id = ?",
+                "SELECT raw_object_id FROM raw_objects WHERE raw_object_id = %s",
                 (raw_object_id,),
             ).fetchone()
             if existing:
                 connection.execute(
                     """
                     UPDATE raw_objects
-                    SET last_fetched_at = ?, fetch_count = fetch_count + 1
-                    WHERE raw_object_id = ?
+                    SET last_fetched_at = %s, fetch_count = fetch_count + 1
+                    WHERE raw_object_id = %s
                     """,
                     (fetched_at, raw_object_id),
                 )
@@ -365,7 +198,7 @@ class DataAssetStore:
                         raw_object_id, source_id, url, status_code, content_hash,
                         body_path, content_type, encoding, response_headers_json,
                         collector, first_fetched_at, last_fetched_at, fetch_count, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
                     """,
                     (
                         raw_object_id,
@@ -435,7 +268,7 @@ class DataAssetStore:
             first_row = connection.execute(
                 """
                 SELECT MIN(first_seen_at) AS first_seen_at
-                FROM standard_documents WHERE canonical_document_id = ?
+                FROM standard_documents WHERE canonical_document_id = %s
                 """,
                 (canonical_document_id,),
             ).fetchone()
@@ -474,8 +307,9 @@ class DataAssetStore:
             connection.execute(
                 """
                 UPDATE standard_documents
-                SET active = 0, superseded_at = COALESCE(superseded_at, ?)
-                WHERE canonical_document_id = ? AND content_version_id <> ? AND active = 1
+                SET active = 0, superseded_at = COALESCE(superseded_at, %s),
+                    indexed_at = NULL
+                WHERE canonical_document_id = %s AND content_version_id <> %s AND active = 1
                 """,
                 (now, canonical_document_id, content_version_id),
             )
@@ -487,7 +321,7 @@ class DataAssetStore:
                     content_hash, source_published_at, first_seen_at, fetched_at,
                     processed_at, indexed_at, superseded_at, parser_version,
                     document_json, active, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 1, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, 1, %s)
                 ON CONFLICT(content_version_id) DO UPDATE SET
                     raw_object_id = excluded.raw_object_id,
                     source_published_at = excluded.source_published_at,
@@ -495,7 +329,8 @@ class DataAssetStore:
                     parser_version = excluded.parser_version,
                     document_json = excluded.document_json,
                     active = 1,
-                    superseded_at = NULL
+                    superseded_at = NULL,
+                    indexed_at = NULL
                 """,
                 (
                     content_version_id,
@@ -520,17 +355,19 @@ class DataAssetStore:
             )
             connection.execute(
                 """
-                INSERT OR IGNORE INTO document_evidence (
+                INSERT INTO document_evidence (
                     content_version_id, raw_object_id, observed_at
-                ) VALUES (?, ?, ?)
+                ) VALUES (%s, %s, %s)
+                ON CONFLICT DO NOTHING
                 """,
                 (content_version_id, raw_object_id, fetched_at),
             )
             connection.execute(
                 """
-                INSERT OR IGNORE INTO processing_outbox (
+                INSERT INTO processing_outbox (
                     content_version_id, state, attempts, task_id, last_error, updated_at
-                ) VALUES (?, 'pending', 0, NULL, NULL, ?)
+                ) VALUES (%s, 'pending', 0, NULL, NULL, %s)
+                ON CONFLICT DO NOTHING
                 """,
                 (content_version_id, now),
             )
@@ -545,13 +382,57 @@ class DataAssetStore:
                 SELECT d.document_json, o.state, o.attempts
                 FROM processing_outbox o
                 JOIN standard_documents d USING(content_version_id)
-                WHERE o.state IN ('pending', 'failed')
+                WHERE d.active = 1 AND o.state IN ('pending', 'failed', 'processed')
                 ORDER BY o.updated_at ASC
-                LIMIT ?
+                LIMIT %s
                 """,
                 (bounded,),
             ).fetchall()
         return [json.loads(row["document_json"]) for row in rows]
+
+    def documents_for_index(self) -> Iterable[Dict[str, Any]]:
+        """Yield every document version with its current visibility state."""
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                SELECT document_json, active FROM standard_documents
+                ORDER BY first_seen_at ASC
+                """
+            )
+            while True:
+                rows = cursor.fetchmany(500)
+                if not rows:
+                    break
+                for row in rows:
+                    document = json.loads(row["document_json"])
+                    document["active"] = bool(row["active"])
+                    yield document
+
+    def pending_documents_for_index(self, limit: int = 100) -> List[Dict[str, Any]]:
+        bounded = max(1, min(int(limit), 1000))
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT document_json, active FROM standard_documents
+                WHERE indexed_at IS NULL
+                ORDER BY first_seen_at ASC
+                LIMIT %s
+                """,
+                (bounded,),
+            ).fetchall()
+        documents = []
+        for row in rows:
+            document = json.loads(row["document_json"])
+            document["active"] = bool(row["active"])
+            documents.append(document)
+        return documents
+
+    def active_document_count(self) -> int:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM standard_documents WHERE active = 1"
+            ).fetchone()
+        return int(row["count"])
 
     def mark_dispatched(self, content_version_ids: Sequence[str], task_id: str) -> None:
         self._set_outbox_state(content_version_ids, "dispatched", task_id=task_id)
@@ -581,7 +462,7 @@ class DataAssetStore:
         where = ""
         if source_id:
             self.registry.get(source_id)
-            where = "WHERE d.source_id = ?"
+            where = "WHERE d.source_id = %s"
             parameters.append(source_id)
         parameters.append(bounded)
 
@@ -592,7 +473,7 @@ class DataAssetStore:
                 FROM standard_documents d
                 {where}
                 ORDER BY d.first_seen_at ASC
-                LIMIT ?
+                LIMIT %s
                 """,
                 parameters,
             ).fetchall()
@@ -602,7 +483,7 @@ class DataAssetStore:
                 """
                 INSERT INTO processing_outbox (
                     content_version_id, state, attempts, task_id, last_error, updated_at
-                ) VALUES (?, 'pending', 0, NULL, NULL, ?)
+                ) VALUES (%s, 'pending', 0, NULL, NULL, %s)
                 ON CONFLICT(content_version_id) DO UPDATE SET
                     state = 'pending', task_id = NULL, last_error = NULL, updated_at = excluded.updated_at
                 """,
@@ -709,11 +590,11 @@ class DataAssetStore:
         self.registry.get(source_id)
         with self._connection() as connection:
             raw_count = connection.execute(
-                "SELECT COUNT(*) AS count FROM raw_objects WHERE source_id = ?",
+                "SELECT COUNT(*) AS count FROM raw_objects WHERE source_id = %s",
                 (source_id,),
             ).fetchone()["count"]
             document_count = connection.execute(
-                "SELECT COUNT(*) AS count FROM standard_documents WHERE source_id = ?",
+                "SELECT COUNT(*) AS count FROM standard_documents WHERE source_id = %s",
                 (source_id,),
             ).fetchone()["count"]
         return {"raw_objects": int(raw_count), "document_versions": int(document_count)}
@@ -743,7 +624,7 @@ class DataAssetStore:
                 INSERT INTO adapter_runs (
                     run_id, source_id, adapter_id, adapter_version, trigger,
                     state, started_at, cursor_before_json, metrics_json
-                ) VALUES (?, ?, ?, ?, ?, 'running', ?, ?, '{}')
+                ) VALUES (%s, %s, %s, %s, %s, 'running', %s, %s, '{}')
                 """,
                 (
                     run_id,
@@ -786,12 +667,12 @@ class DataAssetStore:
             connection.execute(
                 """
                 UPDATE adapter_runs SET
-                    state = ?, finished_at = ?, entrypoints_total = ?,
-                    entrypoints_succeeded = ?, detail_discovered = ?,
-                    detail_fetched = ?, documents_emitted = ?,
-                    evidence_archived = ?, failures = ?, cursor_after_json = ?,
-                    error_summary_json = ?, metrics_json = ?
-                WHERE run_id = ?
+                    state = %s, finished_at = %s, entrypoints_total = %s,
+                    entrypoints_succeeded = %s, detail_discovered = %s,
+                    detail_fetched = %s, documents_emitted = %s,
+                    evidence_archived = %s, failures = %s, cursor_after_json = %s,
+                    error_summary_json = %s, metrics_json = %s
+                WHERE run_id = %s
                 """,
                 (
                     state,
@@ -821,7 +702,7 @@ class DataAssetStore:
     def get_adapter_run(self, run_id: str) -> Dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT * FROM adapter_runs WHERE run_id = ?", (run_id,)
+                "SELECT * FROM adapter_runs WHERE run_id = %s", (run_id,)
             ).fetchone()
         if not row:
             raise KeyError(run_id)
@@ -832,7 +713,7 @@ class DataAssetStore:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT * FROM adapter_runs WHERE source_id = ?
+                SELECT * FROM adapter_runs WHERE source_id = %s
                 ORDER BY started_at DESC LIMIT 1
                 """,
                 (source_id,),
@@ -845,12 +726,12 @@ class DataAssetStore:
         where = ""
         if source_id:
             self.registry.get(source_id)
-            where = "WHERE source_id = ?"
+            where = "WHERE source_id = %s"
             parameters.append(source_id)
         parameters.append(bounded)
         with self._connection() as connection:
             rows = connection.execute(
-                f"SELECT * FROM adapter_runs {where} ORDER BY started_at DESC LIMIT ?",
+                f"SELECT * FROM adapter_runs {where} ORDER BY started_at DESC LIMIT %s",
                 parameters,
             ).fetchall()
         return [self._adapter_run_row(row) for row in rows]
@@ -864,8 +745,8 @@ class DataAssetStore:
             now = utc_now()
             connection.executemany(
                 """
-                UPDATE adapter_runs SET state = 'failed', finished_at = ?, failures = failures + 1,
-                    error_summary_json = ? WHERE run_id = ?
+                UPDATE adapter_runs SET state = 'failed', finished_at = %s, failures = failures + 1,
+                    error_summary_json = %s WHERE run_id = %s
                 """,
                 [
                     (now, _json(["采集器重启前运行未正常结束"]), row["run_id"])
@@ -880,7 +761,7 @@ class DataAssetStore:
             row = connection.execute(
                 """
                 SELECT adapter_id, adapter_version, cursor_json
-                FROM source_cursors WHERE source_id = ?
+                FROM source_cursors WHERE source_id = %s
                 """,
                 (source_id,),
             ).fetchone()
@@ -906,7 +787,7 @@ class DataAssetStore:
                 """
                 INSERT INTO source_cursors (
                     source_id, adapter_id, adapter_version, cursor_json, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT(source_id) DO UPDATE SET
                     adapter_id = excluded.adapter_id,
                     adapter_version = excluded.adapter_version,
@@ -927,11 +808,10 @@ class DataAssetStore:
         if not source.get("enabled"):
             raise DataAssetError(f"来源未启用: {source_id}")
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """
                 SELECT * FROM adapter_run_requests
-                WHERE source_id = ? AND state IN ('queued', 'running')
+                WHERE source_id = %s AND state IN ('queued', 'running')
                 ORDER BY requested_at ASC LIMIT 1
                 """,
                 (source_id,),
@@ -941,16 +821,17 @@ class DataAssetStore:
             request_id = uuid.uuid4().hex
             connection.execute(
                 """
-                INSERT OR IGNORE INTO adapter_run_requests (
+                INSERT INTO adapter_run_requests (
                     request_id, source_id, requested_by, state, requested_at
-                ) VALUES (?, ?, ?, 'queued', ?)
+                ) VALUES (%s, %s, %s, 'queued', %s)
+                ON CONFLICT DO NOTHING
                 """,
                 (request_id, source_id, requested_by[:100], utc_now()),
             )
             row = connection.execute(
                 """
                 SELECT * FROM adapter_run_requests
-                WHERE source_id = ? AND state IN ('queued', 'running')
+                WHERE source_id = %s AND state IN ('queued', 'running')
                 ORDER BY requested_at ASC LIMIT 1
                 """,
                 (source_id,),
@@ -963,7 +844,7 @@ class DataAssetStore:
             row = connection.execute(
                 """
                 SELECT * FROM adapter_run_requests
-                WHERE source_id = ? AND state IN ('queued', 'running')
+                WHERE source_id = %s AND state IN ('queued', 'running')
                 ORDER BY requested_at ASC LIMIT 1
                 """,
                 (source_id,),
@@ -973,11 +854,11 @@ class DataAssetStore:
     def claim_adapter_run_request(self) -> Optional[Dict[str, Any]]:
         """Atomically claim the oldest manual collection request."""
         with self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """
                 SELECT * FROM adapter_run_requests
-                WHERE state = 'queued' ORDER BY requested_at ASC LIMIT 1
+                WHERE state = 'queued' ORDER BY requested_at ASC
+                LIMIT 1 FOR UPDATE SKIP LOCKED
                 """
             ).fetchone()
             if not row:
@@ -985,15 +866,15 @@ class DataAssetStore:
             claimed_at = utc_now()
             updated = connection.execute(
                 """
-                UPDATE adapter_run_requests SET state = 'running', claimed_at = ?
-                WHERE request_id = ? AND state = 'queued'
+                UPDATE adapter_run_requests SET state = 'running', claimed_at = %s
+                WHERE request_id = %s AND state = 'queued'
                 """,
                 (claimed_at, row["request_id"]),
             )
             if updated.rowcount != 1:
                 return None
             claimed = connection.execute(
-                "SELECT * FROM adapter_run_requests WHERE request_id = ?",
+                "SELECT * FROM adapter_run_requests WHERE request_id = %s",
                 (row["request_id"],),
             ).fetchone()
         return self._adapter_request_row(claimed)
@@ -1008,7 +889,7 @@ class DataAssetStore:
                 """
                 UPDATE adapter_run_requests SET state = 'queued', claimed_at = NULL,
                     error = '采集器重启，任务已自动重新排队'
-                WHERE request_id = ?
+                WHERE request_id = %s
                 """,
                 [(row["request_id"],) for row in rows],
             )
@@ -1027,16 +908,16 @@ class DataAssetStore:
         with self._connection() as connection:
             updated = connection.execute(
                 """
-                UPDATE adapter_run_requests SET state = 'completed', finished_at = ?,
-                    run_id = ?, result_state = ?, error = ?
-                WHERE request_id = ? AND state = 'running'
+                UPDATE adapter_run_requests SET state = 'completed', finished_at = %s,
+                    run_id = %s, result_state = %s, error = %s
+                WHERE request_id = %s AND state = 'running'
                 """,
                 (utc_now(), run_id, result_state, error, request_id),
             )
             if updated.rowcount != 1:
                 raise DataAssetError(f"采集请求不在运行态: {request_id}")
             row = connection.execute(
-                "SELECT * FROM adapter_run_requests WHERE request_id = ?",
+                "SELECT * FROM adapter_run_requests WHERE request_id = %s",
                 (request_id,),
             ).fetchone()
         return self._adapter_request_row(row)
@@ -1054,14 +935,14 @@ class DataAssetStore:
             if ids:
                 now = utc_now()
                 connection.executemany(
-                    "UPDATE standard_documents SET active = 0, superseded_at = ? WHERE content_version_id = ?",
+                    "UPDATE standard_documents SET active = 0, superseded_at = %s WHERE content_version_id = %s",
                     [(now, content_version_id) for content_version_id in ids],
                 )
                 connection.executemany(
                     """
                     UPDATE processing_outbox SET state = 'filtered',
-                        last_error = '通用页面快照不进入正式情报索引', updated_at = ?
-                    WHERE content_version_id = ?
+                        last_error = '通用页面快照不进入正式情报索引', updated_at = %s
+                    WHERE content_version_id = %s
                     """,
                     [(now, content_version_id) for content_version_id in ids],
                 )
@@ -1079,7 +960,7 @@ class DataAssetStore:
         where = ""
         if source_id:
             self.registry.get(source_id)
-            where = "WHERE source_id = ?"
+            where = "WHERE source_id = %s"
             parameters.append(source_id)
         parameters.extend([bounded, offset])
 
@@ -1087,7 +968,7 @@ class DataAssetStore:
             rows = connection.execute(
                 f"""
                 SELECT * FROM raw_objects {where}
-                ORDER BY first_fetched_at DESC LIMIT ? OFFSET ?
+                ORDER BY first_fetched_at DESC LIMIT %s OFFSET %s
                 """,
                 parameters,
             ).fetchall()
@@ -1096,7 +977,7 @@ class DataAssetStore:
     def get_evidence(self, raw_object_id: str) -> Dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT * FROM raw_objects WHERE raw_object_id = ?",
+                "SELECT * FROM raw_objects WHERE raw_object_id = %s",
                 (raw_object_id,),
             ).fetchone()
         if not row:
@@ -1118,7 +999,7 @@ class DataAssetStore:
         """Return whether one immutable response is already linked to a document."""
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT 1 FROM document_evidence WHERE raw_object_id = ? LIMIT 1",
+                "SELECT 1 FROM document_evidence WHERE raw_object_id = %s LIMIT 1",
                 (raw_object_id,),
             ).fetchone()
         return row is not None
@@ -1126,13 +1007,13 @@ class DataAssetStore:
     def get_document(self, content_version_id: str) -> Dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT document_json FROM standard_documents WHERE content_version_id = ?",
+                "SELECT document_json FROM standard_documents WHERE content_version_id = %s",
                 (content_version_id,),
             ).fetchone()
             evidence_rows = connection.execute(
                 """
                 SELECT raw_object_id FROM document_evidence
-                WHERE content_version_id = ? ORDER BY observed_at ASC
+                WHERE content_version_id = %s ORDER BY observed_at ASC
                 """,
                 (content_version_id,),
             ).fetchall()
@@ -1159,13 +1040,13 @@ class DataAssetStore:
         clauses = []
         parameters: List[Any] = []
         for term in terms:
-            clauses.append("(LOWER(title) LIKE ? OR LOWER(content) LIKE ?)")
+            clauses.append("(LOWER(title) LIKE %s OR LOWER(content) LIKE %s)")
             wildcard = f"%{term}%"
             parameters.extend([wildcard, wildcard])
         where = "active = 1 AND " + " AND ".join(clauses)
         if source_id:
             self.registry.get(source_id)
-            where += " AND source_id = ?"
+            where += " AND source_id = %s"
             parameters.append(source_id)
 
         with self._connection() as connection:
@@ -1180,7 +1061,7 @@ class DataAssetStore:
                 FROM standard_documents
                 WHERE {where}
                 ORDER BY COALESCE(source_published_at, fetched_at) DESC
-                LIMIT ? OFFSET ?
+                LIMIT %s OFFSET %s
                 """,
                 parameters + [page_size, (page - 1) * page_size],
             ).fetchall()
@@ -1212,7 +1093,7 @@ class DataAssetStore:
         where = ""
         if source_id:
             self.registry.get(source_id)
-            where = "WHERE source_id = ?"
+            where = "WHERE source_id = %s"
             parameters.append(source_id)
         with self._connection() as connection:
             rows = connection.execute(
@@ -1227,7 +1108,7 @@ class DataAssetStore:
             row = connection.execute(
                 """
                 SELECT source_published_at, processed_at, indexed_at
-                FROM standard_documents WHERE content_version_id = ?
+                FROM standard_documents WHERE content_version_id = %s
                 """,
                 (content_version_id,),
             ).fetchone()
@@ -1247,7 +1128,7 @@ class DataAssetStore:
         with self._connection() as connection:
             for content_version_id in ids:
                 row = connection.execute(
-                    "SELECT document_json FROM standard_documents WHERE content_version_id = ?",
+                    "SELECT document_json FROM standard_documents WHERE content_version_id = %s",
                     (content_version_id,),
                 ).fetchone()
                 if not row:
@@ -1257,8 +1138,8 @@ class DataAssetStore:
                 connection.execute(
                     f"""
                     UPDATE standard_documents
-                    SET {field} = ?, document_json = ?
-                    WHERE content_version_id = ?
+                    SET {field} = %s, document_json = %s
+                    WHERE content_version_id = %s
                     """,
                     (value, _json(document), content_version_id),
                 )
@@ -1266,7 +1147,7 @@ class DataAssetStore:
     def _raw_exists(self, raw_object_id: str) -> bool:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT 1 FROM raw_objects WHERE raw_object_id = ?",
+                "SELECT 1 FROM raw_objects WHERE raw_object_id = %s",
                 (raw_object_id,),
             ).fetchone()
         return bool(row)
@@ -1288,9 +1169,9 @@ class DataAssetStore:
             connection.executemany(
                 """
                 UPDATE processing_outbox
-                SET state = ?, attempts = attempts + ?, task_id = COALESCE(?, task_id),
-                    last_error = ?, updated_at = ?
-                WHERE content_version_id = ?
+                SET state = %s, attempts = attempts + %s, task_id = COALESCE(%s, task_id),
+                    last_error = %s, updated_at = %s
+                WHERE content_version_id = %s
                 """,
                 [
                     (state, attempt_delta, task_id, error, now, content_version_id)

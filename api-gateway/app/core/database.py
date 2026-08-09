@@ -3,10 +3,9 @@
 """
 
 import asyncio
-from sqlalchemy import create_engine, MetaData
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 import logging
 
 from app.core.config import settings
@@ -16,13 +15,11 @@ logger = logging.getLogger(__name__)
 # 创建异步数据库引擎
 def create_database_url(sync: bool = False) -> str:
     """创建数据库URL"""
-    url = settings.DATABASE_URL
-    if url.startswith("sqlite"):
-        # SQLite不需要异步驱动修改
-        return url
-    elif not sync and not url.startswith("postgresql+asyncpg"):
-        # 对于异步操作，使用asyncpg驱动
-        url = url.replace("postgresql://", "postgresql+asyncpg://")
+    url = settings.DATABASE_URL.strip()
+    if not url.startswith(("postgresql://", "postgresql+psycopg://")):
+        raise RuntimeError("QSou 运行时只支持 PostgreSQL DATABASE_URL")
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 # 同步引擎（用于Alembic迁移）
@@ -42,7 +39,7 @@ async_engine = create_async_engine(
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-AsyncSessionLocal = sessionmaker(
+AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
     expire_on_commit=False
@@ -96,7 +93,7 @@ async def check_database_connection() -> bool:
     """检查数据库连接"""
     try:
         async with AsyncSessionLocal() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         logger.info("✅ 数据库连接正常")
         return True
     except Exception as e:

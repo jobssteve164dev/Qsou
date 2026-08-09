@@ -15,6 +15,7 @@ from app.services.search_service import search_service
 from app.services.data_processing_service import data_processing_service
 from app.core.config import settings
 from qsou_data import DataAssetStore
+from qsou_data.indexer_state import read_indexer_state
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -29,15 +30,17 @@ async def system_stats():
     """
     try:
         # 并行执行健康检查并记录耗时（暴露调试信息）
-        if settings.ENABLE_DERIVED_SEARCH:
+        if settings.ENABLE_ELASTICSEARCH:
             es_health, es_ms = await _with_timeout_timed(
                 search_service.elasticsearch.health_check(), 2.0, {"status": "timeout"}
             )
+        else:
+            es_health, es_ms = {"status": "disabled"}, 0
+        if settings.ENABLE_QDRANT:
             qdrant_health, qdrant_ms = await _with_timeout_timed(
                 search_service.qdrant.health_check(), 2.0, {"status": "timeout"}
             )
         else:
-            es_health, es_ms = {"status": "disabled"}, 0
             qdrant_health, qdrant_ms = {"status": "disabled"}, 0
         processor_health, processor_ms = await _with_timeout_timed(
             data_processing_service.health_check(),
@@ -50,8 +53,15 @@ async def system_stats():
         data_asset_health = data_asset_store.health()
         data_asset_status = data_asset_store.status()
         data_asset_ok = data_asset_health.get("status") == "healthy"
+        indexer_health = (
+            read_indexer_state()
+            if settings.ENABLE_ELASTICSEARCH
+            else {"status": "disabled"}
+        )
 
         elastic_ok = es_health.get("status") == "connected"
+        indexer_ok = indexer_health.get("status") == "healthy"
+        fulltext_ok = elastic_ok and indexer_ok
         qdrant_ok = qdrant_health.get("status") == "connected"
         processor_ok = bool(processor_health.get("healthy")) and (
             processor_health.get("checks", {}).get("celery", {}).get("status") == "healthy"
@@ -68,7 +78,7 @@ async def system_stats():
                     search_coro = client.search(
                         index=alias_name,
                         body={
-                            "query": {"match_all": {}},
+                            "query": {"term": {"active": True}},
                             "size": 0,
                             "track_total_hits": True,
                         },
@@ -83,13 +93,17 @@ async def system_stats():
                 derived_documents_count = 0
 
         # 汇总系统状态
-        overall = "healthy" if data_asset_ok else "error"
+        required_search_ok = (
+            (not settings.ENABLE_ELASTICSEARCH or fulltext_ok)
+            and (not settings.ENABLE_QDRANT or qdrant_ok)
+        )
+        overall = "healthy" if data_asset_ok and required_search_ok else "error"
 
         # 生成服务异常消息（用于前端悬浮提示）
         def _es_msg():
             status = es_health.get("status")
             if status == "connected":
-                return ""
+                return "" if indexer_ok else "全文索引同步未就绪"
             if status == "timeout":
                 return "Elasticsearch 健康检查超时"
             return f"Elasticsearch 异常: {es_health.get('error', '未连接')}"
@@ -124,7 +138,7 @@ async def system_stats():
             "system_status": overall,
             "services": {
                 "data_assets": data_asset_ok,
-                "elasticsearch": elastic_ok,
+                "elasticsearch": fulltext_ok,
                 "qdrant": qdrant_ok,
                 "crawler": bool(crawler_ok),
                 "processor": processor_ok,
@@ -132,10 +146,10 @@ async def system_stats():
             "service_states": {
                 "data_assets": "healthy" if data_asset_ok else "unavailable",
                 "elasticsearch": (
-                    "healthy" if elastic_ok else "disabled" if not settings.ENABLE_DERIVED_SEARCH else "unavailable"
+                    "healthy" if fulltext_ok else "disabled" if not settings.ENABLE_ELASTICSEARCH else "unavailable"
                 ),
                 "qdrant": (
-                    "healthy" if qdrant_ok else "disabled" if not settings.ENABLE_DERIVED_SEARCH else "unavailable"
+                    "healthy" if qdrant_ok else "disabled" if not settings.ENABLE_QDRANT else "unavailable"
                 ),
                 "crawler": "healthy" if crawler_ok else "idle",
                 "processor": (
@@ -144,12 +158,12 @@ async def system_stats():
             },
             "service_messages": {
                 "elasticsearch": (
-                    "可选全文检索加速未启用，当前使用自有数据检索"
-                    if not settings.ENABLE_DERIVED_SEARCH else _es_msg()
+                    "全文检索未启用"
+                    if not settings.ENABLE_ELASTICSEARCH else _es_msg()
                 ),
                 "qdrant": (
                     "可选语义检索增强未启用"
-                    if not settings.ENABLE_DERIVED_SEARCH else _q_msg()
+                    if not settings.ENABLE_QDRANT else _q_msg()
                 ),
                 "crawler": "采集器当前未运行" if not crawler_ok else "",
                 "processor": (
@@ -168,6 +182,7 @@ async def system_stats():
                     "data_assets": data_asset_status,
                     "derived_documents_count": derived_documents_count,
                     "elasticsearch": es_health,
+                    "indexer": indexer_health,
                     "qdrant": qdrant_health,
                     "processor": processor_health,
                 },

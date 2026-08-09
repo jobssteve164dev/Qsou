@@ -1,19 +1,34 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from qsou_data import DataAssetError, DataAssetStore, SourceRegistry
 
 
+_test_database_url = os.getenv("QSOU_TEST_DATABASE_URL", "").strip()
+
+
+@unittest.skipUnless(
+    _test_database_url,
+    "需要通过 QSOU_TEST_DATABASE_URL 提供隔离的 PostgreSQL 验收库",
+)
 class DataAssetStoreTest(unittest.TestCase):
     def setUp(self):
+        self.environment = patch.dict(
+            os.environ,
+            {"DATABASE_URL": _test_database_url},
+        )
+        self.environment.start()
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
         self.registry = SourceRegistry(Path(__file__).resolve().parents[1] / "config" / "sources.json")
         self.store = DataAssetStore(root=self.root / "data", registry=self.registry)
 
     def tearDown(self):
+        self.environment.stop()
         self.temporary_directory.cleanup()
 
     def test_raw_evidence_is_immutable_idempotent_and_filters_sensitive_headers(self):

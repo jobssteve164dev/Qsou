@@ -1,5 +1,4 @@
-scrapy==2.11.0
-pypdf==6.15.0
 psycopg[binary]==3.3.4
 SQLAlchemy==2.0.43
 boto3==1.43.53
+elasticsearch==8.11.0

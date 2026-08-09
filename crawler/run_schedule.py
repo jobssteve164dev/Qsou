@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from qsou_data import DataAssetStore
+from qsou_data.migration_state import wait_for_migrations
 from qsou_crawler.adapters import AdapterRegistry
 
 
@@ -296,6 +297,17 @@ def run_due_sources() -> None:
 def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
+    migration = wait_for_migrations(
+        STORE,
+        on_wait=lambda state: write_status(
+            state="waiting_for_migration",
+            migration=state,
+            updated_at=iso(utc_now()),
+        ),
+        should_stop=lambda: STOP_REQUESTED,
+    )
+    if migration["status"] != "ready":
+        return 0
     recovered = STORE.recover_interrupted_adapter_runs()
     requeued = STORE.recover_interrupted_adapter_run_requests()
     quarantined = STORE.quarantine_generic_snapshots()

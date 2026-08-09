@@ -13,9 +13,12 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 _temporary_directory = tempfile.TemporaryDirectory()
+_test_database_url = os.getenv("QSOU_TEST_DATABASE_URL", "").strip()
 os.environ["QSOU_DATA_ROOT"] = str(Path(_temporary_directory.name) / "data")
 os.environ["QSOU_SOURCE_REGISTRY"] = str(PROJECT_ROOT / "config" / "sources.json")
-os.environ["ENABLE_DERIVED_SEARCH"] = "false"
+os.environ["DATABASE_URL"] = _test_database_url or "postgresql://test:test@127.0.0.1:1/qsou_test_unavailable"
+os.environ["ENABLE_ELASTICSEARCH"] = "false"
+os.environ["ENABLE_QDRANT"] = "false"
 os.environ["ENABLE_DERIVED_PROCESSING"] = "false"
 os.environ["ENABLE_METRICS"] = "false"
 os.environ["DEBUG"] = "false"
@@ -29,6 +32,10 @@ from app.main import app
 from qsou_data import DataAssetStore
 
 
+@unittest.skipUnless(
+    _test_database_url,
+    "需要通过 QSOU_TEST_DATABASE_URL 提供隔离的 PostgreSQL 验收库",
+)
 class BaselineApiTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):

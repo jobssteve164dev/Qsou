@@ -7,23 +7,22 @@
 - PostgreSQL 保存身份、版本关系、采集运行、游标和处理队列。
 - S3 兼容对象存储保存不可变原始正文及首次采集元数据；配置备份桶时，每次写入同时落主桶与备份桶。
 - `raw_objects.body_path` 始终保存对象键，现有 `objects/<前缀>/<标识>.body` 不变。
-- SQLite 和现有 `objects/` 在迁移及观察期内保持原样，是应用回滚源；升级代码不会删除它们。
-- API 与采集器必须同时使用同一组目录库和对象存储配置，不能混合写入。
+- PostgreSQL 是 API、采集器和索引器唯一允许使用的运行目录库。
+- 旧 SQLite 文件只作为一次性脚本的只读输入；导入、备份恢复与生产验收全部通过后，按精确文件清单删除，不保留运行回退开关。
+- API、采集器和索引器必须使用同一个 PostgreSQL 与对象存储配置，不能混合写入。
 
 ## 2. 后端配置
 
-默认配置仍是现有基线，部署新代码不会自动切换或迁移：
+运行配置必须提供 PostgreSQL：
 
 ```text
-QSOU_CATALOG_BACKEND=sqlite
+DATABASE_URL=postgresql://...
 QSOU_OBJECT_STORAGE_BACKEND=file
 ```
 
-PostgreSQL 与 S3 兼容对象存储准备好后，迁移进程需要以下配置：
+切换 S3 兼容对象存储时再增加：
 
 ```text
-QSOU_CATALOG_BACKEND=postgres
-DATABASE_URL=postgresql://...
 QSOU_OBJECT_STORAGE_BACKEND=s3
 QSOU_OBJECT_STORAGE_ENDPOINT=https://...
 QSOU_OBJECT_STORAGE_REGION=us-east-1
@@ -35,52 +34,36 @@ QSOU_OBJECT_STORAGE_SECRET_KEY=...
 
 凭据只进入远程部署环境，不写入仓库、发布包或命令输出。
 
-## 3. 迁移顺序
+## 3. 一次性目录迁移顺序
 
-在 API 与采集器仍使用 SQLite/file 时，可以从带有目标后端配置的单次远程任务运行可重复回填：
+1. 停止所有旧目录写入，核对没有悬挂发布或迁移任务。
+2. 通过 GitOps 数据库绑定为迁移服务注入 `DATABASE_URL`。
+3. 从终态成功的 API 制品运行受治理的 `/app/deploy/database-migrate`，不得把迁移塞进 API 启动命令。
+4. 入口先执行 `alembic upgrade head`，再在旧文件存在时执行：
 
-```bash
-python -m qsou_data.migrate backfill
-```
+   ```bash
+   python /app/scripts/migrate_sqlite_to_postgres.py \
+     --sqlite-path /var/lib/qsou/catalog.sqlite3 \
+     --data-root /var/lib/qsou
+   ```
 
-回填会执行以下硬校验，任何一项失败都会使目录事务回滚：
+5. 脚本以 SQLite `mode=ro` 打开单一事务快照，逐表执行 PostgreSQL 原生 upsert，并按主键稳定排序比较源/目标行数与 SHA-256 摘要。任何不一致都会回滚整个 PostgreSQL 事务。
+6. 对象后端为 S3 时，入口随后执行 `migrate_file_objects_to_s3.py`，逐个核对本地源、主桶、备份桶三方哈希；已完成的迁移根据 PostgreSQL 迁移标记直接跳过，不再依赖本地旧对象目录。
+7. 运行 `python -m qsou_data.verify --require-backup`，核对外键孤儿、主备对象哈希、目录摘要和迁移版本。
 
-1. 逐表幂等 upsert，并比较源/目标行数。
-2. 按主键稳定排序后比较每张表的 SHA-256 摘要。
-3. 逐个校验旧文件、目标对象和备份对象的正文 SHA-256。
-4. 写入 `schema_migrations` 与 `migration_audits`，记录阶段、数量、摘要和结果。
-
-回填从 SQLite 的单一只读事务快照读取全部表。采集器可以继续写入；回填期间新增的
-完整批次留给下一次幂等回填，不会出现父表与关联表跨时间点读取导致的外键缺口。
-
-目录库统一写入边界会把 PostgreSQL 不接受的文本 NUL 字节规范化为 Unicode
-替代字符；SQLite 新写入、PostgreSQL 新写入、历史迁移和摘要校验使用同一规则。
-迁移结果中的 `text_nul_bytes_normalized` 记录本次规范化数量，避免静默处理。
-
-线上后端仍为 SQLite 时，回填失败会输出
-`QSOU_DATABASE_MIGRATION_RESULT` 的 `status=failed` 结果并继续启动 API；自动发布不会
-因为目标库或历史数据异常而中断现有服务。最终增量和生产验收仍然失败关闭，未通过时
-不能切换到 PostgreSQL。
-
-切换前停止 SQLite 写入，并只对最终增量任务设置写入冻结确认：
-
-```bash
-QSOU_SQLITE_WRITES_FROZEN=true python -m qsou_data.migrate final
-```
-
-最终增量还会检查运行期间 SQLite `data_version`；发现其他连接仍在写入时失败，不能进入切换。
+迁移会把 PostgreSQL 不接受的文本 NUL 字节规范化为 Unicode 替代字符，并在结果中记录数量。脚本只报告可删除的 SQLite、WAL 与 SHM 精确路径，不自行删除。
 
 ## 4. 切换与回滚
 
-只有回填和最终增量都得到 `status=verified` 后，才允许通过一次远程 GitOps 变更同时把 API 与采集器切到 `postgres/s3`。不得只切其中一个服务。
+只有迁移与统一验收都得到 `status=verified` 后，才允许恢复 API、采集器和索引器写入。Elasticsearch 首次同步完成前，API 健康检查保持不就绪。
 
-回滚不执行反向覆盖或删除：把 API 与采集器同时恢复为 `sqlite/file` 配置并重新发布，继续使用未改动的旧目录。切换前可在不依赖 PostgreSQL 可用性的情况下检查回滚源：
+采集器和索引器在制品内核对 Alembic 版本、旧目录导入标记，以及 S3 模式下的对象迁移标记；标记不齐时只报告等待状态，不发起采集、目录写入或索引重建。该门禁不执行迁移，迁移仍由独立的受治理入口一次性完成。
 
-```bash
-QSOU_DATA_ROOT=/var/lib/qsou python -m qsou_data.migrate rollback-check
-```
+API 在迁移标记齐全前拒绝除登录外的写入和搜索 POST，请求只得到“数据升级正在完成”的 503，不暴露迁移实现细节；只读健康探针和受治理迁移入口不受影响。
 
-只有输出 `status=rollback_ready` 且旧目录完整性、对象数量和正文哈希全部通过，回滚路径才成立。
+GitOps 容器探针使用 `/live` 判断 API 进程是否已启动，使制品发布可以先得到终态；生产就绪与验收始终使用 `/health`，后者在迁移或 Elasticsearch 全量同步完成前返回 503。两者不得互换。
+
+回滚不再切回 SQLite。回滚单元是切换前 PostgreSQL 备份、隔离恢复验证通过的对象备份，以及对应的上一版应用制品；恢复后仍然运行 PostgreSQL-only 架构。
 
 ## 5. 备份恢复与生产验收
 
@@ -89,9 +72,10 @@ QSOU_DATA_ROOT=/var/lib/qsou python -m qsou_data.migrate rollback-check
 1. PostgreSQL 可连接，外键关系无孤儿记录。
 2. 主对象桶与备份桶都能读取，正文哈希与目录一致。
 3. 迁移审计中的逐表行数和摘要与恢复目标一致。
-4. API 健康检查、搜索、证据正文读取和 JSONL 导出成功。
-5. 采集器新增一条真实证据，目录、主桶和备份桶均保存且可读取。
-6. 在 2C/4G 总资源上观察 API、Web、采集器和存储连接，无重启、积压或错误。
+4. Elasticsearch 可从恢复后的 PostgreSQL 全量重建，活动版本数与全文索引可见数一致。
+5. API 健康检查、真实搜索、证据正文读取和 JSONL 导出成功。
+6. 采集器新增一条真实证据，目录、主桶和备份桶均保存且可读取，索引器随后使其可搜索。
+7. 在 2C/4G/512 总资源上观察 API、Web、采集器、索引器、Elasticsearch 和存储连接，无重启、积压或错误。
 
 恢复目标的目录关系、逐表摘要、主对象和备份对象可先运行统一硬校验：
 
@@ -101,4 +85,4 @@ python -m qsou_data.verify --require-backup
 
 命令只有在所有孤儿记录为 0、每个正文对象与目录哈希一致且备份桶也逐一通过时，才输出 `status=verified`。
 
-完成隔离恢复验证后再销毁临时目标；销毁属于基础设施动作，必须单独确认准确目标并遵守 GitOps 治理。
+完成 PostgreSQL 与对象存储隔离恢复验证后，先创建新的可读备份，再处理临时目标。任何临时目标或旧文件的删除都必须列出准确对象并单独确认，继续遵守 GitOps 治理。

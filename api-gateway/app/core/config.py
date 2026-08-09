@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     
     # 数据库配置
     DATABASE_URL: str = Field(
-        default="sqlite:///./qsou_dev.db", 
+        default="",
         env="DATABASE_URL"
     )
     
@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     ELASTICSEARCH_HOST: str = Field(default="localhost", env="ELASTICSEARCH_HOST")
     ELASTICSEARCH_PORT: int = Field(default=9200, env="ELASTICSEARCH_PORT")
     ELASTICSEARCH_INDEX_PREFIX: str = Field(default="qsou_", env="ELASTICSEARCH_INDEX_PREFIX")
+    ENABLE_ELASTICSEARCH: bool = Field(default=True, env="ENABLE_ELASTICSEARCH")
+    ENABLE_QDRANT: bool = Field(default=False, env="ENABLE_QDRANT")
     
     # Qdrant配置
     QDRANT_HOST: str = Field(default="localhost", env="QDRANT_HOST")
@@ -74,7 +76,6 @@ class Settings(BaseSettings):
     
     # 性能配置
     ENABLE_METRICS: bool = Field(default=True, env="ENABLE_METRICS")
-    ENABLE_DERIVED_SEARCH: bool = Field(default=True, env="ENABLE_DERIVED_SEARCH")
     ENABLE_DERIVED_PROCESSING: bool = Field(default=True, env="ENABLE_DERIVED_PROCESSING")
     HEALTH_CHECK_INTERVAL: int = Field(default=30, env="HEALTH_CHECK_INTERVAL")
     SERVICE_TIMEOUT: int = Field(default=60, env="SERVICE_TIMEOUT")

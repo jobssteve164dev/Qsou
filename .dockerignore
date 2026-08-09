@@ -1,5 +1,7 @@
 .git
 .solopreneur
+.playwright-cli
+.pytest_cache
 .env
 deploy/baseline.env
 .venv
@@ -11,6 +13,8 @@ crawler/plugins
 crawler/qsou_crawler/spiders/company_announcement_spider.py
 crawler/qsou_crawler/spiders/financial_news_spider.py
 crawler/qsou_crawler/spiders/yicai_test_spider.py
+qsou_data/migrate.py
+qsou_data/start_api.py
 vendor
 data
 logs

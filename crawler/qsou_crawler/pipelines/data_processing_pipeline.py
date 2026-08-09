@@ -147,7 +147,7 @@ class DataProcessingPipeline:
                 str(e),
             )
         finally:
-            # 内存批次可清空；SQLite 待处理记录只在提交成功后改变状态。
+            # 内存批次可清空；PostgreSQL 待处理记录只在提交成功后改变状态。
             self.batch_items = []
 
     def dispatch_pending(self):

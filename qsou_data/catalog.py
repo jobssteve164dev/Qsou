@@ -1,25 +1,26 @@
-"""SQLite and PostgreSQL catalog connection compatibility layer."""
+"""PostgreSQL catalog access through SQLAlchemy transactions."""
 
 from __future__ import annotations
 
 import os
-import re
-import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
+from sqlalchemy import create_engine
+from sqlalchemy.engine import CursorResult, Engine, make_url
+
 
 class CatalogConfigurationError(RuntimeError):
-    """The requested catalog backend is not safely configured."""
+    """The PostgreSQL catalog is not safely configured."""
 
 
-_INSERT_IGNORE_RE = re.compile(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", re.IGNORECASE)
 TEXT_NUL_REPLACEMENT = "\ufffd"
 
 
 def normalize_catalog_value(value: Any) -> Any:
-    """Return a stable catalog value accepted by SQLite and PostgreSQL."""
+    """Return a stable value accepted by PostgreSQL text columns."""
     if isinstance(value, str):
         return value.replace("\x00", TEXT_NUL_REPLACEMENT)
     if isinstance(value, Mapping):
@@ -38,121 +39,105 @@ def _normalize_parameters(parameters: Sequence[Any]) -> tuple[Any, ...]:
     return tuple(normalize_catalog_value(value) for value in parameters)
 
 
-class SQLiteConnection:
-    """Normalize catalog writes before SQLite can retain PostgreSQL-invalid text."""
+class Result:
+    """Expose mapping rows while preserving DB-API row-count semantics."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self.connection = connection
+    def __init__(self, result: CursorResult[Any]) -> None:
+        self._result = result
+        self._rows = result.mappings() if result.returns_rows else None
 
-    def execute(self, sql: str, parameters: Sequence[Any] = ()):
-        return self.connection.execute(sql, _normalize_parameters(parameters))
+    @property
+    def rowcount(self) -> int:
+        return self._result.rowcount
 
-    def executemany(self, sql: str, parameters):
-        return self.connection.executemany(
-            sql,
-            (_normalize_parameters(row) for row in parameters),
-        )
+    def fetchone(self):
+        return self._rows.fetchone() if self._rows is not None else None
 
-    def executescript(self, script: str) -> None:
-        self.connection.executescript(script)
+    def fetchall(self):
+        return self._rows.fetchall() if self._rows is not None else []
 
-    def commit(self) -> None:
-        self.connection.commit()
+    def fetchmany(self, size: int | None = None):
+        if self._rows is None:
+            return []
+        return self._rows.fetchmany(size) if size is not None else self._rows.fetchmany()
 
-    def rollback(self) -> None:
-        self.connection.rollback()
 
-    def close(self) -> None:
-        self.connection.close()
+class EmptyResult:
+    rowcount = 0
+
+    @staticmethod
+    def fetchone():
+        return None
+
+    @staticmethod
+    def fetchall():
+        return []
+
+    @staticmethod
+    def fetchmany(_size: int | None = None):
+        return []
 
 
 class PostgresConnection:
-    """Expose the small sqlite-style surface used by DataAssetStore."""
+    """Small PostgreSQL-native surface used by the data asset repository."""
 
     def __init__(self, connection) -> None:
         self.connection = connection
 
-    def execute(self, sql: str, parameters: Sequence[Any] = ()):
-        normalized = sql.strip().upper()
-        if normalized == "BEGIN IMMEDIATE":
-            return self.connection.execute(
-                "SELECT pg_advisory_xact_lock(%s)",
-                (781_937_611,),
+    def execute(self, sql: str, parameters: Sequence[Any] = ()) -> Result:
+        if parameters:
+            result = self.connection.exec_driver_sql(
+                sql,
+                _normalize_parameters(parameters),
             )
-        return self.connection.execute(
-            _postgres_sql(sql),
-            _normalize_parameters(parameters),
-        )
+        else:
+            result = self.connection.exec_driver_sql(sql)
+        return Result(result)
 
-    def executemany(self, sql: str, parameters):
-        cursor = self.connection.cursor()
-        cursor.executemany(
-            _postgres_sql(sql),
-            (_normalize_parameters(row) for row in parameters),
-        )
-        return cursor
-
-    def executescript(self, script: str) -> None:
-        for statement in script.split(";"):
-            if statement.strip():
-                self.execute(statement)
-
-    def commit(self) -> None:
-        self.connection.commit()
-
-    def rollback(self) -> None:
-        self.connection.rollback()
-
-    def close(self) -> None:
-        self.connection.close()
+    def executemany(self, sql: str, parameters) -> Result | EmptyResult:
+        rows = [_normalize_parameters(row) for row in parameters]
+        if not rows:
+            return EmptyResult()
+        return Result(self.connection.exec_driver_sql(sql, rows))
 
 
-def _postgres_sql(sql: str) -> str:
-    translated = _INSERT_IGNORE_RE.sub("INSERT INTO", sql)
-    ignored_insert = translated != sql
-    translated = translated.replace("?", "%s").strip()
-    if ignored_insert and "ON CONFLICT" not in translated.upper():
-        translated += " ON CONFLICT DO NOTHING"
-    return translated
+def _postgres_url(database_url: str) -> str:
+    try:
+        url = make_url(database_url)
+    except Exception as exc:
+        raise CatalogConfigurationError("PostgreSQL DATABASE_URL 格式无效") from exc
+    if url.get_backend_name() != "postgresql":
+        raise CatalogConfigurationError("QSou 目录库只支持 PostgreSQL")
+    return url.set(drivername="postgresql+psycopg").render_as_string(
+        hide_password=False
+    )
+
+
+@lru_cache(maxsize=4)
+def _engine_for(database_url: str) -> Engine:
+    return create_engine(
+        _postgres_url(database_url),
+        pool_pre_ping=True,
+        pool_size=3,
+        max_overflow=2,
+        pool_recycle=300,
+    )
 
 
 class Catalog:
     def __init__(self, root: Path) -> None:
         self.root = Path(root).resolve()
-        self.sqlite_path = self.root / "catalog.sqlite3"
-        self.backend = os.getenv("QSOU_CATALOG_BACKEND", "sqlite").strip().lower()
+        self.backend = "postgres"
         self.database_url = os.getenv("DATABASE_URL", "").strip()
-        if self.backend not in {"sqlite", "postgres"}:
-            raise CatalogConfigurationError(f"不支持的目录库后端: {self.backend}")
-        if self.backend == "postgres" and not self.database_url:
+        if not self.database_url:
             raise CatalogConfigurationError("PostgreSQL 目录库缺少 DATABASE_URL")
+        self.engine = _engine_for(self.database_url)
 
     @contextmanager
-    def connection(self) -> Iterator[Any]:
-        if self.backend == "sqlite":
-            sqlite_connection = sqlite3.connect(str(self.sqlite_path), timeout=30)
-            sqlite_connection.row_factory = sqlite3.Row
-            sqlite_connection.execute("PRAGMA foreign_keys = ON")
-            sqlite_connection.execute("PRAGMA busy_timeout = 30000")
-            connection = SQLiteConnection(sqlite_connection)
-        else:
-            try:
-                import psycopg
-                from psycopg.rows import dict_row
-            except ImportError as exc:
-                raise CatalogConfigurationError("PostgreSQL 目录库需要 psycopg") from exc
-            connection = PostgresConnection(
-                psycopg.connect(self.database_url, row_factory=dict_row, connect_timeout=15)
-            )
-        try:
-            yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+    def connection(self) -> Iterator[PostgresConnection]:
+        with self.engine.begin() as connection:
+            yield PostgresConnection(connection)
 
     @property
     def label(self) -> str:
-        return str(self.sqlite_path) if self.backend == "sqlite" else "postgresql"
+        return "postgresql"
