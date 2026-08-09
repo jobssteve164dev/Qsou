@@ -152,6 +152,11 @@ class ProductionComposeContractTest(unittest.TestCase):
             "service_healthy",
         )
         self.assertIn("qsou-elasticsearch-data", compose["volumes"])
+        self.assertEqual(
+            services["elasticsearch"]["image"],
+            "docker.elastic.co/elasticsearch/elasticsearch:8.11.0",
+        )
+        self.assertNotIn("build", services["elasticsearch"])
         self.assertEqual(services["elasticsearch"]["restart"], "unless-stopped")
         self.assertNotIn("ports", services["elasticsearch"])
         self.assertEqual(set(services["web"]["ports"]), {"${QSOU_WEB_PORT:-3000}:3000"})

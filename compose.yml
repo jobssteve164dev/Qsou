@@ -130,9 +130,7 @@ services:
 
   elasticsearch:
     platform: linux/amd64
-    build:
-      context: .
-      dockerfile: deploy/elasticsearch.Dockerfile
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
