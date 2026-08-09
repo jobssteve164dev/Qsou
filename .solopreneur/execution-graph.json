@@ -1,10 +1,11 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-08-04T03:25:41.476Z",
-  "runCount": 3,
+  "updatedAt": "2026-08-08T08:24:15.854Z",
+  "runCount": 4,
   "indexes": {
     "byNode": {
       "__solo__": [
+        "__solo__-4",
         "__solo__-3",
         "__solo__-2",
         "__solo__-1"
@@ -12,6 +13,7 @@
     },
     "byAgent": {
       "/usr/local/bin/codex": [
+        "__solo__-4",
         "__solo__-3",
         "__solo__-2",
         "__solo__-1"
@@ -96,6 +98,7 @@
     },
     "byStatus": {
       "Recorded": [
+        "__solo__-4",
         "__solo__-3"
       ],
       "Completed": [
@@ -106,6 +109,7 @@
     "byFailure": {},
     "byCommand": {
       "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'": [
+        "__solo__-4",
         "__solo__-3"
       ],
       "cat '/home/ubuntu/project/Qsou/.solopreneur/agent-runs/__solo__/2/prompt.txt' | '/usr/local/bin/codex' exec --color always -C '/home/ubuntu/project/Qsou' --skip-git-repo-check --da...": [
@@ -117,10 +121,27 @@
     },
     "byExperience": {
       "exp-reusable-signal-1477c0bd97fdae96": [
+        "__solo__-4",
         "__solo__-3"
       ],
       "exp-reusable-signal-4bf40b5596a2f2e5": [
+        "__solo__-4",
         "__solo__-3"
+      ],
+      "exp-handoff-action-eda9df9db54272c0": [
+        "__solo__-4"
+      ],
+      "exp-handoff-action-ba5547540b5f1686": [
+        "__solo__-4"
+      ],
+      "exp-handoff-action-e259497e848b50d0": [
+        "__solo__-4"
+      ],
+      "exp-handoff-action-47cd6add6fa7926e": [
+        "__solo__-4"
+      ],
+      "exp-handoff-action-923e6448c4b9c371": [
+        "__solo__-4"
       ],
       "exp-reusable-signal-bbd83203f5340823": [
         "__solo__-2",
@@ -152,6 +173,7 @@
         "solo_continue"
       ],
       "sourceRefs": [
+        "__solo__-4",
         "__solo__-3"
       ],
       "appliesWhen": [
@@ -164,14 +186,14 @@
         "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
       ],
       "stats": {
-        "uses": 1,
-        "wins": 1,
+        "uses": 2,
+        "wins": 2,
         "losses": 0,
         "neutral": 0,
-        "alpha": 2,
+        "alpha": 3,
         "beta": 1,
-        "winRate": 0.6667,
-        "lastUsed": "2026-08-04T03:25:41.469Z"
+        "winRate": 0.75,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
       }
     },
     "exp-reusable-signal-4bf40b5596a2f2e5": {
@@ -182,6 +204,7 @@
         "solo_continue"
       ],
       "sourceRefs": [
+        "__solo__-4",
         "__solo__-3"
       ],
       "appliesWhen": [
@@ -194,14 +217,164 @@
         "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
       ],
       "stats": {
-        "uses": 1,
-        "wins": 1,
+        "uses": 2,
+        "wins": 2,
         "losses": 0,
         "neutral": 0,
-        "alpha": 2,
+        "alpha": 3,
         "beta": 1,
-        "winRate": 0.6667,
-        "lastUsed": "2026-08-04T03:25:41.469Z"
+        "winRate": 0.75,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
+      }
+    },
+    "exp-handoff-action-eda9df9db54272c0": {
+      "id": "exp-handoff-action-eda9df9db54272c0",
+      "type": "handoff_action",
+      "centralMeaning": "• Ran git status --short && git log -1 --format='%h %s%n%b' && git ls-remote --heads origin main && ps -eo pid,comm,args | rg 'next start -p 3100|next build|uvicorn app.main|docker",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-4"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
+      }
+    },
+    "exp-handoff-action-ba5547540b5f1686": {
+      "id": "exp-handoff-action-ba5547540b5f1686",
+      "type": "handoff_action",
+      "centralMeaning": "3092092 bash /bin/bash -c git status --short && git log -1 --format='%h %s%n%b' && git ls-remote --heads origin main && ps -eo pid,comm,args | rg 'next start -p 3100|",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-4"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
+      }
+    },
+    "exp-handoff-action-e259497e848b50d0": {
+      "id": "exp-handoff-action-e259497e848b50d0",
+      "type": "handoff_action",
+      "centralMeaning": "next build|uvicorn app.main|docker compose build|buildkit' || true",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-4"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
+      }
+    },
+    "exp-handoff-action-47cd6add6fa7926e": {
+      "id": "exp-handoff-action-47cd6add6fa7926e",
+      "type": "handoff_action",
+      "centralMeaning": "3092151 rg rg next start -p 3100|next build|uvicorn app.main|docker compose build|buildkit•WWoor◦rkkiin4WngWogorrkki•inngg◦5•WWoorrkkiin6WngWog◦orrkkiinngg•7◦WWoorrkki•in8WngWogorrkkiinng◦g9•WWoor◦rkkiin20WngWogorrkki•in...",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-4"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
+      }
+    },
+    "exp-handoff-action-923e6448c4b9c371": {
+      "id": "exp-handoff-action-923e6448c4b9c371",
+      "type": "handoff_action",
+      "centralMeaning": "- Next.js 生产构建成功，11 个页面全部生成。",
+      "sourceKinds": [
+        "solo_continue"
+      ],
+      "sourceRefs": [
+        "__solo__-4"
+      ],
+      "appliesWhen": [
+        "接手同一路线图入口：__solo__",
+        "后续 Agent 需要接续上一轮未完全显式化的上下文"
+      ],
+      "doThis": "把这条交接动作转成当前任务的第一步检查或验证。",
+      "avoidThis": "不要把 handoff 当成已验证结论；先和当前代码、日志、测试对齐。",
+      "checks": [
+        "'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "stats": {
+        "uses": 1,
+        "wins": 0,
+        "losses": 0,
+        "neutral": 1,
+        "alpha": 1,
+        "beta": 1,
+        "winRate": 0.5,
+        "lastUsed": "2026-08-08T08:24:15.851Z"
       }
     },
     "exp-reusable-signal-bbd83203f5340823": {
@@ -415,6 +588,90 @@
   },
   "usageEdges": [
     {
+      "runId": "__solo__-4",
+      "experienceId": "exp-reusable-signal-1477c0bd97fdae96",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-reusable-signal-4bf40b5596a2f2e5",
+      "phase": "observed",
+      "outcome": "win",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-handoff-action-eda9df9db54272c0",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-handoff-action-ba5547540b5f1686",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-handoff-action-e259497e848b50d0",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-handoff-action-47cd6add6fa7926e",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
+      "runId": "__solo__-4",
+      "experienceId": "exp-handoff-action-923e6448c4b9c371",
+      "phase": "observed",
+      "outcome": "neutral",
+      "evidenceRefs": [
+        "digest:.solopreneur/run-digests/__solo__-4.json",
+        "execution_logs:4",
+        "check:'/usr/local/bin/codex' resume --include-non-interactive --all -C '/home/ubuntu/project/Qsou' '019fcaa7-257d-7343-953b-485c3e9ee7b0'"
+      ],
+      "createdAt": "2026-08-08T08:24:15.851Z"
+    },
+    {
       "runId": "__solo__-3",
       "experienceId": "exp-reusable-signal-1477c0bd97fdae96",
       "phase": "observed",
@@ -529,6 +786,19 @@
     }
   ],
   "runs": [
+    {
+      "runId": "__solo__-4",
+      "executionLogId": 4,
+      "nodeId": "__solo__",
+      "runKind": "solo_continue",
+      "agentCli": "/usr/local/bin/codex",
+      "status": "Recorded",
+      "finishedAt": "2026-08-08T08:24:15.851Z",
+      "changedFiles": [],
+      "touchedFiles": [],
+      "failures": [],
+      "handoffSummary": "续聊已记录；不参与任务完成、失败或进行中判断。"
+    },
     {
       "runId": "__solo__-3",
       "executionLogId": 3,

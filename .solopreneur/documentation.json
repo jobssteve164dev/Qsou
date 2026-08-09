@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-08T07:40:00Z",
+  "updatedAt": "2026-08-09T01:00:03.345Z",
   "documents": [
     {
       "path": "README.md",
@@ -8,7 +8,7 @@
       "status": "active",
       "solves": "说明项目是什么、服务谁、成功标准和对外表达。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-08-08T07:40:00Z"
+      "lastTouchedAt": "2026-08-08T07:36:17.376Z"
     },
     {
       "path": ".solopreneur/README.md",
@@ -17,6 +17,14 @@
       "solves": "说明项目数据、缓存、运行记录和 Git 管理边界。",
       "lastReviewedAt": "",
       "lastTouchedAt": "2026-06-14T12:28:02.015Z"
+    },
+    {
+      "path": "docs/baseline-deployment.md",
+      "role": "operation",
+      "status": "active",
+      "solves": "说明自主数据基线的部署配置、运行入口、验证步骤、数据备份边界与当前能力限制。",
+      "lastReviewedAt": "2026-08-08T07:40:00Z",
+      "lastTouchedAt": "2026-08-08T07:36:17.375Z"
     },
     {
       "path": "docs/crawler-plugins.md",
@@ -32,15 +40,7 @@
       "status": "active",
       "solves": "说明自主数据资产的目标数据流、组件职责和当前实现差距。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-08-08T07:40:00Z"
-    },
-    {
-      "path": "docs/baseline-deployment.md",
-      "role": "operation",
-      "status": "active",
-      "solves": "说明自主数据基线的部署配置、运行入口、验证步骤、数据备份边界与当前能力限制。",
-      "lastReviewedAt": "2026-08-08T07:40:00Z",
-      "lastTouchedAt": "2026-08-08T07:40:00Z"
+      "lastTouchedAt": "2026-08-08T07:36:17.376Z"
     },
     {
       "path": "docs/data-sovereignty-design-guidelines.md",
@@ -80,7 +80,7 @@
       "status": "active",
       "solves": "说明开发、验证、发布、安装、回滚或排障方式。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-08-08T07:40:00Z"
+      "lastTouchedAt": "2026-08-08T07:36:43.280Z"
     },
     {
       "path": "docs/log-collector-lifecycle.md",
@@ -96,7 +96,7 @@
       "status": "active",
       "solves": "说明当前项目的快速安装、启动和服务验证方式。",
       "lastReviewedAt": "",
-      "lastTouchedAt": "2026-08-08T07:40:00Z"
+      "lastTouchedAt": "2026-08-08T07:36:43.279Z"
     },
     {
       "path": "docs/tech-stack-design.md",
