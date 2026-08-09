@@ -155,12 +155,15 @@ class ProductionComposeContractTest(unittest.TestCase):
             services["indexer"]["depends_on"]["elasticsearch"]["condition"],
             "service_healthy",
         )
-        self.assertEqual(services["indexer"]["image"], "qsou-api")
+        self.assertEqual(
+            services["indexer"]["build"],
+            {"context": ".", "dockerfile": "deploy/api.Dockerfile"},
+        )
         self.assertEqual(
             services["indexer"]["command"],
             ["python", "-m", "qsou_data.indexer"],
         )
-        self.assertNotIn("build", services["indexer"])
+        self.assertNotIn("image", services["indexer"])
         self.assertNotIn("healthcheck", services["indexer"])
         self.assertIn("qsou-elasticsearch-data", compose["volumes"])
         self.assertEqual(
