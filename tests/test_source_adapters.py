@@ -21,7 +21,21 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertEqual(len(catalog), 9)
         self.assertEqual(len({item["source_id"] for item in catalog}), 9)
         self.assertTrue(all(item["adapter_id"] for item in catalog))
-        self.assertTrue(all(item["adapter_version"] == "1.0.0" for item in catalog))
+        versions = {item["source_id"]: item["adapter_version"] for item in catalog}
+        self.assertEqual(
+            versions,
+            {
+                "sse": "1.1.0",
+                "szse": "1.0.0",
+                "cninfo": "1.0.0",
+                "eastmoney": "1.1.0",
+                "sina-finance": "1.1.0",
+                "netease-finance": "1.1.0",
+                "sohu-finance": "1.0.0",
+                "caijing": "1.0.0",
+                "yicai": "1.1.0",
+            },
+        )
 
     def test_production_crawler_exposes_only_the_versioned_adapter_path(self):
         self.assertEqual(
@@ -92,7 +106,8 @@ class SourceAdapterContractTest(unittest.TestCase):
                     }
                 },
                 "url": "https://query.sse.com.cn/security/stock/queryCompanyBulletin.do",
-                "expected_host": "www.sse.com.cn",
+                "expected_host": "big5.sse.com.cn",
+                "expected_path": "/site/cht/www.sse.com.cn/disclosure/",
             },
             "szse": {
                 "payload": {
@@ -142,6 +157,8 @@ class SourceAdapterContractTest(unittest.TestCase):
                 references = adapter.discover(response)
                 self.assertEqual(len(references), 1)
                 self.assertIn(sample["expected_host"], references[0].url)
+                if sample.get("expected_path"):
+                    self.assertIn(sample["expected_path"], references[0].url)
                 self.assertEqual(references[0].document_type, "announcement")
 
     def test_each_news_adapter_discovers_only_its_own_detail_pattern(self):
@@ -203,9 +220,37 @@ class SourceAdapterContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(document)
         self.assertEqual(document["source_id"], "yicai")
-        self.assertEqual(document["parser_version"], "yicai-news/1.0.0")
+        self.assertEqual(document["parser_version"], "yicai-news/1.1.0")
         self.assertEqual(document["metadata"]["extraction"], "structured_source_adapter")
         self.assertIn("经营现金流", document["content"])
+
+    def test_news_adapters_extract_their_article_container_without_navigation(self):
+        samples = {
+            "eastmoney": ("ContentBody", "https://finance.eastmoney.com/a/202608081234567890.html"),
+            "sina-finance": ("artibody", "https://finance.sina.com.cn/stock/doc-abcdef.shtml"),
+            "netease-finance": ("post_body", "https://www.163.com/money/article/ABCDEFGH.html"),
+            "yicai": ("m-txt", "https://www.yicai.com/news/102999999.html"),
+        }
+        for source_id, (container, url) in samples.items():
+            with self.subTest(source_id=source_id):
+                adapter = self.registry.create(source_id)
+                html = (
+                    "<html><head><meta property='og:title' content='公司经营数据更新'></head><body>"
+                    "<nav><p>首页 股票 行情 基金 理财 登录 注册 下载客户端</p></nav>"
+                    f"<div class='{container}'><h1>公司经营数据更新</h1>"
+                    "<p>公司披露本期营业收入和经营现金流均保持增长，核心业务订单按计划交付。</p>"
+                    "<p>公告同时说明了资本开支、市场需求和主要风险，相关数字以原始披露为准，后续变化将继续通过正式公告更新。</p>"
+                    "</div><footer><p>关于我们 联系方式 广告服务 用户协议</p></footer>"
+                    "</body></html>"
+                ).encode()
+                document = adapter.parse_document(
+                    ResponsePayload(url=url, body=html),
+                    DocumentReference(url=url, source_document_id="sample", document_type="news"),
+                )
+                self.assertIsNotNone(document)
+                self.assertIn("营业收入", document["content"])
+                self.assertNotIn("下载客户端", document["content"])
+                self.assertNotIn("广告服务", document["content"])
 
 
 if __name__ == "__main__":

@@ -71,16 +71,37 @@ class ResponsePayload:
 
 
 class _SemanticHTMLParser(HTMLParser):
-    def __init__(self) -> None:
+    _VOID_TAGS = {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+
+    def __init__(self, content_container_patterns: Sequence[str] = ()) -> None:
         super().__init__(convert_charrefs=True)
+        self.content_container_patterns = tuple(content_container_patterns)
         self.title_parts: list[str] = []
         self.heading_parts: list[str] = []
+        self.content_blocks: list[str] = []
         self.semantic_blocks: list[str] = []
         self.fallback_blocks: list[str] = []
         self.links: list[tuple[str, str]] = []
         self.meta: dict[str, str] = {}
         self._ignored_depth = 0
         self._semantic_depth = 0
+        self._content_container_depth = 0
+        self._element_stack: list[tuple[str, bool]] = []
         self._in_title = False
         self._in_heading = False
         self._block_tag: Optional[str] = None
@@ -96,6 +117,17 @@ class _SemanticHTMLParser(HTMLParser):
             return
         if self._ignored_depth:
             return
+        selector = normalize_text(
+            " ".join((attributes.get("id", ""), attributes.get("class", "")))
+        ).lower()
+        is_content_container = bool(selector) and any(
+            re.search(pattern, selector, re.IGNORECASE)
+            for pattern in self.content_container_patterns
+        )
+        if tag not in self._VOID_TAGS:
+            self._element_stack.append((tag, is_content_container))
+        if is_content_container:
+            self._content_container_depth += 1
         if tag in {"article", "main"}:
             self._semantic_depth += 1
         if tag == "title":
@@ -139,6 +171,8 @@ class _SemanticHTMLParser(HTMLParser):
                 self.fallback_blocks.append(text)
                 if self._semantic_depth:
                     self.semantic_blocks.append(text)
+                if self._content_container_depth:
+                    self.content_blocks.append(text)
             self._block_tag = None
             self._block_parts = []
         if tag == "a" and self._link_href:
@@ -147,6 +181,17 @@ class _SemanticHTMLParser(HTMLParser):
             self._link_parts = []
         if tag in {"article", "main"} and self._semantic_depth:
             self._semantic_depth -= 1
+        for index in range(len(self._element_stack) - 1, -1, -1):
+            if self._element_stack[index][0] != tag:
+                continue
+            removed = self._element_stack[index:]
+            del self._element_stack[index:]
+            self._content_container_depth = max(
+                0,
+                self._content_container_depth
+                - sum(1 for _, is_container in removed if is_container),
+            )
+            break
 
     def handle_data(self, data: str) -> None:
         if self._ignored_depth:
@@ -164,8 +209,11 @@ class _SemanticHTMLParser(HTMLParser):
             self._link_parts.append(text)
 
 
-def parse_html(html: str) -> _SemanticHTMLParser:
-    parser = _SemanticHTMLParser()
+def parse_html(
+    html: str,
+    content_container_patterns: Sequence[str] = (),
+) -> _SemanticHTMLParser:
+    parser = _SemanticHTMLParser(content_container_patterns)
     parser.feed(html)
     return parser
 
@@ -201,6 +249,7 @@ class SourceAdapter:
     document_type = "document"
     link_patterns: Sequence[str] = ()
     excluded_patterns: Sequence[str] = ()
+    content_container_patterns: Sequence[str] = ()
 
     def __init__(self, source: Mapping[str, Any]) -> None:
         self.source = dict(source)
@@ -261,7 +310,7 @@ class SourceAdapter:
             title = normalize_text(reference.title) or self.reference_id(response.url)
             published_at = reference.published_at
         else:
-            parser = parse_html(response.text)
+            parser = parse_html(response.text, self.content_container_patterns)
             title = normalize_text(
                 parser.meta.get("og:title")
                 or parser.meta.get("twitter:title")
@@ -269,7 +318,11 @@ class SourceAdapter:
                 or reference.title
                 or " ".join(parser.title_parts)
             )
-            blocks = parser.semantic_blocks or parser.fallback_blocks
+            blocks = (
+                parser.content_blocks
+                or parser.semantic_blocks
+                or parser.fallback_blocks
+            )
             content = "\n".join(dict.fromkeys(blocks))
             published_at = reference.published_at or parse_published_at(parser, response.text)
         content = normalize_text(content)

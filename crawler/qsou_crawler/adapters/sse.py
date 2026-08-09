@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode
 
 from .base import AnnouncementHTMLAdapter, DocumentReference, RequestSpec, ResponsePayload, json_body, normalize_text
 
@@ -8,7 +8,7 @@ from .base import AnnouncementHTMLAdapter, DocumentReference, RequestSpec, Respo
 class SseAdapter(AnnouncementHTMLAdapter):
     source_id = "sse"
     adapter_id = "sse-announcements"
-    version = "1.0.0"
+    version = "1.1.0"
     link_patterns = (r"/disclosure/.+\.pdf(?:$|\?)",)
 
     def initial_requests(self, cursor=None):
@@ -43,7 +43,8 @@ class SseAdapter(AnnouncementHTMLAdapter):
         for row in rows:
             if not isinstance(row, dict) or not row.get("URL"):
                 continue
-            url = urljoin("https://www.sse.com.cn", str(row["URL"]))
+            official_path = "/" + str(row["URL"]).lstrip("/")
+            url = f"https://big5.sse.com.cn/site/cht/www.sse.com.cn{official_path}"
             references.append(
                 DocumentReference(
                     url=url,

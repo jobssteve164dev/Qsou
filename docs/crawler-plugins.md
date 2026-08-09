@@ -25,7 +25,10 @@ class ExampleAdapter(NewsHTMLAdapter):
     adapter_id = "example-news"
     version = "1.0.0"
     link_patterns = (r"example\.com/news/\d+\.html(?:$|\?)",)
+    content_container_patterns = (r"\barticle-body\b",)
 ```
+
+`content_container_patterns` 匹配详情页正文容器的 `id/class`。来源有稳定正文容器时应显式声明，使统一解析基座排除页面导航、登录入口和页脚；选择器变化属于解析语义变化，必须通过固定样本测试并提升适配器版本。
 
 如果来源使用 JSON 公告接口，应覆盖 `initial_requests` 和 `discover`，返回 `DocumentReference`。详情仍由统一 Spider 下载、归档和解析，适配器不能绕开原始证据中间件直接写标准文档。
 

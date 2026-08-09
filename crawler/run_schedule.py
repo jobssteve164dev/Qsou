@@ -43,9 +43,21 @@ def iso(value: datetime) -> str:
 
 def write_status(**values: object) -> None:
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    timeline: dict[str, object] = {}
+    if STATUS_PATH.is_file():
+        try:
+            previous = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+            timeline = {
+                key: previous[key]
+                for key in ("last_started_at", "last_finished_at", "next_run_at")
+                if previous.get(key)
+            }
+        except (OSError, json.JSONDecodeError):
+            timeline = {}
     payload = {
         "source_ids": [adapter.source_id for adapter in selected_adapters()],
         "poll_seconds": POLL_SECONDS,
+        **timeline,
         **values,
     }
     temporary = STATUS_PATH.with_suffix(".tmp")
