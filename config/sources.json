@@ -194,7 +194,7 @@
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
       "adapter_id": "yicai-news",
-      "adapter_version": "1.1.0",
+      "adapter_version": "1.2.0",
       "adapter_kind": "news_listing",
       "health_state": "configured",
       "enabled": true

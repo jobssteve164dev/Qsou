@@ -83,7 +83,32 @@ class SourceAdapterSpider(scrapy.Spider):
             return
         self._documents.append(document)
         self.crawler.stats.inc_value("adapter/documents_emitted")
+        for media_url in document.get("metadata", {}).get("media_urls", []):
+            self.crawler.stats.inc_value("adapter/media_discovered")
+            yield self._request(
+                RequestSpec(
+                    url=media_url,
+                    kind="media",
+                    metadata={
+                        "source_document_id": document["source_document_id"],
+                        "document_type": document["type"],
+                    },
+                ),
+                self.parse_media,
+            )
         yield document
+
+    def parse_media(self, response: scrapy.http.Response):
+        if not 200 <= response.status < 300:
+            self._record_error(f"正文图像响应失败: {response.status} {response.url}")
+            return
+        content_type = response.headers.get(b"Content-Type", b"")
+        if isinstance(content_type, bytes):
+            content_type = content_type.decode("latin-1")
+        if not str(content_type).lower().startswith("image/"):
+            self._record_error(f"正文图像类型异常: {content_type or 'unknown'} {response.url}")
+            return
+        self.crawler.stats.inc_value("adapter/media_fetched")
 
     def handle_request_error(self, failure) -> None:
         request = failure.request
@@ -105,6 +130,8 @@ class SourceAdapterSpider(scrapy.Spider):
             "detail_fetched": self.crawler.stats.get_value("adapter/detail_fetched", 0),
             "documents_emitted": self.crawler.stats.get_value("adapter/documents_emitted", 0),
             "documents_indexed": self.crawler.stats.get_value("adapter/documents_indexed", 0),
+            "media_discovered": self.crawler.stats.get_value("adapter/media_discovered", 0),
+            "media_fetched": self.crawler.stats.get_value("adapter/media_fetched", 0),
             "evidence_archived": self.crawler.stats.get_value("adapter/evidence_archived", 0),
             "failures": self.crawler.stats.get_value("adapter/failures", 0),
             "download_timeout_seconds": self.crawler.settings.getint("DOWNLOAD_TIMEOUT"),

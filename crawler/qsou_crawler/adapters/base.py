@@ -94,6 +94,7 @@ class _SemanticHTMLParser(HTMLParser):
         self.title_parts: list[str] = []
         self.heading_parts: list[str] = []
         self.content_blocks: list[str] = []
+        self.content_images: list[dict[str, str]] = []
         self.semantic_blocks: list[str] = []
         self.fallback_blocks: list[str] = []
         self.links: list[tuple[str, str]] = []
@@ -128,6 +129,15 @@ class _SemanticHTMLParser(HTMLParser):
             self._element_stack.append((tag, is_content_container))
         if is_content_container:
             self._content_container_depth += 1
+        if tag == "img" and self._content_container_depth:
+            source = normalize_text(attributes.get("src"))
+            if source and not source.lower().startswith("data:"):
+                self.content_images.append(
+                    {
+                        "src": source,
+                        "alt": normalize_text(attributes.get("alt")),
+                    }
+                )
         if tag in {"article", "main"}:
             self._semantic_depth += 1
         if tag == "title":
@@ -305,6 +315,8 @@ class SourceAdapter:
         reference: DocumentReference,
     ) -> Optional[dict[str, Any]]:
         content_type = response.content_type.lower()
+        media_urls: list[str] = []
+        parser: Optional[_SemanticHTMLParser] = None
         if "pdf" in content_type or response.url.lower().endswith(".pdf"):
             content = self._extract_pdf(response.body)
             title = normalize_text(reference.title) or self.reference_id(response.url)
@@ -325,8 +337,40 @@ class SourceAdapter:
             )
             content = "\n".join(dict.fromkeys(blocks))
             published_at = reference.published_at or parse_published_at(parser, response.text)
+            media_urls = list(
+                dict.fromkeys(
+                    urljoin(response.url, image["src"])
+                    for image in parser.content_images
+                    if urlsplit(urljoin(response.url, image["src"])).scheme in {"http", "https"}
+                )
+            )
         content = normalize_text(content)
-        if len(title) < 4 or len(content) < 80:
+        metadata = {
+            "adapter_id": self.adapter_id,
+            "adapter_version": self.version,
+            "extraction": "structured_source_adapter",
+            **dict(reference.metadata),
+        }
+        if len(title) < 4:
+            return None
+        if len(content) < 80:
+            if not media_urls:
+                return None
+            description = normalize_text(
+                parser.meta.get("description") or parser.meta.get("og:description")
+            ) if parser else ""
+            content = normalize_text(
+                f"{title}。{description} 原文为图解报道，正文由 {len(media_urls)} 张图片组成；"
+                "图像内容以来源页面为准。"
+            )
+            metadata.update(
+                {
+                    "content_format": "image_story",
+                    "media_count": len(media_urls),
+                    "media_urls": media_urls,
+                }
+            )
+        if len(content) < 50:
             return None
         return {
             "source_document_id": reference.source_document_id or self.reference_id(response.url),
@@ -338,12 +382,7 @@ class SourceAdapter:
             "source_id": self.source_id,
             "source_published_at": published_at,
             "parser_version": f"{self.adapter_id}/{self.version}",
-            "metadata": {
-                "adapter_id": self.adapter_id,
-                "adapter_version": self.version,
-                "extraction": "structured_source_adapter",
-                **dict(reference.metadata),
-            },
+            "metadata": metadata,
         }
 
     def accepts_detail_url(self, url: str) -> bool:

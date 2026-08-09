@@ -175,6 +175,8 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
     detail_discovered = int(metrics.get("detail_discovered", 0) or 0)
     detail_fetched = int(metrics.get("detail_fetched", 0) or 0)
     documents_emitted = int(metrics.get("documents_emitted", 0) or 0)
+    media_discovered = int(metrics.get("media_discovered", 0) or 0)
+    media_fetched = int(metrics.get("media_fetched", 0) or 0)
     failures = int(metrics.get("failures", 0) or 0)
     if completed is None or completed.returncode != 0 or entrypoints_succeeded == 0:
         state = "failed"
@@ -183,6 +185,7 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
         or failures > 0
         or detail_fetched != detail_discovered
         or documents_emitted != detail_fetched
+        or media_fetched != media_discovered
     ):
         state = "degraded"
     else:

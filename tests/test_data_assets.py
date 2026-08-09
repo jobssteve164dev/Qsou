@@ -190,7 +190,7 @@ class DataAssetStoreTest(unittest.TestCase):
         run = self.store.begin_adapter_run(
             source_id="yicai",
             adapter_id="yicai-news",
-            adapter_version="1.1.0",
+            adapter_version="1.2.0",
         )
         finished = self.store.finish_adapter_run(
             run["run_id"],

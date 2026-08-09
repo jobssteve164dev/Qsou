@@ -33,7 +33,7 @@ class SourceAdapterContractTest(unittest.TestCase):
                 "netease-finance": "1.1.0",
                 "sohu-finance": "1.0.0",
                 "caijing": "1.0.0",
-                "yicai": "1.1.0",
+                "yicai": "1.2.0",
             },
         )
 
@@ -228,9 +228,32 @@ class SourceAdapterContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(document)
         self.assertEqual(document["source_id"], "yicai")
-        self.assertEqual(document["parser_version"], "yicai-news/1.1.0")
+        self.assertEqual(document["parser_version"], "yicai-news/1.2.0")
         self.assertEqual(document["metadata"]["extraction"], "structured_source_adapter")
         self.assertIn("经营现金流", document["content"])
+
+    def test_image_story_preserves_media_without_inventing_ocr_text(self):
+        adapter = self.registry.create("yicai")
+        url = "https://www.yicai.com/news/103310862.html"
+        html = (
+            "<html><head><title>晓数点丨明日打新！全方位图解宇树科技IPO</title>"
+            "<meta name='description' content='人形机器人第一股来了！'></head><body>"
+            "<div class='m-txt'><p><img src='https://imgcdn.yicai.com/a.jpg'></p>"
+            "<p><img src='/b.jpg'></p></div></body></html>"
+        ).encode()
+        document = adapter.parse_document(
+            ResponsePayload(url=url, body=html),
+            DocumentReference(url=url, source_document_id="103310862", document_type="news"),
+        )
+        self.assertIsNotNone(document)
+        self.assertEqual(document["metadata"]["content_format"], "image_story")
+        self.assertEqual(document["metadata"]["media_count"], 2)
+        self.assertEqual(
+            document["metadata"]["media_urls"],
+            ["https://imgcdn.yicai.com/a.jpg", "https://www.yicai.com/b.jpg"],
+        )
+        self.assertIn("正文由 2 张图片组成", document["content"])
+        self.assertNotIn("OCR", document["content"])
 
     def test_news_adapters_extract_their_article_container_without_navigation(self):
         samples = {
