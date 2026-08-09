@@ -84,9 +84,10 @@ class BaselineApiTest(unittest.TestCase):
             self.assertEqual(status.json()["active_documents"], 1)
 
             search = client.post(
-                "/api/v1/search/",
+                "/api/v1/search",
                 json={"query": "自主数据", "search_type": "hybrid", "page": 1, "page_size": 20},
                 headers=headers,
+                follow_redirects=False,
             )
             self.assertEqual(search.status_code, 200)
             self.assertEqual(search.json()["total_count"], 1)

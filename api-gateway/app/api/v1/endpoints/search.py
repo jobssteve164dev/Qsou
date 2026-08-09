@@ -55,6 +55,7 @@ class SearchResponse(BaseModel):
     suggestions: List[str] = Field(default=[], description="搜索建议")
 
 
+@router.post("", response_model=SearchResponse, include_in_schema=False)
 @router.post("/", response_model=SearchResponse)
 async def search_documents(search_query: SearchQuery, request: Request):
     """
