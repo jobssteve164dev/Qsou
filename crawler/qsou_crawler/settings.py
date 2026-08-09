@@ -1,19 +1,13 @@
-"""
-Qsou投资情报搜索引擎 - Scrapy爬虫设置
-
-遵循严格的网络爬取道德规范，确保合法合规的数据采集
-"""
+"""统一来源适配器的生产采集设置。"""
 
 import os
-from typing import Dict
 
 # Scrapy settings for qsou_crawler project
 BOT_NAME = 'qsou_crawler'
 
-SPIDER_MODULES = ['qsou_crawler.spiders']
+# 生产面只暴露统一适配器 Spider；来源扩展点统一由 AdapterRegistry 管理。
+SPIDER_MODULES = ['qsou_crawler.spiders.source_adapter_spider']
 NEWSPIDER_MODULE = 'qsou_crawler.spiders'
-
-# 生产扩展点统一由 AdapterRegistry 管理；不再并行扫描旧插件目录。
 SPIDER_LOADER_CLASS = 'scrapy.spiderloader.SpiderLoader'
 
 # ============================================
@@ -25,7 +19,7 @@ ROBOTSTXT_ENCODING = 'utf-8'  # 设置robots.txt编码
 # 用户代理设置
 USER_AGENT = os.getenv(
     'SPIDER_USER_AGENT',
-    'Qsou-InvestmentBot/1.0 (+http://your-domain.com/bot; contact@your-domain.com)'
+    'Qsou-Collector/0.2 (+https://qsou.szlk.uk; purpose=public-investment-data-archival)'
 )
 
 # ============================================
@@ -55,22 +49,11 @@ AUTOTHROTTLE_DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 # 中间件配置
 # ============================================
 DOWNLOADER_MIDDLEWARES = {
-    # 内置中间件
-    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,  # 禁用默认UA中间件
-    'scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware': 100,  # Robots.txt中间件
-    
-    # 自定义中间件 
-    'qsou_crawler.middlewares.RotateUserAgentMiddleware': 400,  # 用户代理轮换
-    'qsou_crawler.middlewares.ProxyMiddleware': 350,  # 代理中间件
     'qsou_crawler.middlewares.RawEvidenceDownloaderMiddleware': 540,  # 解析前归档原始证据
-    'qsou_crawler.middlewares.RetryMiddleware': 550,  # 重试中间件
-    'qsou_crawler.middlewares.AntiDetectionMiddleware': 600,  # 反检测中间件
 }
 
 SPIDER_MIDDLEWARES = {
     'qsou_crawler.middlewares.EvidenceLinkMiddleware': 100,  # 关联响应证据与产出文档
-    'qsou_crawler.middlewares.DuplicateFilterMiddleware': 543,  # 去重过滤
-    'qsou_crawler.middlewares.StatisticsMiddleware': 900,  # 统计中间件
 }
 
 # ============================================
@@ -78,15 +61,13 @@ SPIDER_MIDDLEWARES = {
 # ============================================
 ITEM_PIPELINES = {
     'qsou_crawler.pipelines.data_processing_pipeline.ValidationPipeline': 200,  # 数据验证
-    'qsou_crawler.pipelines.data_processing_pipeline.DuplicationPipeline': 300,  # 去重
-    'qsou_crawler.pipelines.data_processing_pipeline.StatisticsPipeline': 400,  # 统计
     'qsou_crawler.pipelines.data_processing_pipeline.DataProcessingPipeline': 500,  # 数据处理
 }
 
 # 自主数据资产基线
 QSOU_DATA_ROOT = os.getenv('QSOU_DATA_ROOT', '')
 QSOU_SOURCE_REGISTRY = os.getenv('QSOU_SOURCE_REGISTRY', '')
-QSOU_OUTBOX_DISPATCH_ENABLED = os.getenv('QSOU_OUTBOX_DISPATCH_ENABLED', 'true').lower() == 'true'
+QSOU_OUTBOX_DISPATCH_ENABLED = os.getenv('QSOU_OUTBOX_DISPATCH_ENABLED', 'false').lower() == 'true'
 QSOU_OUTBOX_BATCH_SIZE = int(os.getenv('QSOU_OUTBOX_BATCH_SIZE', 10))
 
 # 不使用框架缓存替代原始证据归档；每次访问都进入可审计证据链。
@@ -114,17 +95,6 @@ RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 COOKIES_ENABLED = True
 
 # ============================================
-# 文件和图片下载设置
-# ============================================
-# 文件存储路径
-FILES_STORE = 'downloads/files'
-IMAGES_STORE = 'downloads/images'
-
-# 图片过滤设置
-IMAGES_MIN_HEIGHT = 50
-IMAGES_MIN_WIDTH = 50
-
-# ============================================
 # 合规性和安全设置
 # ============================================
 # DNS超时
@@ -139,37 +109,6 @@ MEMUSAGE_ENABLED = True
 MEMUSAGE_LIMIT_MB = 2048  # 2GB内存限制
 MEMUSAGE_WARNING_MB = 1536  # 1.5GB警告
 
-# ============================================
-# 自定义设置
-# ============================================
-
-# 数据库连接设置
-DATABASE_URL = os.getenv(
-    'DATABASE_URL', 
-    'postgresql://qsou:your_password@localhost:5432/qsou_investment_intel'
-)
-
-# Elasticsearch设置
-ELASTICSEARCH_HOSTS = [
-    f"http://{os.getenv('ELASTICSEARCH_HOST', 'localhost')}:{os.getenv('ELASTICSEARCH_PORT', 9200)}"
-]
-ELASTICSEARCH_INDEX_PREFIX = os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'qsou_')
-
-# Qdrant设置
-QDRANT_HOST = os.getenv('QDRANT_HOST', 'localhost')
-QDRANT_PORT = int(os.getenv('QDRANT_PORT', 6333))
-QDRANT_COLLECTION_NAME = os.getenv('QDRANT_COLLECTION_NAME', 'investment_documents')
-
-# NLP模型设置
-BERT_MODEL_PATH = os.getenv('BERT_MODEL_PATH', 'bert-base-chinese')
-SENTENCE_TRANSFORMER_MODEL = os.getenv(
-    'SENTENCE_TRANSFORMER_MODEL', 
-    'shibing624/text2vec-base-chinese'
-)
-
-# 代理设置
-PROXY_LIST_FILE = 'proxies.txt'  # 代理列表文件
-
 # 数据质量设置
 MIN_CONTENT_LENGTH = 100  # 最小内容长度
 MAX_CONTENT_LENGTH = 1000000  # 最大内容长度 (1MB)
@@ -178,67 +117,9 @@ MAX_CONTENT_LENGTH = 1000000  # 最大内容长度 (1MB)
 TELNETCONSOLE_ENABLED = False  # 禁用telnet控制台（安全考虑）
 STATS_CLASS = 'scrapy.statscollectors.MemoryStatsCollector'
 
-# ============================================
-# 特定域名设置
-# ============================================
-
-# 财经网站特定设置
-FINANCIAL_SITES_CONFIG: Dict[str, Dict] = {
-    'eastmoney.com': {
-        'download_delay': 2,
-        'concurrent_requests': 1,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    },
-    'sina.com.cn': {
-        'download_delay': 3,
-        'concurrent_requests': 1,
-        'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15'
-    },
-    'sse.com.cn': {  # 上交所
-        'download_delay': 5,
-        'concurrent_requests': 1,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    },
-    'szse.cn': {  # 深交所
-        'download_delay': 5,
-        'concurrent_requests': 1,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-}
-
-# ============================================
-# 数据源白名单 (Legal Compliance)
-# ============================================
-# 只爬取明确允许的数据源
-ALLOWED_DOMAINS_WHITELIST = [
-    # 公开的财经新闻网站
-    'eastmoney.com',  # 东方财富
-    'sina.com.cn',    # 新浪财经 
-    '163.com',        # 网易财经
-    'sohu.com',       # 搜狐财经
-    
-    # 官方机构网站
-    'sse.com.cn',     # 上海证券交易所
-    'szse.cn',        # 深圳证券交易所
-    'csrc.gov.cn',    # 证监会
-    'pbc.gov.cn',     # 央行
-    
-    # 专业财经媒体
-    'caijing.com.cn', # 财经网
-    'yicai.com',      # 第一财经
-    'cls.cn',         # 财联社
-    'wallstreetcn.com' # 华尔街见闻
-]
-
-# 严格域名验证
-ALLOWED_DOMAINS_ONLY = True
-
 # Request meta settings
 DEFAULT_REQUEST_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'DNT': '1',  # Do Not Track
     'Cache-Control': 'no-cache',
 }

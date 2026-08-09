@@ -8,6 +8,7 @@ CRAWLER_ROOT = Path(__file__).resolve().parents[1] / "crawler"
 sys.path.insert(0, str(CRAWLER_ROOT))
 
 from qsou_crawler.adapters import AdapterRegistry, DocumentReference, ResponsePayload
+from qsou_crawler import settings as crawler_settings
 
 
 class SourceAdapterContractTest(unittest.TestCase):
@@ -21,6 +22,30 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertEqual(len({item["source_id"] for item in catalog}), 9)
         self.assertTrue(all(item["adapter_id"] for item in catalog))
         self.assertTrue(all(item["adapter_version"] == "1.0.0" for item in catalog))
+
+    def test_production_crawler_exposes_only_the_versioned_adapter_path(self):
+        self.assertEqual(
+            crawler_settings.SPIDER_MODULES,
+            ["qsou_crawler.spiders.source_adapter_spider"],
+        )
+        self.assertEqual(
+            crawler_settings.DOWNLOADER_MIDDLEWARES,
+            {"qsou_crawler.middlewares.RawEvidenceDownloaderMiddleware": 540},
+        )
+        self.assertEqual(
+            crawler_settings.SPIDER_MIDDLEWARES,
+            {"qsou_crawler.middlewares.EvidenceLinkMiddleware": 100},
+        )
+        self.assertEqual(
+            list(crawler_settings.ITEM_PIPELINES),
+            [
+                "qsou_crawler.pipelines.data_processing_pipeline.ValidationPipeline",
+                "qsou_crawler.pipelines.data_processing_pipeline.DataProcessingPipeline",
+            ],
+        )
+        self.assertTrue(crawler_settings.ROBOTSTXT_OBEY)
+        self.assertIn("qsou.szlk.uk", crawler_settings.USER_AGENT)
+        self.assertFalse(crawler_settings.QSOU_OUTBOX_DISPATCH_ENABLED)
 
     def test_primary_announcement_adapters_discover_official_pdf_details(self):
         samples = {

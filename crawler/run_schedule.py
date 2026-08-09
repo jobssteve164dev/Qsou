@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,7 @@ from qsou_crawler.adapters import AdapterRegistry
 
 DATA_ROOT = Path(os.getenv("QSOU_DATA_ROOT", "/var/lib/qsou"))
 STATUS_PATH = DATA_ROOT / "collector-status.json"
+CRAWLER_ROOT = Path(__file__).resolve().parent
 POLL_SECONDS = max(30, int(os.getenv("QSOU_CRAWL_POLL_SECONDS", "60")))
 SOURCE_IDS = [
     value.strip()
@@ -117,6 +119,8 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
     try:
         completed = subprocess.run(
             [
+                sys.executable,
+                "-m",
                 "scrapy",
                 "crawl",
                 "source_adapter",
@@ -127,7 +131,7 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
                 "-L",
                 "INFO",
             ],
-            cwd="/app/crawler",
+            cwd=CRAWLER_ROOT,
             check=False,
         )
         if report_path.is_file():

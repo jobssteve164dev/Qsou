@@ -50,3 +50,5 @@ class ExampleAdapter(NewsHTMLAdapter):
 - 逐源操作入口：`POST /api/v1/data/adapter-runs/{source_id}/trigger`；持久请求由同一调度器认领，禁用或待授权来源不能触发。
 
 旧 `crawler/plugins/` 与按 Spider 名称扫描的加载器不再属于生产路径。保留的历史代码不能被当作正式适配器，也不会被统一调度器发现。
+
+生产 Scrapy 设置只加载统一 `source_adapter`，中间件只负责解析前原始证据归档和证据身份关联。来源级请求头应写在相应适配器的 `RequestSpec` 中；不得通过随机 UA、代理或反检测中间件改变全网行为，也不得用标题级内存去重替代来源文档身份和内容版本。
