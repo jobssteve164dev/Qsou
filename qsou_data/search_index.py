@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
+from datetime import date, datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from elasticsearch import Elasticsearch, helpers
@@ -28,6 +31,42 @@ INDEX_MAPPINGS = {
     }
 }
 INDEX_SETTINGS = {"number_of_shards": 1, "number_of_replicas": 0}
+
+
+def normalize_index_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("\x00", " ")
+
+
+def normalize_index_date(value: Any) -> str | int | float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+
+    text = normalize_index_text(value).strip()
+    if not text:
+        return None
+    if re.fullmatch(r"[0-9]{8}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", text):
+        return datetime.strptime(text, "%Y%m%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        ).isoformat()
+
+    candidate = text.replace(" ", "T", 1)
+    try:
+        return datetime.fromisoformat(candidate.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        try:
+            return date.fromisoformat(candidate).isoformat()
+        except ValueError:
+            return None
 
 
 class ElasticsearchIndex:
@@ -68,6 +107,7 @@ class ElasticsearchIndex:
         projection_generation: str | None = None,
     ) -> list[str]:
         indexed: list[str] = []
+        failures: list[dict[str, Any]] = []
         actions = (
             self._action(document, projection_generation=projection_generation)
             for document in documents
@@ -75,12 +115,25 @@ class ElasticsearchIndex:
         for succeeded, result in helpers.streaming_bulk(
             self.client,
             actions,
-            raise_on_error=True,
+            raise_on_error=False,
             refresh=False,
         ):
+            operation = next(iter(result.values()))
             if succeeded:
-                operation = next(iter(result.values()))
                 indexed.append(str(operation["_id"]))
+                continue
+            failures.append(
+                {
+                    "id": str(operation.get("_id") or ""),
+                    "status": operation.get("status"),
+                    "error": operation.get("error"),
+                }
+            )
+        if failures:
+            raise RuntimeError(
+                f"Elasticsearch 拒绝 {len(failures)} 个文档: "
+                + json.dumps(failures[:5], ensure_ascii=False, default=str)
+            )
         return indexed
 
     def delete_stale(self, projection_generation: str) -> int:
@@ -117,27 +170,42 @@ class ElasticsearchIndex:
         *,
         projection_generation: str | None = None,
     ) -> dict[str, Any]:
-        content_version_id = str(document.get("content_version_id") or document.get("id") or "")
+        content_version_id = normalize_index_text(
+            document.get("content_version_id") or document.get("id")
+        )
         if not content_version_id:
             raise RuntimeError("标准文档缺少 content_version_id")
-        content = str(document.get("content") or "")
-        source_id = str(document.get("source_id") or "")
+        content = normalize_index_text(document.get("content"))
+        source_id = normalize_index_text(document.get("source_id"))
+        raw_tags = document.get("tags") or []
+        if isinstance(raw_tags, str):
+            raw_tags = [raw_tags]
         source = {
             "content_version_id": content_version_id,
-            "canonical_document_id": document.get("canonical_document_id"),
-            "title": str(document.get("title") or ""),
+            "canonical_document_id": normalize_index_text(
+                document.get("canonical_document_id")
+            )
+            or None,
+            "title": normalize_index_text(document.get("title")),
             "content": content,
             "summary": content[:300],
-            "source": document.get("source") or source_id,
+            "source": normalize_index_text(document.get("source") or source_id),
             "source_id": source_id,
-            "url": document.get("url"),
-            "published_at": document.get("source_published_at") or document.get("publish_time"),
-            "fetched_at": document.get("fetched_at"),
-            "tags": list(document.get("tags") or []),
-            "raw_object_id": document.get("raw_object_id"),
+            "url": normalize_index_text(document.get("url")) or None,
+            "published_at": normalize_index_date(
+                document.get("source_published_at") or document.get("publish_time")
+            ),
+            "fetched_at": normalize_index_date(document.get("fetched_at")),
+            "tags": [
+                normalized
+                for tag in raw_tags
+                if (normalized := normalize_index_text(tag).strip())
+            ],
+            "raw_object_id": normalize_index_text(document.get("raw_object_id")) or None,
             "active": bool(document.get("active", True)),
-            "title_suggest": str(document.get("title") or ""),
         }
+        if source["title"]:
+            source["title_suggest"] = source["title"]
         if projection_generation:
             source["projection_generation"] = projection_generation
         return {

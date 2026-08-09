@@ -24,7 +24,11 @@ from qsou_data.migration_state import (
     required_migrations,
 )
 from qsou_data.schema import metadata
-from qsou_data.search_index import ElasticsearchIndex, INDEX_MAPPINGS
+from qsou_data.search_index import (
+    ElasticsearchIndex,
+    INDEX_MAPPINGS,
+    normalize_index_date,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -226,6 +230,57 @@ class ElasticsearchProjectionTest(unittest.TestCase):
         self.assertEqual(action["_source"]["raw_object_id"], "raw-1")
         self.assertFalse(action["_source"]["active"])
         self.assertEqual(INDEX_MAPPINGS["properties"]["active"]["type"], "boolean")
+
+    def test_projection_normalizes_source_dates_and_nul_text(self):
+        self.assertEqual(
+            normalize_index_date("20260807T00:00:00Z"),
+            "2026-08-07T00:00:00+00:00",
+        )
+        self.assertEqual(
+            normalize_index_date("2026-08-10 00:00:00.0"),
+            "2026-08-10T00:00:00",
+        )
+        self.assertIsNone(normalize_index_date("not-a-date"))
+
+        index = ElasticsearchIndex.__new__(ElasticsearchIndex)
+        index.alias = "qsou_documents"
+        action = index._action(
+            {
+                "content_version_id": "version-1",
+                "title": "公告",
+                "content": "含有\x00控制符",
+                "source_published_at": "20260807T00:00:00Z",
+                "fetched_at": "2026-08-09T00:00:00+00:00",
+            }
+        )
+        self.assertNotIn("\x00", action["_source"]["content"])
+        self.assertEqual(
+            action["_source"]["published_at"],
+            "2026-08-07T00:00:00+00:00",
+        )
+
+    def test_bulk_failure_reports_rejected_document_reason(self):
+        index = ElasticsearchIndex.__new__(ElasticsearchIndex)
+        index.alias = "qsou_documents"
+        index.client = object()
+        rejected = {
+            "index": {
+                "_id": "version-1",
+                "status": 400,
+                "error": {
+                    "type": "document_parsing_exception",
+                    "reason": "failed to parse field [published_at]",
+                },
+            }
+        }
+        with patch(
+            "qsou_data.search_index.helpers.streaming_bulk",
+            return_value=iter([(False, rejected)]),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "version-1.*published_at",
+        ):
+            index.index_documents([{"content_version_id": "version-1"}])
 
     def test_cycle_reconciles_all_versions_without_rewriting_outbox_state(self):
         class Store:
