@@ -1,0 +1,67 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e55]:
+    - link "跳到主要内容" [ref=e56] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e57]:
+      - generic [ref=e58]:
+        - link "Q QSou 自主投资数据" [ref=e59] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e60]: Q
+          - generic [ref=e61]:
+            - generic [ref=e62]: QSou
+            - generic [ref=e63]: 自主投资数据
+        - navigation "主导航" [ref=e64]:
+          - link "搜索" [ref=e65] [cursor=pointer]:
+            - /url: /
+          - link "数据资产" [ref=e70] [cursor=pointer]:
+            - /url: /data
+        - generic [ref=e77]:
+          - generic [ref=e78]: admin
+          - generic [ref=e79]: 私人空间
+        - button "退出登录" [ref=e80] [cursor=pointer]
+    - main [ref=e84]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - paragraph [ref=e88]: 只搜索已经保存的数据
+          - heading "找到事实，也找到它的来源。" [level=1] [ref=e89]
+          - paragraph [ref=e90]: 每条结果都来自你的数据资产，并保留来源、采集时间和原始证据。
+        - search [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: 搜索我的数据
+            - textbox "搜索我的数据" [ref=e95]:
+              - /placeholder: 输入公司、主题、公告或事件
+            - generic [ref=e96]: 筛选来源
+            - combobox "筛选来源" [ref=e97]:
+              - option "全部来源" [selected]
+              - option "财经网"
+              - option "巨潮资讯"
+              - option "东方财富"
+              - option "网易财经"
+              - option "新浪财经"
+              - option "搜狐财经"
+              - option "上海证券交易所"
+              - option "深圳证券交易所"
+              - option "第一财经"
+            - button "搜索" [ref=e98] [cursor=pointer]
+      - generic [ref=e100]:
+        - generic [ref=e107]:
+          - heading "你的资料库已经可以搜索" [level=2] [ref=e108]
+          - paragraph [ref=e109]: 当前有 84 份可搜索文档，每份文档都能回到已保存的原始证据。
+          - link "查看数据资产" [ref=e110] [cursor=pointer]:
+            - /url: /data
+        - generic [ref=e113]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: 采集状态
+            - generic [ref=e117]: 正在采集
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - term [ref=e121]: 登记来源
+              - definition [ref=e122]: "9"
+            - generic [ref=e123]:
+              - term [ref=e124]: 原始证据
+              - definition [ref=e125]: "186"
+    - contentinfo [ref=e126]:
+      - generic [ref=e127]:
+        - generic [ref=e128]: QSou · 你的数据，始终可追溯、可导出
+        - generic [ref=e129]: 搜索结果不构成投资建议
+  - alert [ref=e54]: 搜索我的投资数据 · QSou

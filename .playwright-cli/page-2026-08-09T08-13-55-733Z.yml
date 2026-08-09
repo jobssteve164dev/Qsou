@@ -1,0 +1,536 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e131]:
+    - link "跳到主要内容" [ref=e132] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e133]:
+      - generic [ref=e134]:
+        - link "Q QSou 自主投资数据" [ref=e135] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e136]: Q
+          - generic [ref=e137]:
+            - generic [ref=e138]: QSou
+            - generic [ref=e139]: 自主投资数据
+        - navigation "主导航" [ref=e140]:
+          - link "搜索" [ref=e141] [cursor=pointer]:
+            - /url: /
+          - link "数据资产" [ref=e146] [cursor=pointer]:
+            - /url: /data
+        - generic [ref=e153]:
+          - generic [ref=e154]: admin
+          - generic [ref=e155]: 私人空间
+        - button "退出登录" [ref=e156] [cursor=pointer]
+    - main [ref=e160]:
+      - generic [ref=e162]:
+        - generic [ref=e163]:
+          - paragraph [ref=e164]: 数据资产
+          - heading "我真正掌握了什么" [level=1] [ref=e165]
+          - paragraph [ref=e166]: 查看来源、采集状态、原始证据和文档版本。数字只来自实际保存的数据。
+        - generic [ref=e167]:
+          - button "刷新" [ref=e168] [cursor=pointer]
+          - link "导出 JSONL" [ref=e174] [cursor=pointer]:
+            - /url: /api/v1/data/export
+      - generic [ref=e178]:
+        - generic [ref=e179]:
+          - generic [ref=e180]:
+            - generic [ref=e181]: 登记来源
+            - generic [ref=e186]: "9"
+          - generic [ref=e187]:
+            - generic [ref=e188]: 原始证据
+            - generic [ref=e194]: "444"
+          - generic [ref=e195]:
+            - generic [ref=e196]: 可搜索文档
+            - generic [ref=e202]: "119"
+          - generic [ref=e203]:
+            - generic [ref=e204]: 保留版本
+            - generic [ref=e209]: "210"
+        - generic [ref=e211]:
+          - generic [ref=e214]:
+            - heading "部分采集任务失败" [level=2] [ref=e215]
+            - paragraph [ref=e216]: 采集是持续任务；失败状态不会被伪装成“没有新数据”。
+          - generic [ref=e217]:
+            - generic [ref=e218]:
+              - term [ref=e219]: 最近完成
+              - definition [ref=e220]: 2026/8/9 08:13:25
+            - generic [ref=e221]:
+              - term [ref=e222]: 下次检查
+              - definition [ref=e223]: 2026/8/9 08:14:25
+        - generic [ref=e224]:
+          - generic [ref=e225]:
+            - heading "情报来源网络" [level=2] [ref=e226]
+            - paragraph [ref=e227]: 只有最近一轮完整获取已发现详情并生成文档，才会显示为正常。
+          - generic [ref=e228]:
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e229]:
+              - generic [ref=e230]:
+                - generic [ref=e231]:
+                  - heading "财经网" [level=3] [ref=e232]
+                  - paragraph [ref=e233]: 补充来源 · 采集规则 v1.0.0
+                - generic [ref=e234]: 详情入库正常
+              - paragraph [ref=e235]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e236]:
+                - generic [ref=e237]:
+                  - term [ref=e238]: 原始证据
+                  - definition [ref=e239]: "16"
+                - generic [ref=e240]:
+                  - term [ref=e241]: 发现详情
+                  - definition [ref=e242]: "12"
+                - generic [ref=e243]:
+                  - term [ref=e244]: 可搜索文档
+                  - definition [ref=e245]: "12"
+              - generic [ref=e246]:
+                - generic [ref=e247]: 最近完成
+                - generic [ref=e248]: 2026/8/9 08:11:01
+              - button "立即采集" [ref=e249] [cursor=pointer]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e255]:
+              - generic [ref=e256]:
+                - generic [ref=e257]:
+                  - heading "巨潮资讯" [level=3] [ref=e258]
+                  - paragraph [ref=e259]: 一手来源 · 采集规则 v1.0.0
+                - generic [ref=e260]: 详情入库正常
+              - paragraph [ref=e261]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e262]:
+                - generic [ref=e263]:
+                  - term [ref=e264]: 原始证据
+                  - definition [ref=e265]: "19"
+                - generic [ref=e266]:
+                  - term [ref=e267]: 发现详情
+                  - definition [ref=e268]: "12"
+                - generic [ref=e269]:
+                  - term [ref=e270]: 可搜索文档
+                  - definition [ref=e271]: "12"
+              - generic [ref=e272]:
+                - generic [ref=e273]: 最近完成
+                - generic [ref=e274]: 2026/8/9 08:09:34
+              - button "立即采集" [ref=e275] [cursor=pointer]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e281]:
+              - generic [ref=e282]:
+                - generic [ref=e283]:
+                  - heading "东方财富" [level=3] [ref=e284]
+                  - paragraph [ref=e285]: 补充来源 · 采集规则 v1.1.0
+                - generic [ref=e286]: 详情入库正常
+              - paragraph [ref=e287]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e288]:
+                - generic [ref=e289]:
+                  - term [ref=e290]: 原始证据
+                  - definition [ref=e291]: "135"
+                - generic [ref=e292]:
+                  - term [ref=e293]: 发现详情
+                  - definition [ref=e294]: "12"
+                - generic [ref=e295]:
+                  - term [ref=e296]: 可搜索文档
+                  - definition [ref=e297]: "13"
+              - generic [ref=e298]:
+                - generic [ref=e299]: 最近完成
+                - generic [ref=e300]: 2026/8/9 08:12:37
+              - button "立即采集" [ref=e301] [cursor=pointer]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e307]:
+              - generic [ref=e308]:
+                - generic [ref=e309]:
+                  - heading "网易财经" [level=3] [ref=e310]
+                  - paragraph [ref=e311]: 补充来源 · 采集规则 v1.1.0
+                - generic [ref=e312]: 详情入库正常
+              - paragraph [ref=e313]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e314]:
+                - generic [ref=e315]:
+                  - term [ref=e316]: 原始证据
+                  - definition [ref=e317]: "124"
+                - generic [ref=e318]:
+                  - term [ref=e319]: 发现详情
+                  - definition [ref=e320]: "12"
+                - generic [ref=e321]:
+                  - term [ref=e322]: 可搜索文档
+                  - definition [ref=e323]: "12"
+              - generic [ref=e324]:
+                - generic [ref=e325]: 最近完成
+                - generic [ref=e326]: 2026/8/9 08:13:02
+              - button "立即采集" [ref=e327] [cursor=pointer]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e335]:
+                  - heading "新浪财经" [level=3] [ref=e336]
+                  - paragraph [ref=e337]: 补充来源 · 采集规则 v1.1.0
+                - generic [ref=e338]: 详情入库正常
+              - paragraph [ref=e339]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e340]:
+                - generic [ref=e341]:
+                  - term [ref=e342]: 原始证据
+                  - definition [ref=e343]: "27"
+                - generic [ref=e344]:
+                  - term [ref=e345]: 发现详情
+                  - definition [ref=e346]: "12"
+                - generic [ref=e347]:
+                  - term [ref=e348]: 可搜索文档
+                  - definition [ref=e349]: "12"
+              - generic [ref=e350]:
+                - generic [ref=e351]: 最近完成
+                - generic [ref=e352]: 2026/8/9 08:13:25
+              - button "立即采集" [ref=e353] [cursor=pointer]
+            - article "来源不允许通用自动采集，接入获授权的数据通道后才能运行" [ref=e359]:
+              - generic [ref=e360]:
+                - generic [ref=e361]:
+                  - heading "搜狐财经" [level=3] [ref=e362]
+                  - paragraph [ref=e363]: 补充来源 · 采集规则 v1.0.0
+                - generic [ref=e364]: 待授权
+              - paragraph [ref=e365]: 来源不允许通用自动采集，接入获授权的数据通道后才能运行
+              - generic [ref=e366]:
+                - generic [ref=e367]:
+                  - term [ref=e368]: 原始证据
+                  - definition [ref=e369]: "4"
+                - generic [ref=e370]:
+                  - term [ref=e371]: 发现详情
+                  - definition [ref=e372]: "0"
+                - generic [ref=e373]:
+                  - term [ref=e374]: 可搜索文档
+                  - definition [ref=e375]: "0"
+              - generic [ref=e376]:
+                - generic [ref=e377]: 最近完成
+                - generic [ref=e378]: 尚无记录
+              - button "需要授权通道" [disabled] [ref=e379]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e385]:
+              - generic [ref=e386]:
+                - generic [ref=e387]:
+                  - heading "上海证券交易所" [level=3] [ref=e388]
+                  - paragraph [ref=e389]: 一手来源 · 采集规则 v1.1.0
+                - generic [ref=e390]: 详情入库正常
+              - paragraph [ref=e391]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e392]:
+                - generic [ref=e393]:
+                  - term [ref=e394]: 原始证据
+                  - definition [ref=e395]: "54"
+                - generic [ref=e396]:
+                  - term [ref=e397]: 发现详情
+                  - definition [ref=e398]: "12"
+                - generic [ref=e399]:
+                  - term [ref=e400]: 可搜索文档
+                  - definition [ref=e401]: "18"
+              - generic [ref=e402]:
+                - generic [ref=e403]: 最近完成
+                - generic [ref=e404]: 2026/8/9 07:58:47
+              - button "立即采集" [ref=e405] [cursor=pointer]
+            - article "最近一轮完整获取了全部已发现详情，并生成可搜索文档" [ref=e411]:
+              - generic [ref=e412]:
+                - generic [ref=e413]:
+                  - heading "深圳证券交易所" [level=3] [ref=e414]
+                  - paragraph [ref=e415]: 一手来源 · 采集规则 v1.0.0
+                - generic [ref=e416]: 详情入库正常
+              - paragraph [ref=e417]: 最近一轮完整获取了全部已发现详情，并生成可搜索文档
+              - generic [ref=e418]:
+                - generic [ref=e419]:
+                  - term [ref=e420]: 原始证据
+                  - definition [ref=e421]: "31"
+                - generic [ref=e422]:
+                  - term [ref=e423]: 发现详情
+                  - definition [ref=e424]: "12"
+                - generic [ref=e425]:
+                  - term [ref=e426]: 可搜索文档
+                  - definition [ref=e427]: "24"
+              - generic [ref=e428]:
+                - generic [ref=e429]: 最近完成
+                - generic [ref=e430]: 2026/8/9 07:59:23
+              - button "立即采集" [ref=e431] [cursor=pointer]
+            - article "最近一轮存在详情获取或解析缺口，需要检查" [ref=e437]:
+              - generic [ref=e438]:
+                - generic [ref=e439]:
+                  - heading "第一财经" [level=3] [ref=e440]
+                  - paragraph [ref=e441]: 补充来源 · 采集规则 v1.1.0
+                - generic [ref=e442]: 需要检查
+              - paragraph [ref=e443]: 最近一轮存在详情获取或解析缺口，需要检查
+              - generic [ref=e444]:
+                - generic [ref=e445]:
+                  - term [ref=e446]: 原始证据
+                  - definition [ref=e447]: "34"
+                - generic [ref=e448]:
+                  - term [ref=e449]: 发现详情
+                  - definition [ref=e450]: "12"
+                - generic [ref=e451]:
+                  - term [ref=e452]: 可搜索文档
+                  - definition [ref=e453]: "16"
+              - generic [ref=e454]:
+                - generic [ref=e455]: 最近完成
+                - generic [ref=e456]: 2026/8/9 07:59:50
+              - button "立即采集" [ref=e457] [cursor=pointer]
+        - generic [ref=e463]:
+          - generic [ref=e465]:
+            - heading "最近保存的证据" [level=2] [ref=e466]
+            - paragraph [ref=e467]: 原始响应按内容标识保存，不用搜索索引替代证据。
+          - generic [ref=e468]:
+            - article [ref=e469]:
+              - generic [ref=e470]:
+                - generic [ref=e471]: https://finance.sina.com.cn/
+                - generic [ref=e472]:
+                  - generic [ref=e473]: 新浪财经
+                  - generic [ref=e474]: 2026/8/9 08:13:06
+                  - generic [ref=e475]: 抓取 1 次
+              - link "查看归档证据" [ref=e476] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/24edf8239ab093f1acae57d2f9201f58c15d6dd5f217b01e41766659ab85e0ad/content
+            - article [ref=e481]:
+              - generic [ref=e482]:
+                - generic [ref=e483]: https://www.163.com/money/article/L161NFL400258J1R.html
+                - generic [ref=e484]:
+                  - generic [ref=e485]: 网易财经
+                  - generic [ref=e486]: 2026/8/9 08:13:01
+                  - generic [ref=e487]: 抓取 1 次
+              - link "查看归档证据" [ref=e488] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/4de46c6e04f244621bf96ddf6eab6a23a22852f2deca0ca782a675e262bef109/content
+            - article [ref=e493]:
+              - generic [ref=e494]:
+                - generic [ref=e495]: https://www.163.com/money/article/KV7FMUKK00258J1R.html
+                - generic [ref=e496]:
+                  - generic [ref=e497]: 网易财经
+                  - generic [ref=e498]: 2026/8/9 08:12:59
+                  - generic [ref=e499]: 抓取 1 次
+              - link "查看归档证据" [ref=e500] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/8561db771f9bd75280a3cfd0655b0c66e11de2efc5d6e8a65b3e3dc02baa7329/content
+            - article [ref=e505]:
+              - generic [ref=e506]:
+                - generic [ref=e507]: https://www.163.com/money/article/KPJCIECI00258J1R.html
+                - generic [ref=e508]:
+                  - generic [ref=e509]: 网易财经
+                  - generic [ref=e510]: 2026/8/9 08:12:58
+                  - generic [ref=e511]: 抓取 1 次
+              - link "查看归档证据" [ref=e512] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/28a1f54fdc7e0dd025dc184d392d0f91ee17aee874af9eeb384f401dd6a873af/content
+            - article [ref=e517]:
+              - generic [ref=e518]:
+                - generic [ref=e519]: https://www.163.com/money/article/L3NT81TP00258105.html
+                - generic [ref=e520]:
+                  - generic [ref=e521]: 网易财经
+                  - generic [ref=e522]: 2026/8/9 08:12:57
+                  - generic [ref=e523]: 抓取 1 次
+              - link "查看归档证据" [ref=e524] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/b85c012628d5785303972c1c15a9ebc72bbc610a237bc4fd8d17a09224620a6b/content
+            - article [ref=e529]:
+              - generic [ref=e530]:
+                - generic [ref=e531]: https://www.163.com/money/article/L3LL45A800258105.html
+                - generic [ref=e532]:
+                  - generic [ref=e533]: 网易财经
+                  - generic [ref=e534]: 2026/8/9 08:12:55
+                  - generic [ref=e535]: 抓取 1 次
+              - link "查看归档证据" [ref=e536] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/406069095b96387b3d97f42e14d728387703d1e0106c5e2a9afc588031bb0b08/content
+            - article [ref=e541]:
+              - generic [ref=e542]:
+                - generic [ref=e543]: https://www.163.com/money/article/L3J2RDD800258105.html
+                - generic [ref=e544]:
+                  - generic [ref=e545]: 网易财经
+                  - generic [ref=e546]: 2026/8/9 08:12:54
+                  - generic [ref=e547]: 抓取 1 次
+              - link "查看归档证据" [ref=e548] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/bd6d716a1b4c9098771997c9df2363f5fe25f233a0f1aac3f84fe55964a48adf/content
+            - article [ref=e553]:
+              - generic [ref=e554]:
+                - generic [ref=e555]: https://www.163.com/money/article/L2UMLFBU00258105.html
+                - generic [ref=e556]:
+                  - generic [ref=e557]: 网易财经
+                  - generic [ref=e558]: 2026/8/9 08:12:53
+                  - generic [ref=e559]: 抓取 1 次
+              - link "查看归档证据" [ref=e560] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/8cf08259dee2c7aa2592067217b563ba2af51f49717d4e52eb09b5ce9dcb9778/content
+            - article [ref=e565]:
+              - generic [ref=e566]:
+                - generic [ref=e567]: https://www.163.com/money/article/KQ0GK3VI00258105.html
+                - generic [ref=e568]:
+                  - generic [ref=e569]: 网易财经
+                  - generic [ref=e570]: 2026/8/9 08:12:51
+                  - generic [ref=e571]: 抓取 1 次
+              - link "查看归档证据" [ref=e572] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/931e3e6045e6cd438b9c5cb6b15c6f09991253df2b541783223be965e5afb0be/content
+            - article [ref=e577]:
+              - generic [ref=e578]:
+                - generic [ref=e579]: https://www.163.com/money/article/KQNQS710002590RK.html
+                - generic [ref=e580]:
+                  - generic [ref=e581]: 网易财经
+                  - generic [ref=e582]: 2026/8/9 08:12:49
+                  - generic [ref=e583]: 抓取 1 次
+              - link "查看归档证据" [ref=e584] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/894b85fba06d7d2ca22a50130fb04c7c03dc4426df440edacb444020b0114a5d/content
+            - article [ref=e589]:
+              - generic [ref=e590]:
+                - generic [ref=e591]: https://www.163.com/money/article/KQLKU2UG002590RK.html
+                - generic [ref=e592]:
+                  - generic [ref=e593]: 网易财经
+                  - generic [ref=e594]: 2026/8/9 08:12:48
+                  - generic [ref=e595]: 抓取 1 次
+              - link "查看归档证据" [ref=e596] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/39070274ca04b002157573d00b58c203b23283580d4dbc8fff77b807003fb4c0/content
+            - article [ref=e601]:
+              - generic [ref=e602]:
+                - generic [ref=e603]: https://www.163.com/money/article/KPE24P9J00258105.html
+                - generic [ref=e604]:
+                  - generic [ref=e605]: 网易财经
+                  - generic [ref=e606]: 2026/8/9 08:12:46
+                  - generic [ref=e607]: 抓取 1 次
+              - link "查看归档证据" [ref=e608] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/51b0f607b359ee8c07e0a0e72cb64422de356f840df1517be4425547b649d149/content
+            - article [ref=e613]:
+              - generic [ref=e614]:
+                - generic [ref=e615]: https://www.163.com/money/article/L38VDPMN00258J1R.html
+                - generic [ref=e616]:
+                  - generic [ref=e617]: 网易财经
+                  - generic [ref=e618]: 2026/8/9 08:12:45
+                  - generic [ref=e619]: 抓取 1 次
+              - link "查看归档证据" [ref=e620] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/e6b8c255dc98052d7cc32d2b76699297c334abc95aadbf2032faf16dc593140d/content
+            - article [ref=e625]:
+              - generic [ref=e626]:
+                - generic [ref=e627]: https://money.163.com/
+                - generic [ref=e628]:
+                  - generic [ref=e629]: 网易财经
+                  - generic [ref=e630]: 2026/8/9 08:12:42
+                  - generic [ref=e631]: 抓取 1 次
+              - link "查看归档证据" [ref=e632] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/6c4a119ee9cf3a293ed4f19602f75f2bcb2edfec0caf3a89ebdb835f4eb6f4d3/content
+            - article [ref=e637]:
+              - generic [ref=e638]:
+                - generic [ref=e639]: https://finance.eastmoney.com/a/202608073834493676.html
+                - generic [ref=e640]:
+                  - generic [ref=e641]: 东方财富
+                  - generic [ref=e642]: 2026/8/9 08:12:36
+                  - generic [ref=e643]: 抓取 1 次
+              - link "查看归档证据" [ref=e644] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/695b4b833e50e20855cbbdf0333d364b8ee4568e0f9078d030d0f6c400c305f8/content
+            - article [ref=e649]:
+              - generic [ref=e650]:
+                - generic [ref=e651]: https://finance.eastmoney.com/a/202608073834455915.html
+                - generic [ref=e652]:
+                  - generic [ref=e653]: 东方财富
+                  - generic [ref=e654]: 2026/8/9 08:12:35
+                  - generic [ref=e655]: 抓取 1 次
+              - link "查看归档证据" [ref=e656] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/cbe3a409c5ed2a1bab5e2f0701a5dba2023914eb4959b5e336bb8e2d0fb1035f/content
+            - article [ref=e661]:
+              - generic [ref=e662]:
+                - generic [ref=e663]: https://finance.eastmoney.com/a/202608063834184950.html
+                - generic [ref=e664]:
+                  - generic [ref=e665]: 东方财富
+                  - generic [ref=e666]: 2026/8/9 08:12:32
+                  - generic [ref=e667]: 抓取 1 次
+              - link "查看归档证据" [ref=e668] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/1ab3f34339e0eccd9fa4006b3c1b47ba7c726372a883531622faf6ac40a34029/content
+            - article [ref=e673]:
+              - generic [ref=e674]:
+                - generic [ref=e675]: https://finance.eastmoney.com/a/202608063834107995.html
+                - generic [ref=e676]:
+                  - generic [ref=e677]: 东方财富
+                  - generic [ref=e678]: 2026/8/9 08:12:31
+                  - generic [ref=e679]: 抓取 1 次
+              - link "查看归档证据" [ref=e680] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/5dd64d2b58acd1d1a172e2e1d740cd7cb1cf6185b3cd846294a4efb967c4f4ae/content
+            - article [ref=e685]:
+              - generic [ref=e686]:
+                - generic [ref=e687]: https://finance.eastmoney.com/a/202608083835847895.html
+                - generic [ref=e688]:
+                  - generic [ref=e689]: 东方财富
+                  - generic [ref=e690]: 2026/8/9 08:12:29
+                  - generic [ref=e691]: 抓取 1 次
+              - link "查看归档证据" [ref=e692] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/46dde2010b171536e5637d1dfc3690d6356cf6a6089a691b39a45c9e2c07e67b/content
+            - article [ref=e697]:
+              - generic [ref=e698]:
+                - generic [ref=e699]: https://finance.eastmoney.com/a/202608073834254568.html
+                - generic [ref=e700]:
+                  - generic [ref=e701]: 东方财富
+                  - generic [ref=e702]: 2026/8/9 08:12:27
+                  - generic [ref=e703]: 抓取 1 次
+              - link "查看归档证据" [ref=e704] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/c59e195d7d60c9374af4d966324638b2470cfd4216c347e0bf6c854e193076f4/content
+            - article [ref=e709]:
+              - generic [ref=e710]:
+                - generic [ref=e711]: https://finance.eastmoney.com/a/202608073834495422.html
+                - generic [ref=e712]:
+                  - generic [ref=e713]: 东方财富
+                  - generic [ref=e714]: 2026/8/9 08:12:26
+                  - generic [ref=e715]: 抓取 1 次
+              - link "查看归档证据" [ref=e716] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/d484a4fd021c9e24f974f64cd8e26feaf8e1bb0fe935ed999029c73963453794/content
+            - article [ref=e721]:
+              - generic [ref=e722]:
+                - generic [ref=e723]: https://finance.eastmoney.com/a/202608073834494342.html
+                - generic [ref=e724]:
+                  - generic [ref=e725]: 东方财富
+                  - generic [ref=e726]: 2026/8/9 08:12:24
+                  - generic [ref=e727]: 抓取 1 次
+              - link "查看归档证据" [ref=e728] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/5082a3b78cf0a6327fb2f2d232ed0881a9071d295f75bed8186b21b9720358b7/content
+            - article [ref=e733]:
+              - generic [ref=e734]:
+                - generic [ref=e735]: https://finance.eastmoney.com/a/202608073834266961.html
+                - generic [ref=e736]:
+                  - generic [ref=e737]: 东方财富
+                  - generic [ref=e738]: 2026/8/9 08:12:22
+                  - generic [ref=e739]: 抓取 1 次
+              - link "查看归档证据" [ref=e740] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/3339da444adb432c826e3fdb11ce74b57feb69563fabe1cc3102d52f50a2c7c3/content
+            - article [ref=e745]:
+              - generic [ref=e746]:
+                - generic [ref=e747]: https://finance.eastmoney.com/a/202608073834284382.html
+                - generic [ref=e748]:
+                  - generic [ref=e749]: 东方财富
+                  - generic [ref=e750]: 2026/8/9 08:12:20
+                  - generic [ref=e751]: 抓取 1 次
+              - link "查看归档证据" [ref=e752] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/aa161dd578acd62e31a80560279cf6ed2a78dd98c7423fa60bdb036982c65184/content
+            - article [ref=e757]:
+              - generic [ref=e758]:
+                - generic [ref=e759]: https://finance.eastmoney.com/a/202608063834143196.html
+                - generic [ref=e760]:
+                  - generic [ref=e761]: 东方财富
+                  - generic [ref=e762]: 2026/8/9 08:12:19
+                  - generic [ref=e763]: 抓取 1 次
+              - link "查看归档证据" [ref=e764] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/645e0d73ac4bf9541c7d375c1af08b7ce5be4772fec6675c77ca682927fe5ed1/content
+            - article [ref=e769]:
+              - generic [ref=e770]:
+                - generic [ref=e771]: https://finance.eastmoney.com/a/202608063834145493.html
+                - generic [ref=e772]:
+                  - generic [ref=e773]: 东方财富
+                  - generic [ref=e774]: 2026/8/9 08:12:13
+                  - generic [ref=e775]: 抓取 1 次
+              - link "查看归档证据" [ref=e776] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/572f7dd3fd2550eed2be2023983a9b7cf89b3685b86b8933fc09d625a9c4587f/content
+            - article [ref=e781]:
+              - generic [ref=e782]:
+                - generic [ref=e783]: https://finance.eastmoney.com/
+                - generic [ref=e784]:
+                  - generic [ref=e785]: 东方财富
+                  - generic [ref=e786]: 2026/8/9 08:12:10
+                  - generic [ref=e787]: 抓取 1 次
+              - link "查看归档证据" [ref=e788] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/2a1c496ae90027589949f8c3e940fd412d156af33b9ce2c053fe3750f5bd7624/content
+            - article [ref=e793]:
+              - generic [ref=e794]:
+                - generic [ref=e795]: https://www.eastmoney.com/
+                - generic [ref=e796]:
+                  - generic [ref=e797]: 东方财富
+                  - generic [ref=e798]: 2026/8/9 08:12:08
+                  - generic [ref=e799]: 抓取 1 次
+              - link "查看归档证据" [ref=e800] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/d78bc25df72476b7d6d628a316449426ae01f0d27b8a8e7d11504ec141b2e3c2/content
+            - article [ref=e805]:
+              - generic [ref=e806]:
+                - generic [ref=e807]: https://www.yicai.com/news/103310868.html
+                - generic [ref=e808]:
+                  - generic [ref=e809]: 第一财经
+                  - generic [ref=e810]: 2026/8/9 07:59:33
+                  - generic [ref=e811]: 抓取 1 次
+              - link "查看归档证据" [ref=e812] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/342d5ae3d5d815456f6bc7b7ce8893e2c8d36f7073c67c62a07003a9037d3d15/content
+            - article [ref=e817]:
+              - generic [ref=e818]:
+                - generic [ref=e819]: https://www.yicai.com/news/
+                - generic [ref=e820]:
+                  - generic [ref=e821]: 第一财经
+                  - generic [ref=e822]: 2026/8/9 07:59:31
+                  - generic [ref=e823]: 抓取 1 次
+              - link "查看归档证据" [ref=e824] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/89791b30051995397792c8c6cbd46d0aa2a17719585017dc91da54e5fa3acf8c/content
+        - generic [ref=e829]:
+          - generic [ref=e830]:
+            - heading "现在去搜索已保存的数据" [level=2] [ref=e831]
+            - paragraph [ref=e832]: 搜索结果只来自上面的可搜索文档。
+          - link "开始搜索" [ref=e833] [cursor=pointer]:
+            - /url: /
+    - contentinfo [ref=e836]:
+      - generic [ref=e837]:
+        - generic [ref=e838]: QSou · 你的数据，始终可追溯、可导出
+        - generic [ref=e839]: 搜索结果不构成投资建议
+  - alert [ref=e54]: 数据资产 · QSou

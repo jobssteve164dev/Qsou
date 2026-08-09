@@ -1,0 +1,174 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e840]:
+    - link "跳到主要内容" [ref=e841] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e842]:
+      - generic [ref=e843]:
+        - link "Q QSou" [ref=e844] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e845]: Q
+          - generic [ref=e846]: QSou
+        - navigation "主导航" [ref=e848]:
+          - link "搜索" [ref=e849] [cursor=pointer]:
+            - /url: /
+          - link "数据资产" [ref=e854] [cursor=pointer]:
+            - /url: /data
+        - button "退出登录" [ref=e860] [cursor=pointer]
+    - main [ref=e864]:
+      - generic [ref=e866]:
+        - generic [ref=e867]:
+          - paragraph [ref=e868]: 只搜索已经保存的数据
+          - heading "找到事实，也找到它的来源。" [level=1] [ref=e869]
+          - paragraph [ref=e870]: 每条结果都来自你的数据资产，并保留来源、采集时间和原始证据。
+        - search [ref=e871]:
+          - generic [ref=e872]:
+            - generic [ref=e873]: 搜索我的数据
+            - textbox "搜索我的数据" [ref=e875]:
+              - /placeholder: 输入公司、主题、公告或事件
+              - text: 营业收入
+            - generic [ref=e876]: 筛选来源
+            - combobox "筛选来源" [ref=e877]:
+              - option "全部来源" [selected]
+              - option "财经网"
+              - option "巨潮资讯"
+              - option "东方财富"
+              - option "网易财经"
+              - option "新浪财经"
+              - option "搜狐财经"
+              - option "上海证券交易所"
+              - option "深圳证券交易所"
+              - option "第一财经"
+            - button "搜索" [ref=e878] [cursor=pointer]
+      - generic [ref=e879]:
+        - generic [ref=e910]:
+          - generic [ref=e911]:
+            - heading "搜索结果" [level=2] [ref=e912]
+            - paragraph [ref=e913]: 找到 11 条结果 · 22 毫秒
+          - generic [ref=e914]: 第 1 / 1 页
+        - generic [ref=e915]:
+          - article [ref=e916]:
+            - generic [ref=e917]:
+              - generic [ref=e918]: 东方财富
+              - generic [ref=e919]: 2026/8/9 06:09:06
+            - heading "DeepSeek等参与 宇树科技战略配售名单" [level=3] [ref=e923]
+            - paragraph [ref=e924]: 财经 焦点 股票 新股 期指 期权 行情 数据 全球 美股 港股 期货 外汇 银行 基金 理财 债券 直播 股吧 基金吧 博客 财富号 搜索 方便，快捷 手机查看财经快讯 专业，丰富 一手掌握市场脉搏 提示： 微信扫一扫 分享到您的 朋友圈 随着 宇树科技 IPO发行价确定，其战略配售阵容也浮出水面。 根据 宇树科技 8月6日晚公告，本次初始战略配售20%股份，最终落地全部额度。公司战配阵容囊括国家级长期资金、相关产业龙头企业，战略配售总量808.9286万股。 另外，公司发行价格为150.8元/股。按此发行价预估， 宇树科技 上市时市值约为609.93亿元。 网下询价火热 宇树科技本次公开发行股票4044.6434万股，占发行后公司总股本的比例为10.00%，全部为公开发行新股，公司股东不进行公开发售股份。 根据宇树科技公告，此次询价阶段共收到367家网下投资者管理的12161个配售对象的初步询价报价信息，报价区间为15.20元/股—154.88元/股，拟申购数量总和为737.359亿股。 本次网下发行提交有效报价的网下投资者数量为313家，管理的配售对象个数为11052个，对应的有
+            - generic [ref=e925]:
+              - link "查看归档证据" [ref=e926] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/8d8ec292a3bf1ac82e90bb23df6eb858ac60250e2c958ff09965a1666cf88aa3/content
+              - link "打开原始来源" [ref=e930] [cursor=pointer]:
+                - /url: https://finance.eastmoney.com/a/202608063834143196.html
+          - article [ref=e935]:
+            - generic [ref=e936]:
+              - generic [ref=e937]: 第一财经
+              - generic [ref=e938]: 2026/8/9 03:49:20
+            - heading "科技周报|宇树IPO造就一批新贵，OpenAI撑起微软七成AI收入" [level=3] [ref=e942]
+            - paragraph [ref=e943]: 微信 微博 QQ 分享到微信 打开微信，点击底部的“发现”， 使用“扫一扫”即可将网页分享至朋友圈。 科技周报|宇树IPO造就一批新贵，OpenAI撑起微软七成AI收入 第一财经 2026-08-09 11:49:20 听新闻 作者：一财科技 责编：宁佳彦 宇树科技超百名员工参与IPO，一批90后科技新贵或诞生 8月6日，宇树科技发布首次公开发行股票并在科创板上市发行公告。本次发行价格为150.80元/股，发行的股票数量为4044.64万股，发行后总股本为4.045亿股。按此测算，宇树科技上市时市值约为609.99亿元，高于此前市场预估的超400亿元。根据最新披露的资管计划名单，参与认购宇树科技员工1号资管计划的发行人高级管理人员和核心员工为159名，参与认购宇树科技员工2号资管计划的发行人高级管理人员和核心员工为12名。其中，既有研发技术主管，也有销售、生产等主管，认购金额百万元起。 【点评】多家大厂、投资机构都参与到这场IPO盛宴中，同时有一批年轻的科技新贵或将诞生。招股书显示，发行前宇树科技创始人王兴兴直接与间接合计持股比例为33.3583%。计算下来，王兴兴身家达203.5亿元
+            - generic [ref=e944]:
+              - link "查看归档证据" [ref=e945] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/d3e9e786dd0247e13c8a15c29c5f387053004396e6f431d04a1a296f85251e98/content
+              - link "打开原始来源" [ref=e949] [cursor=pointer]:
+                - /url: https://www.yicai.com/news/103310840.html
+          - article [ref=e954]:
+            - generic [ref=e955]:
+              - generic [ref=e956]: 深圳证券交易所
+              - generic [ref=e957]: 2026/8/8 00:00:00
+            - heading "儒意电影：关于新增2026年度日常关联交易预计的公告" [level=3] [ref=e961]
+            - paragraph [ref=e962]: 1 股票代码：002739 股票简称：儒意电影 公告编号：2026-040 儒意电影娱乐股份有限公司 关于新增 2026 年度日常关联交易预计的公告 本公司及董事会全体成员保证信息披露内容的真实、准确和完整，没有虚假记载、 误导性陈述或重大遗漏。 一、新增日常关联交易基本情况 （一）关联交易概述 儒意电影娱乐股份有限公司（以下简称“公司”）分别于 2026 年 4 月 23 日、2026 年 6 月 24 日召开第七届董事会第十一次会议和 2025 年年度股东会，审议通过了《关于 公司 2026 年度日常关联交易事项的议案》，对公司 2026 年日常关联交易事项进行了预 计，具体内容详见公司 2026 年 4 月 27 日披露于巨潮资讯网（www.cninfo.com.cn）上的 《关于 2026 年度日常关联交易事项的公告》。 鉴于公司董事陈洪涛先生于近日担任大连万达商业管理集团股份有限公司（以下简 称“大连万达商管”）和珠海万达商业管理集团股份有限公司（以下简称“珠海万达商管”） 的董事，根据《深圳证券交易所股票上市规则》，公司与上述公司成为关联方，公司与 上述公司发生的影城租赁、
+            - generic [ref=e963]:
+              - link "查看归档证据" [ref=e964] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/54ef54046e92d56f65596d68188201860c19bdce06998c3740824d2f88800db2/content
+              - link "打开原始来源" [ref=e968] [cursor=pointer]:
+                - /url: https://disc.static.szse.cn/disc/disk03/finalpage/2026-08-08/07b13fe9-c7bf-4696-9e6e-c3a0a7784100.PDF
+          - article [ref=e973]:
+            - generic [ref=e974]:
+              - generic [ref=e975]: 巨潮资讯
+              - generic [ref=e976]: 2026/8/7 16:00:00
+            - heading "杭州惠嘉信息科技有限公司审计报告" [level=3] [ref=e980]
+            - paragraph [ref=e981]: 中国杭州市钱江新城新业路 8 号 UDC 时代大厦 A 座 5-8 层、12 层、23 层 www.zhcpa.cn Floors5-8,12and23,Block A,UDC Times Building,No.8 Xinye Road，Qianjiang New City,Hangzhou Tel.0571-88879999 Fax.0571-88879000 杭州惠嘉信息科技有限公司 审 计 报 告 中国杭州市钱江新城新业路 8 号 UDC 时代大厦 A 座 5-8 层、12 层、23 层 www.zhcpa.cn Floors5-8,12and23,Block A,UDC Times Building,No.8 Xinye Road，Qianjiang New City,Hangzhou Tel.0571-88879999 Fax.0571-88879000 目 录 页 次 一、审计报告 1-5 二、财务报表 6-17 (一) 合并资产负债表 6-7 (二) 合并利润表 8 (三) 合并现金流量表 9 (四) 合并所有者权益变动表 10-12 (五) 母公司资产负债表 13-1
+            - generic [ref=e982]:
+              - link "查看归档证据" [ref=e983] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/119b9fc15b38979fb5c16562f4da6ef709252ee70f30f9721f145eb784bda53b/content
+              - link "打开原始来源" [ref=e987] [cursor=pointer]:
+                - /url: https://static.cninfo.com.cn/finalpage/2026-08-08/1225465230.PDF
+          - article [ref=e992]:
+            - generic [ref=e993]:
+              - generic [ref=e994]: 巨潮资讯
+              - generic [ref=e995]: 2026/8/7 16:00:00
+            - heading "浙江帅丰电器股份有限公司第三届董事会第二十四次会议决议公告" [level=3] [ref=e999]
+            - paragraph [ref=e1000]: 证券代码：605336 证券简称：*ST帅电 公告编号：2026-032 浙江帅丰电器股份有限公司 第三届董事会第二十四次会议决议公告 本公司董事会及全体董事保证本公告内容不存在任何虚假记载、误导性陈 述或者重大遗漏，并对其内容的真实性、准确性和完整性承担法律责任。 一、董事会会议召开情况 浙江帅丰电器股份有限公司（以下简称“公司”）第三届董事会第二十四 次会议于2026年8月7日以现场方式召开，根据公司《董事会议事规则》有关规 定，会议通知于2026年8月2日以通讯方式告知全体董事。本次董事会应参加会 议董事8人，实际参加董事8人，会议由董事长商若云女士召集和主持。会议的 召集和召开程序符合《中华人民共和国公司法》等法律法规和《公司章程》的 有关规定。公司总经理、董事会秘书、其他高级管理人员列席本次董事会会 议。 二、董事会会议审议情况 会议审议通过如下决议： （一）审议通过《关于公司支付现金购买资产暨构成重大资产重组的议案》 公司拟通过支付现金方式收购杭州惠嘉信息科技有限公司（以下简称“惠 嘉科技”）100％股权（以下简称“本次支付现金购买资产”），根据《中华人 民共和国公司法》《
+            - generic [ref=e1001]:
+              - link "查看归档证据" [ref=e1002] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/89f0308531a63dc3359e0a52d96724a536e3622d021e5c5101ea7a952f7971fb/content
+              - link "打开原始来源" [ref=e1006] [cursor=pointer]:
+                - /url: https://static.cninfo.com.cn/finalpage/2026-08-08/1225465235.PDF
+          - article [ref=e1011]:
+            - generic [ref=e1012]:
+              - generic [ref=e1013]: 巨潮资讯
+              - generic [ref=e1014]: 2026/8/7 16:00:00
+            - heading "浙江帅丰电器股份有限公司拟支付现金购买资产所涉及的杭州惠嘉信息科技有限公司股东全部权益价值资产评估报告" [level=3] [ref=e1018]
+            - paragraph [ref=e1019]: 本资产评估报告依据中国资产评估准则编制 浙江帅丰电器股份有限公司拟支付现金购买资产所涉及的 杭州惠嘉信息科技有限公司股东全部权益价值 资产评估报告 金证评报字【2026】A0658 号 （共一册，第一册） 金证（上海）资产评估有限公司 2026 年 08 月 07 日 金证评报字【2026】A0658 号 资产评估报告 -1- 目 录 声 明 .......................................................................................................................................................... 2 摘 要 .......................................................................................................................................................... 3 正 文 .....
+            - generic [ref=e1020]:
+              - link "查看归档证据" [ref=e1021] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/8c6d5dbafbae3826715f4d2c8464e1ca24d171683769b7750d50f7785d95bf2c/content
+              - link "打开原始来源" [ref=e1025] [cursor=pointer]:
+                - /url: https://static.cninfo.com.cn/finalpage/2026-08-08/1225465236.PDF
+          - article [ref=e1030]:
+            - generic [ref=e1031]:
+              - generic [ref=e1032]: 巨潮资讯
+              - generic [ref=e1033]: 2026/8/7 16:00:00
+            - heading "国浩律师（杭州）事务所关于浙江帅丰电器股份有限公司重大资产购买之法律意见书" [level=3] [ref=e1037]
+            - paragraph [ref=e1038]: "国浩律师（杭州）事务所 关 于 浙江帅丰电器股份有限公司 重大资产购买 之 法律意见书 地址：杭州市上城区老复兴路白塔公园B区2号、15号楼 邮编：310008 Grandall Building, No.2＆No.15, Block B, Baita Park, Old Fuxing Road, Hangzhou, Zhejiang 310008, China 电话/Tel: (+86)(571) 8577 5888 传真/Fax: (+86)(571) 8577 5643 电子邮箱/Mail：grandallhz@grandall.com.cn 网址/Website：http://www.grandall.com.cn 二〇二六年八月 法律意见书 国浩律师（杭州）事务所 目 录 第一部分 引 言 ................................................... 4 一、律师事务所及律师简介 .......................................... 4 二、出具法律意见所涉及的主要工作过程 .............."
+            - generic [ref=e1039]:
+              - link "查看归档证据" [ref=e1040] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/a552045bf04acf847ae13d1b3842b5ecbd70d89fd40d004282e84647da340ebb/content
+              - link "打开原始来源" [ref=e1044] [cursor=pointer]:
+                - /url: https://static.cninfo.com.cn/finalpage/2026-08-08/1225465237.PDF
+          - article [ref=e1049]:
+            - generic [ref=e1050]:
+              - generic [ref=e1051]: 新浪财经
+              - generic [ref=e1052]: 2026/8/6 23:33:15
+            - heading "6天5跌停后4天3板！百合花股价坐上“过山车” 最新公告：控股股东减持实施完毕" [level=3] [ref=e1056]
+            - paragraph [ref=e1057]: 新浪首页 新闻 体育 财经 娱乐 科技 博客 图片 专栏 更多 汽车 教育 时尚 女性 星座 健康 房产 历史 视频 收藏 育儿 读书 佛学 游戏 旅游 邮箱 导航 新浪微博 新浪新闻 新浪财经 新浪体育 新浪众测 新浪博客 新浪视频 新浪游戏 天气通 6天5跌停后4天3板！百合花股价坐上“过山车” 最新公告：控股股东减持实施完毕 炒股就看 金麒麟分析师研报 ，权威，专业，及时，全面，助您挖掘潜力主题机会！ 8月6日盘后， 百合花 （SH603823，股价66.80元，市值278.13亿元）连发两份公告，披露控股股东减持结果并提示股票交易风险。公司控股股东 百合花 控股有限公司通过集中竞价方式减持公司股份4163620股，占公司总股本的1%，本次减持计划已实施完毕；与此同时，公司股票因连续多日大涨触发异常波动，公司就相关业务、业绩及二级市场风险作出提示。 当日公司股价再度涨停，这是该股近4个交易日拿下的第3个涨停板，区间累计涨幅超42%。而就在一周多前，公司刚经历了6个交易日5度跌停的断崖式下跌，暴涨暴跌切换之快，堪称近期市场最极致的“过山车”行情。 控股股东减持1%完毕董监高接力减持
+            - generic [ref=e1058]:
+              - link "查看归档证据" [ref=e1059] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/2209048055480e0cbb38bb6b9bb48d19d559914cd069695a18829fa905b272fa/content
+              - link "打开原始来源" [ref=e1063] [cursor=pointer]:
+                - /url: https://finance.sina.com.cn/stock/s/2026-08-07/doc-inimmpqz3372760.shtml
+          - article [ref=e1068]:
+            - generic [ref=e1069]:
+              - generic [ref=e1070]: 网易财经
+              - generic [ref=e1071]: 2026/8/6 07:48:50
+            - heading "群核科技：“杭州六小龙” 光环之下 物理AI故事有水分吗？" [level=3] [ref=e1075]
+            - paragraph [ref=e1076]: 网易新闻 网易公开课 网易红彩 网易严选 邮箱大师 网易云课堂 新闻 国内 国际 王三三 体育 NBA CBA 综合 中超 国际足球 英超 西甲 意甲 娱乐 明星 电影 电视 音乐 封面故事 财经 股票 原创 智库 汽车 购车 车型库 科技 网易智能 IT 互联网 通信 时尚 艺术 旅游 手机 / 数码 惊奇科技 易评机 家电 房产 / 家居 北京房产 上海房产 广州房产 楼盘库 设计师库 案例库 教育 留学 高考 注册VIP邮箱（特权邮箱，付费） 免费下载网易官方手机邮箱应用 移动端 网易公开课 TED 中国大学视频公开课 国际名校公开课 赏课·纪录片 付费精品课程 北京大学公开课 英语课程学习 网易严选 新人特价 9.9专区 新品热卖 人气好物 居家生活 服饰鞋包 母婴亲子 美食酒水 支付 一卡通充值 一卡通购买 我的网易支付 网易跨境支付 邮箱 免费邮箱 VIP邮箱 企业邮箱 免费注册 客户端下载 群核科技：“杭州六小龙” 光环之下 物理AI故事有水分吗？ 用微信扫码二维码 分享至好友和朋友圈 作者｜王晓悦 主编｜赵妍 来源｜星火Ember 今年4月，群 核科技 （00068.H
+            - generic [ref=e1077]:
+              - link "查看归档证据" [ref=e1078] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/0f13ec06d6ab301659046caa8b969daa7751dc7dcf56b4b9e35ef53c06055667/content
+              - link "打开原始来源" [ref=e1082] [cursor=pointer]:
+                - /url: https://www.163.com/money/article/L3LL45A800258105.html
+          - article [ref=e1087]:
+            - generic [ref=e1088]:
+              - generic [ref=e1089]: 网易财经
+              - generic [ref=e1090]: 2026/8/1 09:38:44
+            - heading "陈欣：长鑫科技四万亿市值背后的资本与周期" [level=3] [ref=e1094]
+            - paragraph [ref=e1095]: 网易新闻 网易公开课 网易红彩 网易严选 邮箱大师 网易云课堂 新闻 国内 国际 王三三 体育 NBA CBA 综合 中超 国际足球 英超 西甲 意甲 娱乐 明星 电影 电视 音乐 封面故事 财经 股票 原创 智库 汽车 购车 车型库 科技 网易智能 IT 互联网 通信 时尚 艺术 旅游 手机 / 数码 惊奇科技 易评机 家电 房产 / 家居 北京房产 上海房产 广州房产 楼盘库 设计师库 案例库 教育 留学 高考 注册VIP邮箱（特权邮箱，付费） 免费下载网易官方手机邮箱应用 移动端 网易公开课 TED 中国大学视频公开课 国际名校公开课 赏课·纪录片 付费精品课程 北京大学公开课 英语课程学习 网易严选 新人特价 9.9专区 新品热卖 人气好物 居家生活 服饰鞋包 母婴亲子 美食酒水 支付 一卡通充值 一卡通购买 我的网易支付 网易跨境支付 邮箱 免费邮箱 VIP邮箱 企业邮箱 免费注册 客户端下载 陈欣：长鑫科技四万亿市值背后的资本与周期 用微信扫码二维码 分享至好友和朋友圈 *网易财经智库原创文章转载需经授权。本文不构成投资决策。 作者| 陈欣 （ 上海财经大学滴水湖高级金融学
+            - generic [ref=e1096]:
+              - link "查看归档证据" [ref=e1097] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/a44db56f4708f65f8fd28ce1586ab6878009ecd6f80b9f51b89bac798a01d136/content
+              - link "打开原始来源" [ref=e1101] [cursor=pointer]:
+                - /url: https://www.163.com/money/article/L38VDPMN00258J1R.html
+          - article [ref=e1106]:
+            - generic [ref=e1107]:
+              - generic [ref=e1108]: 网易财经
+              - generic [ref=e1109]: 2026/4/8 06:24:51
+            - heading "广州通则康威IPO:产品海外市场空间或有隐忧，关联方信披语焉不详|清流IPO" [level=3] [ref=e1113]
+            - paragraph [ref=e1114]: 网易新闻 网易公开课 网易红彩 网易严选 邮箱大师 网易云课堂 新闻 国内 国际 王三三 体育 NBA CBA 综合 中超 国际足球 英超 西甲 意甲 娱乐 明星 电影 电视 音乐 封面故事 财经 股票 原创 智库 汽车 购车 车型库 科技 网易智能 IT 互联网 通信 时尚 艺术 旅游 手机 / 数码 惊奇科技 易评机 家电 房产 / 家居 北京房产 上海房产 广州房产 楼盘库 设计师库 案例库 教育 留学 高考 注册VIP邮箱（特权邮箱，付费） 免费下载网易官方手机邮箱应用 移动端 网易公开课 TED 中国大学视频公开课 国际名校公开课 赏课·纪录片 付费精品课程 北京大学公开课 英语课程学习 网易严选 新人特价 9.9专区 新品热卖 人气好物 居家生活 服饰鞋包 母婴亲子 美食酒水 支付 一卡通充值 一卡通购买 我的网易支付 网易跨境支付 邮箱 免费邮箱 VIP邮箱 企业邮箱 免费注册 客户端下载 广州通则康威IPO:产品海外市场空间或有隐忧，关联方信披语焉不详|清流IPO 用微信扫码二维码 分享至好友和朋友圈 作者|周淼 主编|赵妍 近期，宽带连接终端设备商广州 通则 康威科技
+            - generic [ref=e1115]:
+              - link "查看归档证据" [ref=e1116] [cursor=pointer]:
+                - /url: /api/v1/data/evidence/61f70bda19e19de483e94b4d375568826b4ab74d2580c2e2b3b9f27a7822c034/content
+              - link "打开原始来源" [ref=e1120] [cursor=pointer]:
+                - /url: https://www.163.com/money/article/KQ0GK3VI00258105.html
+    - contentinfo [ref=e906]:
+      - generic [ref=e907]:
+        - generic [ref=e908]: QSou · 你的数据，始终可追溯、可导出
+        - generic [ref=e909]: 搜索结果不构成投资建议
+  - alert [ref=e54]: 搜索我的投资数据 · QSou

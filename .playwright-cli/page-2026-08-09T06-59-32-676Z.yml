@@ -1,0 +1,38 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e375]:
+    - link "跳到主要内容" [ref=e376] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e377]:
+      - generic [ref=e378]:
+        - link "Q QSou 自主投资数据" [ref=e379] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e380]: Q
+          - generic [ref=e381]:
+            - generic [ref=e382]: QSou
+            - generic [ref=e383]: 自主投资数据
+        - navigation "主导航" [ref=e384]:
+          - link "搜索" [ref=e385] [cursor=pointer]:
+            - /url: /
+          - link "数据资产" [ref=e390] [cursor=pointer]:
+            - /url: /data
+        - generic [ref=e397]:
+          - generic [ref=e398]: admin
+          - generic [ref=e399]: 私人空间
+        - button "退出登录" [ref=e400] [cursor=pointer]
+    - main [ref=e404]:
+      - generic [ref=e406]:
+        - generic [ref=e407]:
+          - paragraph [ref=e408]: 数据资产
+          - heading "我真正掌握了什么" [level=1] [ref=e409]
+          - paragraph [ref=e410]: 查看来源、采集状态、原始证据和文档版本。数字只来自实际保存的数据。
+        - generic [ref=e411]:
+          - button "刷新" [disabled] [ref=e412]
+          - link "导出 JSONL" [ref=e418] [cursor=pointer]:
+            - /url: /api/v1/data/export
+      - status [ref=e423]:
+        - paragraph [ref=e425]: 正在读取数据资产
+    - contentinfo [ref=e426]:
+      - generic [ref=e427]:
+        - generic [ref=e428]: QSou · 你的数据，始终可追溯、可导出
+        - generic [ref=e429]: 搜索结果不构成投资建议
+  - alert [ref=e54]: 数据资产 · QSou

@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e840]:
+    - link "跳到主要内容" [ref=e841] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e842]:
+      - generic [ref=e843]:
+        - link "Q QSou" [ref=e844] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e845]: Q
+          - generic [ref=e846]: QSou
+        - navigation "主导航" [ref=e848]:
+          - link "搜索" [ref=e849] [cursor=pointer]:
+            - /url: /
+          - link "数据资产" [ref=e854] [cursor=pointer]:
+            - /url: /data
+        - button "退出登录" [ref=e860] [cursor=pointer]
+    - main [ref=e864]:
+      - generic [ref=e866]:
+        - generic [ref=e867]:
+          - paragraph [ref=e868]: 只搜索已经保存的数据
+          - heading "找到事实，也找到它的来源。" [level=1] [ref=e869]
+          - paragraph [ref=e870]: 每条结果都来自你的数据资产，并保留来源、采集时间和原始证据。
+        - search [ref=e871]:
+          - generic [ref=e872]:
+            - generic [ref=e873]: 搜索我的数据
+            - textbox "搜索我的数据" [ref=e875]:
+              - /placeholder: 输入公司、主题、公告或事件
+            - generic [ref=e876]: 筛选来源
+            - combobox "筛选来源" [ref=e877]:
+              - option "全部来源" [selected]
+              - option "财经网"
+              - option "巨潮资讯"
+              - option "东方财富"
+              - option "网易财经"
+              - option "新浪财经"
+              - option "搜狐财经"
+              - option "上海证券交易所"
+              - option "深圳证券交易所"
+              - option "第一财经"
+            - button "搜索" [ref=e878] [cursor=pointer]
+      - generic [ref=e880]:
+        - generic [ref=e887]:
+          - heading "你的资料库已经可以搜索" [level=2] [ref=e888]
+          - paragraph [ref=e889]: 当前有 85 份可搜索文档，每份文档都能回到已保存的原始证据。
+          - link "查看数据资产" [ref=e890] [cursor=pointer]:
+            - /url: /data
+        - generic [ref=e893]:
+          - generic [ref=e895]:
+            - generic [ref=e896]: 采集状态
+            - generic [ref=e897]: 部分来源采集失败
+          - generic [ref=e899]:
+            - generic [ref=e900]:
+              - term [ref=e901]: 登记来源
+              - definition [ref=e902]: "9"
+            - generic [ref=e903]:
+              - term [ref=e904]: 原始证据
+              - definition [ref=e905]: "201"
+    - contentinfo [ref=e906]:
+      - generic [ref=e907]:
+        - generic [ref=e908]: QSou · 你的数据，始终可追溯、可导出
+        - generic [ref=e909]: 搜索结果不构成投资建议
+  - alert [ref=e54]: 搜索我的投资数据 · QSou
