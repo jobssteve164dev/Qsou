@@ -314,6 +314,9 @@ class ElasticsearchProjectionTest(unittest.TestCase):
     def test_cycle_reconciles_all_versions_without_rewriting_outbox_state(self):
         class Store:
             marked = []
+            pending_batches = iter(
+                [[{"content_version_id": "current", "active": True}], [], []]
+            )
 
             @staticmethod
             def documents_for_index():
@@ -321,7 +324,7 @@ class ElasticsearchProjectionTest(unittest.TestCase):
 
             @staticmethod
             def pending_documents_for_index(_limit):
-                return [{"content_version_id": "current", "active": True}]
+                return next(Store.pending_batches)
 
             @staticmethod
             def active_document_count():
@@ -377,6 +380,8 @@ class ElasticsearchProjectionTest(unittest.TestCase):
                 "indexed": 1,
                 "active_documents": 1,
                 "indexed_active_documents": 1,
+                "pending_documents": 0,
+                "converged": True,
             },
         )
         self.assertEqual(Index.batches, [["old"], ["current"]])
@@ -385,6 +390,92 @@ class ElasticsearchProjectionTest(unittest.TestCase):
         self.assertEqual(Index.stale_deletes, [Index.generations[0]])
         self.assertEqual(Store.marked, [["old"], ["current"]])
         self.assertEqual(Index.refreshes, 2)
+
+    def test_cycle_treats_concurrent_collection_as_catching_up(self):
+        class Store:
+            active_counts = iter([1, 2])
+            pending_batches = iter(
+                [
+                    [{"content_version_id": "current", "active": True}],
+                    [],
+                    [{"content_version_id": "next", "active": True}],
+                ]
+            )
+
+            @staticmethod
+            def pending_documents_for_index(_limit):
+                return next(Store.pending_batches)
+
+            @staticmethod
+            def active_document_count():
+                return next(Store.active_counts)
+
+            @staticmethod
+            def mark_indexed(_ids):
+                return None
+
+        class Index:
+            @staticmethod
+            def ensure_ready():
+                return None
+
+            @staticmethod
+            def index_documents(documents, *, projection_generation=None):
+                self.assertIsNone(projection_generation)
+                return [document["content_version_id"] for document in documents]
+
+            @staticmethod
+            def refresh():
+                return None
+
+            @staticmethod
+            def active_document_count():
+                return 1
+
+        _, result = run_cycle(
+            Store(),
+            Index(),
+            last_reconcile=100,
+            reconcile_seconds=3600,
+            batch_size=100,
+            now=101,
+        )
+        self.assertFalse(result["converged"])
+        self.assertEqual(result["active_documents"], 2)
+        self.assertEqual(result["indexed_active_documents"], 1)
+        self.assertEqual(result["pending_documents"], 1)
+
+    def test_cycle_rejects_stable_projection_count_mismatch(self):
+        class Store:
+            @staticmethod
+            def pending_documents_for_index(_limit):
+                return []
+
+            @staticmethod
+            def active_document_count():
+                return 2
+
+        class Index:
+            @staticmethod
+            def ensure_ready():
+                return None
+
+            @staticmethod
+            def active_document_count():
+                return 1
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "postgres=2, elasticsearch=1",
+        ):
+            run_cycle(
+                Store(),
+                Index(),
+                last_reconcile=100,
+                reconcile_seconds=3600,
+                batch_size=100,
+                now=101,
+            )
 
     def test_indexer_readiness_requires_fresh_success(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(

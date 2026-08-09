@@ -38,7 +38,7 @@ def run_cycle(
     reconcile_seconds: int,
     batch_size: int,
     now: float | None = None,
-) -> tuple[float, dict[str, int]]:
+) -> tuple[float, dict[str, int | bool]]:
     current = time.monotonic() if now is None else now
     reconciled = 0
     index.ensure_ready()
@@ -63,9 +63,20 @@ def run_cycle(
         index.refresh()
         indexed = len(ids)
         _event("indexed", documents=indexed)
-    active_documents = store.active_document_count()
+    # A collector may commit another document between indexing this batch and
+    # reading the two backends.  Compare only a quiescent projection checkpoint;
+    # an outstanding PostgreSQL row means the indexer is legitimately catching up.
+    active_documents_before = store.active_document_count()
+    pending_before_count = len(store.pending_documents_for_index(1))
     indexed_active_documents = index.active_document_count()
-    if active_documents != indexed_active_documents:
+    active_documents = store.active_document_count()
+    pending_after_count = len(store.pending_documents_for_index(1))
+    converged = (
+        active_documents_before == active_documents
+        and pending_before_count == 0
+        and pending_after_count == 0
+    )
+    if converged and active_documents != indexed_active_documents:
         raise RuntimeError(
             "Elasticsearch 活动文档计数与 PostgreSQL 不一致: "
             f"postgres={active_documents}, elasticsearch={indexed_active_documents}"
@@ -75,6 +86,8 @@ def run_cycle(
         "indexed": indexed,
         "active_documents": active_documents,
         "indexed_active_documents": indexed_active_documents,
+        "pending_documents": pending_after_count,
+        "converged": converged,
     }
 
 
