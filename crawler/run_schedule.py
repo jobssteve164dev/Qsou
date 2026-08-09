@@ -108,6 +108,8 @@ def is_due(adapter, now: datetime) -> bool:
     latest = STORE.latest_adapter_run(adapter.source_id)
     if not latest or latest.get("state") == "running":
         return latest is None
+    if latest.get("adapter_version") != adapter.version:
+        return True
     finished_at = parse_time(latest.get("finished_at"))
     return finished_at is None or now >= finished_at + timedelta(
         seconds=schedule_seconds(adapter.source.get("schedule"))
@@ -256,6 +258,7 @@ def run_due_sources() -> None:
             updated_at=iso(utc_now()),
         )
         run_adapter(adapter)
+        run_requested_sources()
 
     finished_at = utc_now()
     sources = source_summary()

@@ -61,6 +61,8 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn("qsou.szlk.uk", crawler_settings.USER_AGENT)
         self.assertFalse(crawler_settings.QSOU_OUTBOX_DISPATCH_ENABLED)
         self.assertEqual(crawler_settings.REQUEST_FINGERPRINTER_IMPLEMENTATION, "2.7")
+        self.assertGreaterEqual(crawler_settings.DOWNLOAD_TIMEOUT, 180)
+        self.assertEqual(crawler_settings.MEMUSAGE_LIMIT_MB, 3584)
 
     def test_downloader_evidence_identity_stays_on_request_until_spider_stage(self):
         project_root = Path(__file__).resolve().parents[1]
@@ -77,6 +79,8 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn("errback=self.handle_request_error", spider)
         self.assertNotIn('metadata["handle_httpstatus_all"]', spider)
         self.assertIn('"LOG_FILE="', scheduler)
+        self.assertIn('latest.get("adapter_version") != adapter.version', scheduler)
+        self.assertGreaterEqual(scheduler.count("run_requested_sources()"), 3)
 
     def test_collector_image_uses_an_explicit_runtime_allowlist(self):
         project_root = Path(__file__).resolve().parents[1]

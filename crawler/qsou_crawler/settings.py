@@ -84,8 +84,8 @@ LOG_ENCODING = 'utf-8'
 # ============================================
 # 请求设置
 # ============================================
-# 请求超时
-DOWNLOAD_TIMEOUT = 30
+# 公告 PDF 可能达到数十 MiB，正式采集优先完成下载，不用短超时制造失败。
+DOWNLOAD_TIMEOUT = int(os.getenv('QSOU_DOWNLOAD_TIMEOUT_SECONDS', '180'))
 # 重试次数
 RETRY_TIMES = 3
 # 重试HTTP状态码
@@ -106,8 +106,8 @@ DUPEFILTER_DEBUG = False
 
 # 内存使用监控
 MEMUSAGE_ENABLED = True
-MEMUSAGE_LIMIT_MB = 2048  # 2GB内存限制
-MEMUSAGE_WARNING_MB = 1536  # 1.5GB警告
+MEMUSAGE_LIMIT_MB = int(os.getenv('QSOU_COLLECTOR_MEMORY_LIMIT_MB', '3584'))
+MEMUSAGE_WARNING_MB = int(os.getenv('QSOU_COLLECTOR_MEMORY_WARNING_MB', '3072'))
 
 # 数据质量设置
 MIN_CONTENT_LENGTH = 100  # 最小内容长度

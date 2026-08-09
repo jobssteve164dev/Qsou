@@ -107,6 +107,7 @@ class SourceAdapterSpider(scrapy.Spider):
             "documents_indexed": self.crawler.stats.get_value("adapter/documents_indexed", 0),
             "evidence_archived": self.crawler.stats.get_value("adapter/evidence_archived", 0),
             "failures": self.crawler.stats.get_value("adapter/failures", 0),
+            "download_timeout_seconds": self.crawler.settings.getint("DOWNLOAD_TIMEOUT"),
             "errors": self._errors[-20:],
             "cursor": self.adapter.cursor_candidate(self._documents),
         }
