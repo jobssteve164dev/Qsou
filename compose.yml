@@ -18,8 +18,9 @@ services:
       SECRET_KEY: ${QSOU_SECRET_KEY:?QSOU_SECRET_KEY is required}
       QSOU_ADMIN_USERNAME: ${QSOU_ADMIN_USERNAME:?QSOU_ADMIN_USERNAME is required}
       QSOU_ADMIN_PASSWORD: ${QSOU_ADMIN_PASSWORD:?QSOU_ADMIN_PASSWORD is required}
-    ports:
-      - "${QSOU_API_PORT:-8000}:8000"
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${QSOU_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+    expose:
+      - "8000"
     volumes:
       - qsou-data:/var/lib/qsou
     healthcheck:
@@ -40,12 +41,9 @@ services:
       context: .
       dockerfile: deploy/web.Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${QSOU_PUBLIC_API_URL:-http://localhost:8000/api/v1}
         API_INTERNAL_URL: http://api:8000
     environment:
-      NEXT_PUBLIC_API_URL: ${QSOU_PUBLIC_API_URL:-http://localhost:8000/api/v1}
       API_INTERNAL_URL: http://api:8000
-      NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN: "false"
     ports:
       - "${QSOU_WEB_PORT:-3000}:3000"
     depends_on:
@@ -55,7 +53,6 @@ services:
 
   collector:
     platform: linux/amd64
-    profiles: ["collector"]
     build:
       context: .
       dockerfile: deploy/crawler.Dockerfile
@@ -65,11 +62,12 @@ services:
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
       LOG_FILE: /app/crawler/logs/scrapy.log
+      QSOU_CRAWLER_SPIDERS: ${QSOU_CRAWLER_SPIDERS:-company_announcement,financial_news}
+      QSOU_CRAWL_INTERVAL_SECONDS: ${QSOU_CRAWL_INTERVAL_SECONDS:-1800}
     volumes:
       - qsou-data:/var/lib/qsou
       - qsou-crawler-logs:/app/crawler/logs
-    command: ["crawl", "${QSOU_SPIDER:-financial_news}"]
-    restart: "no"
+    restart: unless-stopped
 
 volumes:
   qsou-data:

@@ -102,7 +102,6 @@ class Settings(BaseSettings):
     
     # 开发配置
     SKIP_SSL_VERIFY: bool = Field(default=True, env="SKIP_SSL_VERIFY")
-    SKIP_AUTH_IN_DEV: bool = Field(default=False, env="SKIP_AUTH_IN_DEV")
     ENABLE_DEBUG_TOOLBAR: bool = Field(default=True, env="ENABLE_DEBUG_TOOLBAR")
     
     class Config:

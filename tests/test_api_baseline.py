@@ -19,6 +19,9 @@ os.environ["ENABLE_DERIVED_SEARCH"] = "false"
 os.environ["ENABLE_DERIVED_PROCESSING"] = "false"
 os.environ["ENABLE_METRICS"] = "false"
 os.environ["DEBUG"] = "false"
+os.environ["QSOU_ADMIN_USERNAME"] = "owner"
+os.environ["QSOU_ADMIN_PASSWORD"] = "strong-password"
+os.environ["SECRET_KEY"] = "test-signing-key"
 
 from fastapi.testclient import TestClient
 
@@ -65,40 +68,44 @@ class BaselineApiTest(unittest.TestCase):
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json()["status"], "healthy")
 
-            status = client.get("/api/v1/data/status")
+            unauthenticated = client.get("/api/v1/data/status")
+            self.assertEqual(unauthenticated.status_code, 401)
+
+            login = client.post(
+                "/api/v1/auth/login",
+                json={"username": "owner", "password": "strong-password"},
+            )
+            self.assertEqual(login.status_code, 200)
+            headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+            status = client.get("/api/v1/data/status", headers=headers)
             self.assertEqual(status.status_code, 200)
             self.assertEqual(status.json()["raw_objects"], 1)
             self.assertEqual(status.json()["active_documents"], 1)
 
-            system_stats = client.get("/api/v1/system/stats")
-            self.assertEqual(system_stats.status_code, 200)
-            self.assertEqual(system_stats.json()["system_status"], "healthy")
-            self.assertEqual(system_stats.json()["service_states"]["data_assets"], "healthy")
-            self.assertEqual(system_stats.json()["service_states"]["elasticsearch"], "disabled")
-            self.assertEqual(system_stats.json()["service_states"]["qdrant"], "disabled")
-
             search = client.post(
                 "/api/v1/search/",
                 json={"query": "自主数据", "search_type": "hybrid", "page": 1, "page_size": 20},
+                headers=headers,
             )
             self.assertEqual(search.status_code, 200)
             self.assertEqual(search.json()["total_count"], 1)
             self.assertEqual(search.json()["results"][0]["id"], document["content_version_id"])
 
-            content = client.get(f"/api/v1/data/evidence/{evidence['raw_object_id']}/content")
+            content = client.get(f"/api/v1/data/evidence/{evidence['raw_object_id']}/content", headers=headers)
             self.assertEqual(content.status_code, 200)
             self.assertEqual(content.content, "Qsou 基线原始证据".encode("utf-8"))
 
-            exported = client.get("/api/v1/data/export")
+            exported = client.get("/api/v1/data/export", headers=headers)
             self.assertEqual(exported.status_code, 200)
             self.assertIn(document["content_version_id"], exported.text)
             self.assertIn(evidence["raw_object_id"], exported.text)
 
-            replay = client.post("/api/v1/data/replay", json={"source_id": "yicai", "limit": 10})
+            replay = client.post("/api/v1/data/replay", json={"source_id": "yicai", "limit": 10}, headers=headers)
             self.assertEqual(replay.status_code, 200)
             self.assertEqual(replay.json()["queued_count"], 1)
 
-            unknown_export = client.get("/api/v1/data/export?source_id=not-registered")
+            unknown_export = client.get("/api/v1/data/export?source_id=not-registered", headers=headers)
             self.assertEqual(unknown_export.status_code, 400)
 
 

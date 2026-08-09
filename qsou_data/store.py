@@ -504,6 +504,16 @@ class DataAssetStore:
                 "SELECT state, COUNT(*) AS count FROM processing_outbox GROUP BY state"
             ).fetchall()
 
+        collector = {"state": "not_started"}
+        collector_status_path = self.root / "collector-status.json"
+        if collector_status_path.is_file():
+            try:
+                loaded = json.loads(collector_status_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    collector = loaded
+            except (OSError, json.JSONDecodeError):
+                collector = {"state": "unknown"}
+
         return {
             "status": "healthy",
             "registered_sources": len(self.registry.all(enabled_only=True)),
@@ -511,6 +521,7 @@ class DataAssetStore:
             "document_versions": document_count,
             "active_documents": active_count,
             "processing": {row["state"]: row["count"] for row in outbox_rows},
+            "collector": collector,
         }
 
     def list_sources(self) -> List[Dict[str, Any]]:

@@ -40,6 +40,8 @@ class SearchResult(BaseModel):
     # 在序列化时由服务层保证至少一个存在
     relevance_score: float = Field(..., description="相关性得分", ge=0.0, le=1.0)
     tags: List[str] = Field(default=[], description="标签列表")
+    source_id: Optional[str] = Field(default=None, description="登记来源标识")
+    raw_object_id: Optional[str] = Field(default=None, description="原始证据标识")
 
 
 class SearchResponse(BaseModel):
@@ -141,26 +143,8 @@ async def get_search_suggestions(
 
 @router.get("/trending")
 async def get_trending_searches():
-    """
-    获取热门搜索关键词
-    """
-    logger.info("获取热门搜索")
-    
-    try:
-        # TODO: 实现基于真实数据的热门搜索统计
-        trending = [
-            {"keyword": "新能源汽车", "count": 1250},
-            {"keyword": "人工智能", "count": 980},
-            {"keyword": "芯片半导体", "count": 856},
-            {"keyword": "医疗健康", "count": 743},
-            {"keyword": "金融科技", "count": 621},
-        ]
-        
-        return {"trending_searches": trending}
-        
-    except Exception as e:
-        logger.error("获取热门搜索失败", error=str(e))
-        raise HTTPException(status_code=500, detail="无法获取热门搜索")
+    """没有真实搜索历史时不生成伪造的热门词。"""
+    return {"trending_searches": []}
 
 
 @router.get("/similar/{document_id}")
@@ -189,5 +173,3 @@ async def get_similar_documents(
     except Exception as e:
         logger.error("查找相似文档失败", document_id=document_id, error=str(e))
         raise HTTPException(status_code=500, detail="无法查找相似文档")
-
-

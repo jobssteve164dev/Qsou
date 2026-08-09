@@ -17,6 +17,8 @@ export interface SearchDocument {
   category: string;
   tags: string[];
   score?: number;
+  source_id?: string;
+  raw_object_id?: string;
 }
 
 export interface SearchRequest {
@@ -84,11 +86,11 @@ export interface AnalysisReport {
 
 // 用户认证类型
 export interface User {
-  id: string;
   username: string;
-  email: string;
   role: 'user' | 'admin';
-  created_at: string;
+  id?: string;
+  email?: string;
+  created_at?: string;
 }
 
 export interface LoginRequest {
@@ -136,6 +138,15 @@ export interface DataAssetStatus {
   document_versions: number;
   active_documents: number;
   processing: Record<string, number>;
+  collector: {
+    state: 'not_started' | 'running' | 'idle' | 'degraded' | 'stopping' | 'disabled' | 'unknown';
+    spiders?: string[];
+    interval_seconds?: number;
+    last_started_at?: string;
+    last_finished_at?: string;
+    next_run_at?: string;
+    results?: Record<string, number>;
+  };
 }
 
 export interface DataSourceStatus {
@@ -143,6 +154,8 @@ export interface DataSourceStatus {
   source_name: string;
   authority_tier: 'primary' | 'secondary' | 'discovery';
   document_types: string[];
+  schedule?: string;
+  rights_status?: string;
   health_state: string;
   raw_count: number;
   last_fetched_at?: string | null;

@@ -174,36 +174,7 @@ const UnifiedSearchBar: React.FC<UnifiedSearchBarProps> = ({
 
   // 处理智能分析点击
   const handleIntelligenceClick = () => {
-    const token = localStorage.getItem('auth_token');
-    const isDev = process.env.NODE_ENV === 'development';
-    
-    // 如果是开发环境且没有token，执行静默登录
-    if (isDev && !token) {
-      performSilentLogin();
-    } else if (!token) {
-      // 生产环境跳转到登录页
-      router.push('/login?returnUrl=/intelligence');
-    } else {
-      router.push('/intelligence');
-    }
-  };
-
-  // 静默登录（仅用于开发环境）
-  const performSilentLogin = async () => {
-    try {
-      const { authApi } = await import('@/services/api');
-      const response = await authApi.login({
-        username: 'admin',
-        password: 'admin123',
-      });
-      
-      if (response.success && response.data?.token) {
-        router.push('/intelligence');
-      }
-    } catch (error) {
-      console.error('静默登录失败，跳转到登录页面');
-      router.push('/login?returnUrl=/intelligence');
-    }
+    router.push('/data');
   };
 
   // 处理点击外部关闭

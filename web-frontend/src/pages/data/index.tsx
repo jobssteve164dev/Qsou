@@ -1,21 +1,41 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
-import { Database, Download, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Activity,
+  ArrowRight,
+  Clock3,
+  Database,
+  Download,
+  ExternalLink,
+  FileArchive,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
-import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Loading } from '@/components/ui/Loading';
 import { dataAssetApi } from '@/services/api';
 import { DataAssetStatus, DataSourceStatus, EvidenceRecord } from '@/types';
 
-
 const formatTime = (value?: string | null) => {
-  if (!value) return '等待首次采集';
+  if (!value) return '尚无记录';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
 };
 
+const collectorMessage = (collector?: DataAssetStatus['collector']) => {
+  if (!collector) return { label: '正在读取', tone: 'bg-slate-200' };
+  const map: Record<string, { label: string; tone: string }> = {
+    running: { label: '正在采集来源数据', tone: 'bg-cyan-500' },
+    idle: { label: '运行正常，等待下一轮', tone: 'bg-emerald-500' },
+    degraded: { label: '部分采集任务失败', tone: 'bg-amber-500' },
+    not_started: { label: '等待采集器启动', tone: 'bg-slate-400' },
+    stopping: { label: '采集器正在停止', tone: 'bg-amber-500' },
+    disabled: { label: '采集器未启用', tone: 'bg-slate-400' },
+    unknown: { label: '采集状态暂不可用', tone: 'bg-rose-500' },
+  };
+  return map[collector.state] || map.unknown;
+};
 
 const DataAssetsPage: React.FC = () => {
   const [status, setStatus] = useState<DataAssetStatus | null>(null);
@@ -27,18 +47,17 @@ const DataAssetsPage: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [statusResponse, sourcesResponse, evidenceResponse] = await Promise.all([
+    const [statusResult, sourcesResult, evidenceResult] = await Promise.all([
       dataAssetApi.status(),
       dataAssetApi.sources(),
-      dataAssetApi.evidence(20),
+      dataAssetApi.evidence(30),
     ]);
-
-    if (!statusResponse.success || !statusResponse.data) {
-      setError(statusResponse.error || '暂时无法读取数据资产状态');
+    if (!statusResult.success || !statusResult.data) {
+      setError(statusResult.error || '暂时无法读取数据资产');
     } else {
-      setStatus(statusResponse.data);
-      setSources(sourcesResponse.data?.sources || []);
-      setEvidence(evidenceResponse.data?.evidence || []);
+      setStatus(statusResult.data);
+      setSources(sourcesResult.data?.sources || []);
+      setEvidence(evidenceResult.data?.evidence || []);
     }
     setLoading(false);
   }, []);
@@ -47,130 +66,118 @@ const DataAssetsPage: React.FC = () => {
     load();
   }, [load]);
 
+  const sourceNames = useMemo(
+    () => new Map(sources.map((source) => [source.source_id, source.source_name])),
+    [sources],
+  );
+  const collector = collectorMessage(status?.collector);
+
   return (
     <Layout>
       <Head>
-        <title>我的数据 - QSou</title>
-        <meta name="description" content="查看 QSou 已经保存的来源、文档和原始证据" />
+        <title>数据资产 · QSou</title>
+        <meta name="description" content="查看已经保存的来源、原始证据和可搜索文档" />
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="border-b border-gray-200 bg-white">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-7 sm:px-6 lg:px-8">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">我的数据</h1>
-              <p className="mt-1 text-sm text-gray-600">查看已经掌握的来源、历史证据和可搜索文档</p>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={load} disabled={loading}>
-                <RefreshCw className="mr-2 h-4 w-4" />刷新
-              </Button>
-              <a href={dataAssetApi.exportUrl()}>
-                <Button>
-                  <Download className="mr-2 h-4 w-4" />导出全部数据
-                </Button>
-              </a>
-            </div>
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-end sm:justify-between sm:px-6 lg:px-8">
+          <div>
+            <p className="mb-2 text-sm font-medium text-cyan-700">数据资产</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">我真正掌握了什么</h1>
+            <p className="mt-3 max-w-2xl leading-7 text-slate-600">查看来源、采集状态、原始证据和文档版本。数字只来自实际保存的数据。</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={load} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />刷新
+            </button>
+            <a href={dataAssetApi.exportUrl()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-200">
+              <Download className="h-4 w-4" aria-hidden="true" />导出 JSONL
+            </a>
           </div>
         </div>
+      </section>
 
-        <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-          {loading && !status ? (
-            <Loading size="lg" text="正在读取我的数据…" />
-          ) : error ? (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="py-8 text-center text-red-700">{error}</CardContent>
-            </Card>
-          ) : status ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  ['持续来源', status.registered_sources],
-                  ['原始证据', status.raw_objects],
-                  ['可搜索文档', status.active_documents],
-                  ['历史版本', status.document_versions],
-                ].map(([label, value]) => (
-                  <Card key={label}>
-                    <CardContent className="py-6">
-                      <div className="text-3xl font-bold text-gray-900">{value}</div>
-                      <div className="mt-1 text-sm text-gray-500">{label}</div>
-                    </CardContent>
-                  </Card>
+      <section className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+        {error ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-rose-800" role="alert">
+            <p className="font-medium">无法读取数据资产</p><p className="mt-1 text-sm">{error}</p>
+          </div>
+        ) : loading && !status ? (
+          <div className="py-20 text-center" role="status"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" /><p className="text-slate-600">正在读取数据资产</p></div>
+        ) : status ? (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: '登记来源', value: status.registered_sources, icon: ShieldCheck },
+                { label: '原始证据', value: status.raw_objects, icon: FileArchive },
+                { label: '可搜索文档', value: status.active_documents, icon: Database },
+                { label: '保留版本', value: status.document_versions, icon: Clock3 },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-500">{item.label}</span><item.icon className="h-5 w-5 text-slate-400" aria-hidden="true" /></div>
+                  <div className="mt-4 text-3xl font-semibold tabular-nums text-slate-950">{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${collector.tone}`} />
+                  <div><h2 className="font-semibold text-slate-950">{collector.label}</h2><p className="mt-1 text-sm text-slate-500">采集是持续任务；失败状态不会被伪装成“没有新数据”。</p></div>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:text-right">
+                  <div><dt className="text-slate-500">最近完成</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.last_finished_at)}</dd></div>
+                  <div><dt className="text-slate-500">下次运行</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.next_run_at)}</dd></div>
+                </dl>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-semibold text-slate-950">来源覆盖</h2><p className="mt-1 text-sm text-slate-500">一手来源优先；“已登记”不等于已经完整采集。</p></div>
+              <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+                {sources.map((source) => (
+                  <article key={source.source_id} className="bg-white p-5 sm:p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div><h3 className="font-semibold text-slate-950">{source.source_name}</h3><p className="mt-1 text-xs text-slate-500">{source.authority_tier === 'primary' ? '一手来源' : source.authority_tier === 'secondary' ? '补充来源' : '线索来源'}</p></div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${source.raw_count > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{source.raw_count > 0 ? '已采集' : '待采集'}</span>
+                    </div>
+                    <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm">
+                      <div><dt className="text-slate-500">证据数</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.raw_count}</dd></div>
+                      <div><dt className="text-slate-500">最近采集</dt><dd className="mt-1 text-slate-700">{formatTime(source.last_fetched_at)}</dd></div>
+                    </dl>
+                  </article>
                 ))}
               </div>
+            </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-primary-600" />来源覆盖
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500">
-                          <th className="pb-3 font-medium">来源</th>
-                          <th className="pb-3 font-medium">性质</th>
-                          <th className="pb-3 font-medium">已保存证据</th>
-                          <th className="pb-3 font-medium">最近采集</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {sources.map((source) => (
-                          <tr key={source.source_id}>
-                            <td className="py-3 font-medium text-gray-900">{source.source_name}</td>
-                            <td className="py-3 text-gray-600">
-                              {source.authority_tier === 'primary' ? '一手来源' : '补充来源'}
-                            </td>
-                            <td className="py-3 text-gray-600">{source.raw_count}</td>
-                            <td className="py-3 text-gray-600">{formatTime(source.last_fetched_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <div className="flex items-end justify-between border-b border-slate-100 px-5 py-5 sm:px-6"><div><h2 className="text-lg font-semibold text-slate-950">最近保存的证据</h2><p className="mt-1 text-sm text-slate-500">原始响应按内容标识保存，不用搜索索引替代证据。</p></div></div>
+              {evidence.length === 0 ? (
+                <div className="px-6 py-14 text-center">
+                  <Activity className="mx-auto h-9 w-9 text-slate-400" aria-hidden="true" />
+                  <h3 className="mt-4 font-semibold text-slate-950">还没有保存到原始证据</h3>
+                  <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">采集器完成首轮后，真实证据会出现在这里。系统不会填充演示数据。</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {evidence.map((item) => (
+                    <article key={item.raw_object_id} className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                      <div className="min-w-0"><div className="truncate font-medium text-slate-950">{item.url}</div><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500"><span>{sourceNames.get(item.source_id) || item.source_id}</span><span>{formatTime(item.first_fetched_at)}</span><span>抓取 {item.fetch_count} 次</span></div></div>
+                      <a href={dataAssetApi.evidenceContentUrl(item.raw_object_id)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 font-medium text-cyan-700 hover:text-cyan-900">查看归档证据 <ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="h-5 w-5 text-primary-600" />最近保存的证据
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {evidence.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-gray-500">尚未采集数据。运行采集器后，证据会出现在这里。</div>
-                  ) : (
-                    <div className="divide-y divide-gray-100">
-                      {evidence.map((item) => (
-                        <div key={item.raw_object_id} className="flex items-center justify-between gap-4 py-4">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-gray-900">{item.url}</div>
-                            <div className="mt-1 text-sm text-gray-500">
-                              {sources.find((source) => source.source_id === item.source_id)?.source_name || item.source_id}
-                              {' · '}{formatTime(item.first_fetched_at)}
-                            </div>
-                          </div>
-                          <a
-                            href={dataAssetApi.evidenceContentUrl(item.raw_object_id)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex shrink-0 items-center text-sm font-medium text-primary-600 hover:text-primary-700"
-                          >
-                            查看证据<ExternalLink className="ml-1 h-4 w-4" />
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          ) : null}
-        </div>
-      </div>
+            <div className="rounded-2xl bg-slate-950 p-6 text-white sm:flex sm:items-center sm:justify-between">
+              <div><h2 className="font-semibold">现在去搜索已保存的数据</h2><p className="mt-1 text-sm text-slate-400">搜索结果只来自上面的可搜索文档。</p></div>
+              <Link href="/" className="mt-4 inline-flex min-h-11 items-center gap-2 font-medium text-cyan-300 hover:text-cyan-200 sm:mt-0">开始搜索 <ArrowRight className="h-4 w-4" /></Link>
+            </div>
+          </>
+        ) : null}
+      </section>
     </Layout>
   );
 };
