@@ -16,6 +16,8 @@ services:
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
       QSOU_CATALOG_BACKEND: ${QSOU_CATALOG_BACKEND:-sqlite}
       DATABASE_URL: ${DATABASE_URL:-}
+      QSOU_MIGRATION_PHASE: ${QSOU_MIGRATION_PHASE:-off}
+      QSOU_SQLITE_WRITES_FROZEN: ${QSOU_SQLITE_WRITES_FROZEN:-false}
       QSOU_OBJECT_STORAGE_BACKEND: ${QSOU_OBJECT_STORAGE_BACKEND:-file}
       QSOU_OBJECT_STORAGE_ENDPOINT: ${QSOU_OBJECT_STORAGE_ENDPOINT:-}
       QSOU_OBJECT_STORAGE_REGION: ${QSOU_OBJECT_STORAGE_REGION:-us-east-1}
@@ -41,7 +43,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-      start_period: 10s
+      start_period: 300s
     restart: unless-stopped
 
   web:

@@ -10,6 +10,7 @@ from qsou_data import DataAssetError, DataAssetStore, SourceRegistry
 from qsou_data.catalog import _postgres_sql
 from qsou_data.migrate import LegacySqliteMigrator
 from qsou_data.objects import ObjectStorageError, S3ObjectStore
+from qsou_data.start_api import run_configured_migration
 from qsou_data.verify import verify_storage
 
 
@@ -152,6 +153,48 @@ class StorageMigrationTest(unittest.TestCase):
             "INSERT INTO sample (id, value) VALUES (%s, %s) "
             "ON CONFLICT(id) DO UPDATE SET value = excluded.value",
         )
+
+    def test_startup_backfill_restores_sqlite_runtime_backend(self) -> None:
+        report = {"status": "verified", "phase": "backfill"}
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "QSOU_CATALOG_BACKEND": "sqlite",
+                    "QSOU_MIGRATION_PHASE": "backfill",
+                    "DATABASE_URL": "postgresql://redacted",
+                },
+            ),
+            patch("qsou_data.start_api.DataAssetStore") as store_class,
+            patch("qsou_data.start_api.LegacySqliteMigrator") as migrator_class,
+        ):
+            migrator_class.return_value.run.return_value = report
+            self.assertEqual(run_configured_migration(), report)
+            self.assertEqual(os.environ["QSOU_CATALOG_BACKEND"], "sqlite")
+            store_class.assert_called_once_with()
+            migrator_class.return_value.run.assert_called_once_with("backfill")
+
+    def test_startup_final_requires_postgres_runtime(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "QSOU_CATALOG_BACKEND": "sqlite",
+                "QSOU_MIGRATION_PHASE": "final",
+            },
+        ):
+            with self.assertRaisesRegex(DataAssetError, "QSOU_CATALOG_BACKEND=postgres"):
+                run_configured_migration()
+
+    def test_startup_verify_requires_postgres_runtime(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "QSOU_CATALOG_BACKEND": "sqlite",
+                "QSOU_MIGRATION_PHASE": "verify",
+            },
+        ):
+            with self.assertRaisesRegex(DataAssetError, "生产验收要求"):
+                run_configured_migration()
 
     def test_s3_primary_backup_cache_and_restore_are_hash_checked(self) -> None:
         client = _MemoryS3Client()
