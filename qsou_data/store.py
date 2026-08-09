@@ -928,8 +928,9 @@ class DataAssetStore:
             rows = connection.execute(
                 """
                 SELECT content_version_id FROM standard_documents
-                WHERE active = 1 AND parser_version LIKE 'qsou-generic-html/%'
-                """
+                WHERE active = 1 AND parser_version LIKE %s
+                """,
+                ("qsou-generic-html/%",),
             ).fetchall()
             ids = [row["content_version_id"] for row in rows]
             if ids:

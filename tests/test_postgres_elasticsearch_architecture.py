@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -29,6 +29,7 @@ from qsou_data.search_index import (
     INDEX_MAPPINGS,
     normalize_index_date,
 )
+from qsou_data.store import DataAssetStore
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +77,31 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
         self.assertIn("create table raw_objects", rendered)
         self.assertIn("create table standard_documents", rendered)
         self.assertIn("insert into alembic_version", rendered)
+
+    def test_generic_snapshot_quarantine_parameterizes_like_pattern(self):
+        calls = []
+
+        class Result:
+            @staticmethod
+            def fetchall():
+                return []
+
+        class Connection:
+            @staticmethod
+            def execute(sql, parameters=()):
+                calls.append((sql, parameters))
+                return Result()
+
+        @contextmanager
+        def connection():
+            yield Connection()
+
+        store = DataAssetStore.__new__(DataAssetStore)
+        store._connection = connection
+
+        self.assertEqual(store.quarantine_generic_snapshots(), 0)
+        self.assertIn("parser_version LIKE %s", calls[0][0])
+        self.assertEqual(calls[0][1], ("qsou-generic-html/%",))
 
     def test_runtime_writers_require_completed_external_migrations(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(
