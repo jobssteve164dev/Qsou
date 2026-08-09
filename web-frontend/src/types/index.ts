@@ -134,14 +134,17 @@ export interface SystemStats {
 export interface DataAssetStatus {
   status: 'healthy' | 'unhealthy';
   registered_sources: number;
+  active_sources?: number;
   raw_objects: number;
   document_versions: number;
   active_documents: number;
   processing: Record<string, number>;
+  network?: Record<string, number>;
   collector: {
-    state: 'not_started' | 'running' | 'idle' | 'degraded' | 'stopping' | 'disabled' | 'unknown';
-    spiders?: string[];
-    interval_seconds?: number;
+    state: 'starting' | 'not_started' | 'running' | 'idle' | 'degraded' | 'stopping' | 'disabled' | 'unknown';
+    source_ids?: string[];
+    active_source_id?: string | null;
+    poll_seconds?: number;
     last_started_at?: string;
     last_finished_at?: string;
     next_run_at?: string;
@@ -157,8 +160,43 @@ export interface DataSourceStatus {
   schedule?: string;
   rights_status?: string;
   health_state: string;
+  adapter_id: string;
+  adapter_version: string;
+  adapter_kind: string;
+  enabled: boolean;
+  collection_state: 'not_started' | 'queued' | 'running' | 'healthy' | 'degraded' | 'failed' | 'cancelled' | 'stale' | 'authorization_required' | 'disabled';
   raw_count: number;
+  document_versions: number;
+  active_documents: number;
   last_fetched_at?: string | null;
+  last_document_at?: string | null;
+  cursor?: {
+    last_successful_at?: string;
+    latest_published_at?: string | null;
+  } | null;
+  active_request?: {
+    request_id: string;
+    state: 'queued' | 'running';
+    requested_at: string;
+    claimed_at?: string | null;
+  } | null;
+  last_run?: {
+    run_id: string;
+    state: string;
+    started_at: string;
+    finished_at?: string | null;
+    entrypoints_total: number;
+    entrypoints_succeeded: number;
+    detail_discovered: number;
+    detail_fetched: number;
+    documents_emitted: number;
+    metrics?: {
+      documents_indexed?: number;
+      new_document_versions?: number;
+    } | null;
+    evidence_archived: number;
+    failures: number;
+  } | null;
 }
 
 export interface EvidenceRecord {

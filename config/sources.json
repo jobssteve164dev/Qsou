@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "sources": [
     {
       "source_id": "sse",
@@ -17,6 +17,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "sse-announcements",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "announcement_api",
       "health_state": "configured",
       "enabled": true
     },
@@ -36,6 +39,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "szse-announcements",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "announcement_api",
       "health_state": "configured",
       "enabled": true
     },
@@ -55,6 +61,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "cninfo-announcements",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "announcement_api",
       "health_state": "configured",
       "enabled": true
     },
@@ -64,7 +73,7 @@
       "publisher": "东方财富网",
       "authority_tier": "secondary",
       "domains": ["eastmoney.com"],
-      "entrypoints": ["https://finance.eastmoney.com/news/"],
+      "entrypoints": ["https://finance.eastmoney.com/"],
       "document_types": ["news"],
       "coverage_start": null,
       "collection_method": "public_web",
@@ -74,6 +83,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "eastmoney-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "news_listing",
       "health_state": "configured",
       "enabled": true
     },
@@ -93,6 +105,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "sina-finance-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "news_listing",
       "health_state": "configured",
       "enabled": true
     },
@@ -107,11 +122,14 @@
       "coverage_start": null,
       "collection_method": "public_web",
       "schedule": "15m",
-      "cursor_strategy": "feed_and_listing_pages",
+      "cursor_strategy": "listing_pages",
       "rights_status": "review_required",
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "netease-finance-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "news_listing",
       "health_state": "configured",
       "enabled": true
     },
@@ -124,15 +142,18 @@
       "entrypoints": ["https://business.sohu.com/"],
       "document_types": ["news"],
       "coverage_start": null,
-      "collection_method": "public_web",
+      "collection_method": "licensed_feed_required",
       "schedule": "15m",
       "cursor_strategy": "listing_pages",
-      "rights_status": "review_required",
+      "rights_status": "authorization_required",
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
-      "health_state": "configured",
-      "enabled": true
+      "adapter_id": "sohu-finance-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "licensed_news_feed",
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "caijing",
@@ -140,7 +161,7 @@
       "publisher": "财经网",
       "authority_tier": "secondary",
       "domains": ["caijing.com.cn"],
-      "entrypoints": ["https://www.caijing.com.cn/"],
+      "entrypoints": ["https://m.caijing.com.cn/json/category/14/index.json"],
       "document_types": ["news"],
       "coverage_start": null,
       "collection_method": "public_web",
@@ -150,6 +171,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "caijing-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "news_api",
       "health_state": "configured",
       "enabled": true
     },
@@ -169,6 +193,9 @@
       "retention_policy": "retain_public_evidence_until_reviewed",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
+      "adapter_id": "yicai-news",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "news_listing",
       "health_state": "configured",
       "enabled": true
     }

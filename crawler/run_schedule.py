@@ -7,24 +7,28 @@ import json
 import os
 import signal
 import subprocess
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from index_evidence import index_pending_html_evidence
+from qsou_data import DataAssetStore
+from qsou_crawler.adapters import AdapterRegistry
 
 
 DATA_ROOT = Path(os.getenv("QSOU_DATA_ROOT", "/var/lib/qsou"))
 STATUS_PATH = DATA_ROOT / "collector-status.json"
-INTERVAL_SECONDS = max(300, int(os.getenv("QSOU_CRAWL_INTERVAL_SECONDS", "1800")))
-SPIDERS = [
+POLL_SECONDS = max(30, int(os.getenv("QSOU_CRAWL_POLL_SECONDS", "60")))
+SOURCE_IDS = [
     value.strip()
     for value in os.getenv(
-        "QSOU_CRAWLER_SPIDERS", "company_announcement,financial_news"
+        "QSOU_SOURCE_IDS", ""
     ).split(",")
     if value.strip()
 ]
 STOP_REQUESTED = False
+STORE = DataAssetStore()
+ADAPTERS = AdapterRegistry(STORE.registry)
 
 
 def utc_now() -> datetime:
@@ -37,7 +41,11 @@ def iso(value: datetime) -> str:
 
 def write_status(**values: object) -> None:
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
-    payload = {"spiders": SPIDERS, "interval_seconds": INTERVAL_SECONDS, **values}
+    payload = {
+        "source_ids": [adapter.source_id for adapter in selected_adapters()],
+        "poll_seconds": POLL_SECONDS,
+        **values,
+    }
     temporary = STATUS_PATH.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     temporary.replace(STATUS_PATH)
@@ -57,37 +65,196 @@ def wait_until(deadline: datetime) -> None:
         time.sleep(min(5, remaining))
 
 
-def run_cycle() -> None:
-    started_at = utc_now()
-    write_status(state="running", last_started_at=iso(started_at), updated_at=iso(started_at))
-    results: dict[str, int] = {}
+def selected_adapters():
+    return ADAPTERS.all(SOURCE_IDS or None)
 
-    for spider in SPIDERS:
-        if STOP_REQUESTED:
-            break
+
+def schedule_seconds(value: object) -> int:
+    text = str(value or "30m").strip().lower()
+    try:
+        if text.endswith("m"):
+            return max(300, int(text[:-1]) * 60)
+        if text.endswith("h"):
+            return max(300, int(text[:-1]) * 3600)
+        return max(300, int(text))
+    except ValueError:
+        return 1800
+
+
+def parse_time(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def is_due(adapter, now: datetime) -> bool:
+    latest = STORE.latest_adapter_run(adapter.source_id)
+    if not latest or latest.get("state") == "running":
+        return latest is None
+    finished_at = parse_time(latest.get("finished_at"))
+    return finished_at is None or now >= finished_at + timedelta(
+        seconds=schedule_seconds(adapter.source.get("schedule"))
+    )
+
+
+def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
+    run = STORE.begin_adapter_run(
+        source_id=adapter.source_id,
+        adapter_id=adapter.adapter_id,
+        adapter_version=adapter.version,
+        trigger=trigger,
+    )
+    before = STORE.source_counts(adapter.source_id)
+    descriptor, report_name = tempfile.mkstemp(prefix=f"qsou-{adapter.source_id}-", suffix=".json")
+    os.close(descriptor)
+    report_path = Path(report_name)
+    report_path.unlink(missing_ok=True)
+    report: dict[str, object] = {}
+    errors: list[str] = []
+    try:
         completed = subprocess.run(
-            ["scrapy", "crawl", spider, "-L", "INFO"],
+            [
+                "scrapy",
+                "crawl",
+                "source_adapter",
+                "-a",
+                f"source_id={adapter.source_id}",
+                "-a",
+                f"report_path={report_path}",
+                "-L",
+                "INFO",
+            ],
             cwd="/app/crawler",
             check=False,
         )
-        results[spider] = completed.returncode
+        if report_path.is_file():
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        if completed.returncode != 0:
+            errors.append(f"采集进程退出码 {completed.returncode}")
+    except Exception as exc:
+        completed = None
+        errors.append(str(exc))
+    finally:
+        report_path.unlink(missing_ok=True)
 
-    indexing = index_pending_html_evidence()
+    after = STORE.source_counts(adapter.source_id)
+    metrics = {
+        **report,
+        "evidence_archived": int(report.get("evidence_archived", 0) or 0),
+        "new_raw_objects": max(0, after["raw_objects"] - before["raw_objects"]),
+        "new_document_versions": max(
+            0, after["document_versions"] - before["document_versions"]
+        ),
+    }
+    errors.extend(str(value) for value in report.get("errors", []) if value)
+    entrypoints_succeeded = int(metrics.get("entrypoints_succeeded", 0) or 0)
+    documents_indexed = int(metrics.get("documents_indexed", 0) or 0)
+    if completed is None or completed.returncode != 0 or entrypoints_succeeded == 0:
+        state = "failed"
+    elif documents_indexed == 0:
+        state = "degraded"
+    else:
+        state = "healthy"
+    return STORE.finish_adapter_run(
+        run["run_id"],
+        state=state,
+        metrics=metrics,
+        cursor=report.get("cursor") if state == "healthy" else None,
+        errors=errors,
+    )
+
+
+def source_summary() -> dict[str, object]:
+    return {
+        source["source_id"]: {
+            "state": source["collection_state"],
+            "adapter_id": source["adapter_id"],
+            "adapter_version": source["adapter_version"],
+            "last_run": source.get("last_run"),
+        }
+        for source in STORE.list_sources()
+        if source.get("enabled")
+    }
+
+
+def run_requested_sources() -> int:
+    completed_count = 0
+    while not STOP_REQUESTED:
+        request = STORE.claim_adapter_run_request()
+        if not request:
+            return completed_count
+        source_id = str(request["source_id"])
+        write_status(
+            state="running",
+            active_source_id=source_id,
+            active_request_id=request["request_id"],
+            sources=source_summary(),
+            updated_at=iso(utc_now()),
+        )
+        run_id = None
+        result_state = "failed"
+        error = None
+        try:
+            result = run_adapter(ADAPTERS.create(source_id), trigger="manual")
+            run_id = str(result["run_id"])
+            result_state = str(result["state"])
+        except Exception as exc:
+            error = str(exc)
+        STORE.finish_adapter_run_request(
+            str(request["request_id"]),
+            run_id=run_id,
+            result_state=result_state,
+            error=error,
+        )
+        completed_count += 1
+    return completed_count
+
+
+def run_due_sources() -> None:
+    started_at = utc_now()
+    run_requested_sources()
+    for adapter in selected_adapters():
+        if STOP_REQUESTED:
+            break
+        if not is_due(adapter, utc_now()):
+            continue
+        write_status(
+            state="running",
+            active_source_id=adapter.source_id,
+            last_started_at=iso(started_at),
+            sources=source_summary(),
+            updated_at=iso(utc_now()),
+        )
+        run_adapter(adapter)
 
     finished_at = utc_now()
-    next_run_at = finished_at + timedelta(seconds=INTERVAL_SECONDS)
-    state = (
-        "idle"
-        if results and all(code == 0 for code in results.values()) and not indexing["errors"]
-        else "degraded"
+    sources = source_summary()
+    states = [str(value.get("state")) for value in sources.values()]
+    state = "idle" if states and all(value == "healthy" for value in states) else "degraded"
+    latest_runs = [
+        value["last_run"]
+        for value in sources.values()
+        if isinstance(value.get("last_run"), dict)
+    ]
+    last_started_at = max(
+        (str(run["started_at"]) for run in latest_runs if run.get("started_at")),
+        default=None,
     )
+    last_finished_at = max(
+        (str(run["finished_at"]) for run in latest_runs if run.get("finished_at")),
+        default=None,
+    )
+    next_run_at = finished_at + timedelta(seconds=POLL_SECONDS)
     write_status(
         state=state,
-        last_started_at=iso(started_at),
-        last_finished_at=iso(finished_at),
+        active_source_id=None,
+        last_started_at=last_started_at,
+        last_finished_at=last_finished_at,
         next_run_at=iso(next_run_at),
-        results=results,
-        indexing=indexing,
+        sources=sources,
         updated_at=iso(finished_at),
     )
     wait_until(next_run_at)
@@ -96,11 +263,19 @@ def run_cycle() -> None:
 def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    if not SPIDERS:
-        write_status(state="disabled", updated_at=iso(utc_now()))
-        return 0
+    recovered = STORE.recover_interrupted_adapter_runs()
+    requeued = STORE.recover_interrupted_adapter_run_requests()
+    quarantined = STORE.quarantine_generic_snapshots()
+    write_status(
+        state="starting",
+        recovered_interrupted_runs=recovered,
+        requeued_interrupted_requests=requeued,
+        quarantined_generic_snapshots=quarantined,
+        sources=source_summary(),
+        updated_at=iso(utc_now()),
+    )
     while not STOP_REQUESTED:
-        run_cycle()
+        run_due_sources()
     return 0
 
 

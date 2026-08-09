@@ -36,8 +36,8 @@ class SourceRegistry:
             raise FileNotFoundError(f"来源登记文件不存在: {self.path}")
 
         payload = json.loads(self.path.read_text(encoding="utf-8"))
-        if payload.get("schema_version") != 1:
-            raise ValueError("仅支持 schema_version=1 的来源登记文件")
+        if payload.get("schema_version") != 2:
+            raise ValueError("仅支持 schema_version=2 的来源登记文件")
 
         sources: Dict[str, Dict[str, Any]] = {}
         for source in payload.get("sources", []):
@@ -47,6 +47,11 @@ class SourceRegistry:
                 raise ValueError("每个来源必须提供 source_id 和至少一个 domains 值")
             if source_id in sources:
                 raise ValueError(f"来源重复登记: {source_id}")
+            adapter_id = str(source.get("adapter_id", "")).strip()
+            adapter_version = str(source.get("adapter_version", "")).strip()
+            adapter_kind = str(source.get("adapter_kind", "")).strip()
+            if not adapter_id or not adapter_version or not adapter_kind:
+                raise ValueError(f"来源缺少适配器契约: {source_id}")
 
             normalized = dict(source)
             normalized["source_id"] = source_id

@@ -1,109 +1,52 @@
-# 爬虫插件开发与安装指南
+# 来源适配器开发与升级指南
 
-本指南说明如何为 Qsou 数据采集层编写与安装“插件化”爬虫。
+QSou 的采集扩展点是“来源适配器”，不是任意 Spider 插件。每个启用来源必须在 `config/sources.json` 中登记，并且在 `AdapterRegistry` 中恰好对应一个有版本的实现。没有登记、实现或契约测试的代码不能进入生产调度。
 
-> 设计边界：插件是已登记数据源的连接器，不是独立的数据权威。新增插件必须遵循[自主数据资产设计指导](./data-sovereignty-design-guidelines.md)中的来源契约、原始证据、时间与版本规则。当前代码尚未完成原始响应归档时，应明确记录该差距，不得把结构化 Item 当成完整原始证据。
+完整架构、状态口径和升级流程见[来源适配器网络设计](./source-adapter-network.md)。
 
-## 1. 目标与能力
+## 新增一个来源
 
-- 可插拔：将插件包放入 `crawler/plugins/`（或通过 Python entry point 安装）即可自动被发现。
-- 无侵入：无需修改核心代码与 `settings.py` 的 `SPIDER_MODULES`。
-- 可验证：`cd crawler && scrapy list` 能显示插件 Spider 名称；`run_crawler.py` 可动态列出并启动。
+1. 在 `config/sources.json` 登记来源身份、域名、入口、文档类型、频率、游标策略、权利状态、`adapter_id` 和 `adapter_version`。
+2. 在 `crawler/qsou_crawler/adapters/` 新增一个 `SourceAdapter` 子类。
+3. 实现入口请求、详情发现规则；只有接口形状特殊时才覆盖 `discover`。
+4. 在 `crawler/qsou_crawler/adapters/registry.py` 注册适配器。
+5. 在 `tests/test_source_adapters.py` 增加该来源的固定响应样本和契约测试。
+6. 验证一轮真实运行至少产生入口成功数、详情发现数、详情获取数、文档产出数和证据归档数。
+7. 确认前台只按真实终态显示正常、需要检查或失败。
 
-## 2. 插件目录结构（目录扫描方式）
-
-```
-crawler/
-  plugins/
-    your_plugin_pkg/
-      __init__.py
-      spiders/
-        __init__.py
-        your_spider.py
-```
-
-- `your_spider.py` 中定义标准 Scrapy Spider 类，并设置唯一的 `name`。
-- 插件 Spider 输出的 `Item` 字段应与 `qsou_crawler.items` 中定义的结构对齐，例如 `NewsArticleItem`。
-
-最小示例：
+最小 HTML 新闻适配器：
 
 ```python
-# crawler/plugins/example_news_plugin/spiders/example_yicai_spider.py
-import scrapy
-from qsou_crawler.items import NewsArticleItem
+from .base import NewsHTMLAdapter
 
-class ExampleYicaiSpider(scrapy.Spider):
-    name = "example_yicai"
-    allowed_domains = ["yicai.com"]
-    start_urls = ["https://www.yicai.com/news/"]
 
-    def parse(self, response):
-        for href in response.css(".m-title a::attr(href)").getall():
-            yield response.follow(href, callback=self.parse_article)
-
-    def parse_article(self, response):
-        item = NewsArticleItem()
-        item["title"] = response.css("title::text").get() or ""
-        content_parts = response.css("article p::text, .article p::text").getall()
-        item["content"] = "\n".join([p.strip() for p in content_parts if p and p.strip()])
-        item["summary"] = (item["content"] or "")[:160]
-        item["source"] = "yicai.com"
-        item["url"] = response.url
-        yield item
+class ExampleAdapter(NewsHTMLAdapter):
+    source_id = "example"
+    adapter_id = "example-news"
+    version = "1.0.0"
+    link_patterns = (r"example\.com/news/\d+\.html(?:$|\?)",)
 ```
 
-## 3. 通过 Entry Point 的方式分发（可选）
+如果来源使用 JSON 公告接口，应覆盖 `initial_requests` 和 `discover`，返回 `DocumentReference`。详情仍由统一 Spider 下载、归档和解析，适配器不能绕开原始证据中间件直接写标准文档。
 
-若希望以 `pip install` 分发插件，可在你的独立 Python 包内声明 entry point：
+## 升级一个适配器
 
-- entry point group 固定为：`qsou_crawler.plugins`
-- entry point value 指向你的包的 `spiders` 模块，例如：`your_pkg.spiders`
+适配器升级必须是一个原子变更：
 
-`pyproject.toml` 示例：
+- 同时修改来源登记中的 `adapter_version` 和实现类的 `version`。
+- 增加能复现旧问题的响应样本，再修改解析代码。
+- 保留原始证据和历史标准文档；不得用新解析结果覆盖历史内容。
+- 新版本首轮仍回看最近列表窗口，由 `source_document_id` 和内容版本去重，避免升级切换造成时间缺口。
+- 只有入口成功且合格详情文档已经实际登记入库，运行终态才是 `healthy`；入口可达但零入库是 `degraded`。
+- 发布后核对该来源的详情发现、详情获取、文档产出和失败数，不能只看进程退出码。
 
-```toml
-[project.entry-points."qsou_crawler.plugins"]
-news_plugin = "your_pkg.spiders"
-```
+## 统一管理边界
 
-安装后运行 `scrapy list` 即可被发现。
+- 来源配置权威：`config/sources.json`。
+- 实现注册权威：`crawler/qsou_crawler/adapters/registry.py`。
+- 调度权威：`crawler/run_schedule.py`，按每个来源的 `schedule` 独立判断是否到期。
+- 运行事实权威：SQLite `adapter_runs` 和 `source_cursors`。
+- 用户可见状态：认证后的 `/api/v1/data/sources`、`/api/v1/data/adapter-runs` 和“数据资产”页面。
+- 逐源操作入口：`POST /api/v1/data/adapter-runs/{source_id}/trigger`；持久请求由同一调度器认领，禁用或待授权来源不能触发。
 
-## 4. 运行与验证
-
-- 列出所有 Spider（含插件）：
-  - `cd crawler && scrapy list`
-- 启动交互式运行器：
-  - `python crawler/run_crawler.py`
-  - 直接输入爬虫名或选择序号均可
-
-## 5. 配置与行为说明
-
-- 自定义加载器：`qsou_crawler.plugin_loader.PluginSpiderLoader`
-- 目录扫描基准：`CRAWLER_PLUGIN_DIRS = ["plugins"]`（相对 `crawler/` 根目录）
-- Entry point 组名：`CRAWLER_PLUGIN_ENTRYPOINT_GROUP = 'qsou_crawler.plugins'`
-- 插件内部可通过 `custom_settings` 微调参数（建议小范围覆盖，避免与全局冲突）。
-
-## 6. 最佳实践
-
-- 接入前登记来源身份、入口、覆盖范围、采集频率、权利状态和责任人。
-- 采集结果应保留来源文档标识、来源发布时间、实际抓取时间、最终 URL 和内容哈希。
-- 目标链路完成后，必须先确认原始响应持久化，再把结构化 Item 交给后续处理。
-- 与核心 Item 对齐，确保数据在 `pipelines` 中能被验证、去重并提交到处理系统。
-- 合理控制抓取速率，遵守 `robots.txt` 与站点条款。
-- 对接新增站点时，优先以插件形式扩展，避免修改核心仓库。
-
-## 7. 故障排查
-
-- 插件未被发现：
-  - 目录结构是否正确？`spiders/__init__.py` 是否存在？
-  - `scrapy list` 是否在 `crawler/` 目录执行？
-- 导入错误：
-  - 插件 Spider 内是否引用了不存在的依赖？
-  - `from qsou_crawler.items import NewsArticleItem` 是否可导入？
-
-```bash
-# 快速验证
-cd crawler
-scrapy list | cat
-scrapy crawl example_yicai -L INFO -s LOG_FILE=logs/scrapy.log
-```
+旧 `crawler/plugins/` 与按 Spider 名称扫描的加载器不再属于生产路径。保留的历史代码不能被当作正式适配器，也不会被统一调度器发现。

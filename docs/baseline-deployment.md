@@ -39,7 +39,9 @@ cp deploy/baseline.env.example deploy/baseline.env
 - `QSOU_WEB_PORT`：唯一宿主机入口端口，默认 `3000`。
 - `QSOU_ADMIN_USERNAME`、`QSOU_ADMIN_PASSWORD`与 `QSOU_SECRET_KEY`：登录账号、强密码与随机签名密钥，必须只保存在部署环境中。
 - `QSOU_ACCESS_TOKEN_EXPIRE_MINUTES`：服务端会话有效期，默认与 Cookie 一致为 24 小时。
-- `QSOU_CRAWLER_SPIDERS` 与 `QSOU_CRAWL_INTERVAL_SECONDS`：持续运行的采集器列表和轮询间隔。
+- `QSOU_SOURCE_IDS`：可选的来源子集；留空时运行登记中的全部启用来源。
+- `QSOU_CRAWL_POLL_SECONDS`：调度器检查到期来源的频率，默认 60 秒。
+- `QSOU_ADAPTER_MAX_DETAILS`：单来源单轮最多获取的详情数，默认 12；它限制批量规模，不改变来源健康判定。
 
 Compose 只把 Web 的 `3000` 发布到宿主机。API 的 `8000` 仅通过项目内部网络提供给 Web 服务端代理；完整项目重新发布后，端口自动发现也只能选择 Web，不会把公网域名切到 API。
 
@@ -49,7 +51,9 @@ Compose 只把 Web 的 `3000` 发布到宿主机。API 的 `8000` 仅通过项�
 docker compose --env-file deploy/baseline.env up -d --build
 ```
 
-采集器启动后立即执行首轮采集，随后按 `QSOU_CRAWL_INTERVAL_SECONDS` 周期运行。每轮先保存原始响应和 Spider 结构化条目，再把未被专用解析覆盖的有效 HTML 生成可搜索页面快照。状态写入共享数据目录的 `collector-status.json`，前台“数据资产”页面直接显示正在运行、等待下一轮或部分失败，不用“暂无新数据”掩盖故障。
+采集器启动后立即执行尚未运行的来源，随后按每个来源在 `sources.json` 中的 `schedule` 独立判断是否到期。每轮先保存入口和详情原始响应，再由对应版本适配器生成标准文档。入口页和通用页面快照不会进入正式搜索。运行终态、阶段指标和游标写入 SQLite，汇总状态同时写入 `collector-status.json`。
+
+数据资产页的“立即采集”会写入同一个 SQLite 调度队列。重复点击不会制造并行任务；采集器异常重启后，已认领但未闭合的请求会自动重新排队。`enabled=false` 或 `authorization_required` 的来源不能从前台强行触发。
 
 ## 4. 验证部署
 
@@ -91,6 +95,7 @@ npm run start -- -p 3000
 ## 6. 上线前边界
 
 - `config/sources.json` 中的 `rights_status=review_required` 是待复核状态，不是数据保存或再分发许可结论。
-- 来源覆盖状态目前只表示“已登记、是否采到数据”，还没有分页完整性、时间缺口和条款变更自动检查。
+- 搜狐财经当前为 `authorization_required`，保持登记但不参与自动调度；接入获授权且持续更新的 feed 后，必须升级适配器版本再启用。
+- 来源状态区分入口成功、详情发现、详情获取与文档产出；仍没有外部独立对账源来证明历史窗口绝对完整，也没有条款变更自动检查。
 - SQLite 加共享文件卷适合单实例基线；多 API 实例、跨节点采集或大规模数据前，需要迁移到支持并发与对象存储的实现，但不能改变原始证据的权威地位。
 - 备份必须覆盖来源登记、整个数据根目录及部署配置，并通过恢复演练验证，不能只备份搜索索引。

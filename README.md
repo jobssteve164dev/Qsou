@@ -29,7 +29,8 @@ Qsou 要建立的是一套不依赖传统搜索引擎才能持续运转的数据
 | [自主数据资产设计指导](./docs/data-sovereignty-design-guidelines.md) | 项目方向、数据权威、来源治理、时间模型与验收标准 |
 | [数据流架构](./docs/data-flow-architecture.md) | 目标数据流以及当前实现差距 |
 | [基线部署](./docs/baseline-deployment.md) | 部署 API、前端、采集器并验证数据资产闭环 |
-| [爬虫插件指南](./docs/crawler-plugins.md) | 数据源连接器的开发与验证方式 |
+| [来源适配器网络设计](./docs/source-adapter-network.md) | 适配器基座、九个来源、运行状态和升级闭环 |
+| [来源适配器开发指南](./docs/crawler-plugins.md) | 新增与升级来源适配器的操作方式 |
 | [法律合规指南](./docs/legal-compliance-guide.md) | 来源接入和数据使用的合规检查参考 |
 | [技术栈设计](./docs/tech-stack-design.md) | 历史技术选型与实现参考，不定义数据权威 |
 | [本地开发环境](./docs/local-development-setup.md) | 开发环境安装与运行 |
@@ -53,7 +54,7 @@ flowchart LR
 
 ## 当前实现与主要差距
 
-**Observed in code：** 当前基线已经在 Scrapy 解析之前保存原始响应；Spider 产出的结构化条目会直接登记为标准文档，未被专用解析器覆盖的有效 HTML 也会生成可搜索的页面快照，并始终关联原始证据。持续采集器随部署启动并公开真实运行状态；FastAPI 提供受认证保护的自有数据搜索、来源状态、证据查看和开放导出；Next.js 以同域 HttpOnly 会话提供“搜索”和“数据资产”两个用户入口。API 只存在于项目内部网络。Elasticsearch、Qdrant 与 Celery 是可选派生能力，关闭后基线仍可运行。
+**Observed in code：** 当前基线由一份来源注册表和一份适配器注册表约束九个一对一来源适配器；八个公开入口进入自动调度，搜狐财经在取得有效授权 feed 前保持待授权。调度器按来源频率独立运行，记录适配器版本、入口、详情、实际入库、失败和游标，并接收前台持久化的逐源立即采集请求。所有响应在解析前归档，只有来源适配器产生的正式文档进入搜索，通用首页快照不会掩盖解析失败。FastAPI 提供受认证保护的搜索、证据、来源运行状态、触发、导出与回放；Next.js 使用同域 HttpOnly 会话。API 只存在于项目内部网络，Elasticsearch、Qdrant、Redis 和 Celery 不是生产基线硬依赖。
 
 **仍待完成：** 当前回放从已保存标准文档开始，尚未完成仅凭原始响应重新执行解析器并重建所有派生层的恢复演练；来源登记也尚未自动证明分页、编号和时间窗口完整性。多实例存储、用户知识资产、实体事件层和订阅仍在基线之外。
 

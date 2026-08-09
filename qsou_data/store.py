@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,18 @@ class DataAssetError(RuntimeError):
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def schedule_seconds(value: Any) -> int:
+    text = str(value or "30m").strip().lower()
+    try:
+        if text.endswith("m"):
+            return max(300, int(text[:-1]) * 60)
+        if text.endswith("h"):
+            return max(300, int(text[:-1]) * 3600)
+        return max(300, int(text))
+    except ValueError:
+        return 1800
 
 
 def default_data_root() -> Path:
@@ -173,6 +186,56 @@ class DataAssetStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_outbox_state
                     ON processing_outbox(state, updated_at);
+
+                CREATE TABLE IF NOT EXISTS adapter_runs (
+                    run_id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    adapter_id TEXT NOT NULL,
+                    adapter_version TEXT NOT NULL,
+                    trigger TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    entrypoints_total INTEGER NOT NULL DEFAULT 0,
+                    entrypoints_succeeded INTEGER NOT NULL DEFAULT 0,
+                    detail_discovered INTEGER NOT NULL DEFAULT 0,
+                    detail_fetched INTEGER NOT NULL DEFAULT 0,
+                    documents_emitted INTEGER NOT NULL DEFAULT 0,
+                    evidence_archived INTEGER NOT NULL DEFAULT 0,
+                    failures INTEGER NOT NULL DEFAULT 0,
+                    cursor_before_json TEXT,
+                    cursor_after_json TEXT,
+                    error_summary_json TEXT,
+                    metrics_json TEXT NOT NULL DEFAULT '{}'
+                );
+                CREATE INDEX IF NOT EXISTS idx_adapter_runs_source_time
+                    ON adapter_runs(source_id, started_at DESC);
+
+                CREATE TABLE IF NOT EXISTS source_cursors (
+                    source_id TEXT PRIMARY KEY,
+                    adapter_id TEXT NOT NULL,
+                    adapter_version TEXT NOT NULL,
+                    cursor_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS adapter_run_requests (
+                    request_id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    requested_by TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    requested_at TEXT NOT NULL,
+                    claimed_at TEXT,
+                    finished_at TEXT,
+                    run_id TEXT,
+                    result_state TEXT,
+                    error TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_adapter_requests_state_time
+                    ON adapter_run_requests(state, requested_at ASC);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_adapter_requests_one_active
+                    ON adapter_run_requests(source_id)
+                    WHERE state IN ('queued', 'running');
                 """
             )
 
@@ -514,14 +577,22 @@ class DataAssetStore:
             except (OSError, json.JSONDecodeError):
                 collector = {"state": "unknown"}
 
+        sources = self.list_sources()
+        network_states: Dict[str, int] = {}
+        for source in sources:
+            state = str(source.get("collection_state") or "not_started")
+            network_states[state] = network_states.get(state, 0) + 1
+
         return {
             "status": "healthy",
-            "registered_sources": len(self.registry.all(enabled_only=True)),
+            "registered_sources": len(self.registry.all()),
+            "active_sources": len(self.registry.all(enabled_only=True)),
             "raw_objects": raw_count,
             "document_versions": document_count,
             "active_documents": active_count,
             "processing": {row["state"]: row["count"] for row in outbox_rows},
             "collector": collector,
+            "network": network_states,
         }
 
     def list_sources(self) -> List[Dict[str, Any]]:
@@ -533,19 +604,414 @@ class DataAssetStore:
                 FROM raw_objects GROUP BY source_id
                 """
             ).fetchall()
+            document_rows = connection.execute(
+                """
+                SELECT source_id,
+                       COUNT(*) AS document_versions,
+                       SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END) AS active_documents,
+                       MAX(fetched_at) AS last_document_at
+                FROM standard_documents GROUP BY source_id
+                """
+            ).fetchall()
         observed = {row["source_id"]: dict(row) for row in rows}
+        documents = {row["source_id"]: dict(row) for row in document_rows}
 
         result = []
         for source in self.registry.all():
             metrics = observed.get(source["source_id"], {})
+            document_metrics = documents.get(source["source_id"], {})
+            latest_run = self.latest_adapter_run(source["source_id"])
+            active_request = self.active_adapter_run_request(source["source_id"])
             entry = dict(source)
             entry["raw_count"] = metrics.get("raw_count", 0)
             entry["last_fetched_at"] = metrics.get("last_fetched_at")
-            entry["health_state"] = (
-                "collecting" if metrics.get("last_fetched_at") else source.get("health_state", "configured")
-            )
+            entry["document_versions"] = document_metrics.get("document_versions", 0)
+            entry["active_documents"] = document_metrics.get("active_documents", 0)
+            entry["last_document_at"] = document_metrics.get("last_document_at")
+            if not source.get("enabled"):
+                entry["collection_state"] = str(source.get("health_state") or "disabled")
+            elif active_request:
+                entry["collection_state"] = active_request["state"]
+            else:
+                entry["collection_state"] = latest_run.get("state", "not_started") if latest_run else "not_started"
+                if entry["collection_state"] == "healthy" and latest_run.get("finished_at"):
+                    try:
+                        finished_at = datetime.fromisoformat(
+                            str(latest_run["finished_at"]).replace("Z", "+00:00")
+                        )
+                        stale_after = schedule_seconds(source.get("schedule")) * 2
+                        if (datetime.now(timezone.utc) - finished_at).total_seconds() > stale_after:
+                            entry["collection_state"] = "stale"
+                    except (TypeError, ValueError):
+                        entry["collection_state"] = "stale"
+            entry["last_run"] = latest_run
+            entry["active_request"] = active_request
+            entry["cursor"] = self.get_source_cursor(source["source_id"])
             result.append(entry)
         return result
+
+    def source_counts(self, source_id: str) -> Dict[str, int]:
+        """Return monotonic source totals used to close one adapter run."""
+        self.registry.get(source_id)
+        with self._connection() as connection:
+            raw_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM raw_objects WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()["count"]
+            document_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM standard_documents WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()["count"]
+        return {"raw_objects": int(raw_count), "document_versions": int(document_count)}
+
+    def begin_adapter_run(
+        self,
+        *,
+        source_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        trigger: str = "schedule",
+    ) -> Dict[str, Any]:
+        """Open one source-scoped run before any network request is made."""
+        source = self.registry.get(source_id)
+        if source.get("adapter_id") != adapter_id:
+            raise DataAssetError(f"适配器与来源契约不一致: {source_id}/{adapter_id}")
+        if source.get("adapter_version") != adapter_version:
+            raise DataAssetError(
+                f"适配器版本与来源契约不一致: {source_id}/{adapter_version}"
+            )
+        run_id = uuid.uuid4().hex
+        started_at = utc_now()
+        cursor_before = self.get_source_cursor(source_id)
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO adapter_runs (
+                    run_id, source_id, adapter_id, adapter_version, trigger,
+                    state, started_at, cursor_before_json, metrics_json
+                ) VALUES (?, ?, ?, ?, ?, 'running', ?, ?, '{}')
+                """,
+                (
+                    run_id,
+                    source_id,
+                    adapter_id,
+                    adapter_version,
+                    trigger,
+                    started_at,
+                    _json(cursor_before) if cursor_before else None,
+                ),
+            )
+        return self.get_adapter_run(run_id)
+
+    def finish_adapter_run(
+        self,
+        run_id: str,
+        *,
+        state: str,
+        metrics: Optional[Mapping[str, Any]] = None,
+        cursor: Optional[Mapping[str, Any]] = None,
+        errors: Optional[Sequence[Any]] = None,
+    ) -> Dict[str, Any]:
+        """Persist one terminal adapter result and advance its cursor only on success."""
+        if state not in {"healthy", "degraded", "failed", "cancelled"}:
+            raise ValueError(f"不支持的适配器终态: {state}")
+        current = self.get_adapter_run(run_id)
+        values = dict(metrics or {})
+        fields = {
+            "entrypoints_total",
+            "entrypoints_succeeded",
+            "detail_discovered",
+            "detail_fetched",
+            "documents_emitted",
+            "evidence_archived",
+            "failures",
+        }
+        normalized = {field: max(0, int(values.get(field, 0) or 0)) for field in fields}
+        finished_at = utc_now()
+        with self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE adapter_runs SET
+                    state = ?, finished_at = ?, entrypoints_total = ?,
+                    entrypoints_succeeded = ?, detail_discovered = ?,
+                    detail_fetched = ?, documents_emitted = ?,
+                    evidence_archived = ?, failures = ?, cursor_after_json = ?,
+                    error_summary_json = ?, metrics_json = ?
+                WHERE run_id = ?
+                """,
+                (
+                    state,
+                    finished_at,
+                    normalized["entrypoints_total"],
+                    normalized["entrypoints_succeeded"],
+                    normalized["detail_discovered"],
+                    normalized["detail_fetched"],
+                    normalized["documents_emitted"],
+                    normalized["evidence_archived"],
+                    normalized["failures"],
+                    _json(cursor) if cursor else None,
+                    _json(list(errors or [])) if errors else None,
+                    _json(values),
+                    run_id,
+                ),
+            )
+        if state == "healthy" and cursor:
+            self.set_source_cursor(
+                source_id=current["source_id"],
+                adapter_id=current["adapter_id"],
+                adapter_version=current["adapter_version"],
+                cursor=cursor,
+            )
+        return self.get_adapter_run(run_id)
+
+    def get_adapter_run(self, run_id: str) -> Dict[str, Any]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM adapter_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        if not row:
+            raise KeyError(run_id)
+        return self._adapter_run_row(row)
+
+    def latest_adapter_run(self, source_id: str) -> Optional[Dict[str, Any]]:
+        self.registry.get(source_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM adapter_runs WHERE source_id = ?
+                ORDER BY started_at DESC LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+        return self._adapter_run_row(row) if row else None
+
+    def list_adapter_runs(self, source_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        bounded = max(1, min(int(limit), 500))
+        parameters: List[Any] = []
+        where = ""
+        if source_id:
+            self.registry.get(source_id)
+            where = "WHERE source_id = ?"
+            parameters.append(source_id)
+        parameters.append(bounded)
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM adapter_runs {where} ORDER BY started_at DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+        return [self._adapter_run_row(row) for row in rows]
+
+    def recover_interrupted_adapter_runs(self) -> int:
+        """Close runs left open by a previous collector process before scheduling again."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT run_id FROM adapter_runs WHERE state = 'running'"
+            ).fetchall()
+            now = utc_now()
+            connection.executemany(
+                """
+                UPDATE adapter_runs SET state = 'failed', finished_at = ?, failures = failures + 1,
+                    error_summary_json = ? WHERE run_id = ?
+                """,
+                [
+                    (now, _json(["采集器重启前运行未正常结束"]), row["run_id"])
+                    for row in rows
+                ],
+            )
+        return len(rows)
+
+    def get_source_cursor(self, source_id: str) -> Optional[Dict[str, Any]]:
+        source = self.registry.get(source_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT adapter_id, adapter_version, cursor_json
+                FROM source_cursors WHERE source_id = ?
+                """,
+                (source_id,),
+            ).fetchone()
+        if not row:
+            return None
+        if row["adapter_id"] != source["adapter_id"] or row["adapter_version"] != source["adapter_version"]:
+            return None
+        return json.loads(row["cursor_json"])
+
+    def set_source_cursor(
+        self,
+        *,
+        source_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        cursor: Mapping[str, Any],
+    ) -> None:
+        source = self.registry.get(source_id)
+        if source.get("adapter_id") != adapter_id or source.get("adapter_version") != adapter_version:
+            raise DataAssetError(f"游标与当前适配器版本不一致: {source_id}/{adapter_id}/{adapter_version}")
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO source_cursors (
+                    source_id, adapter_id, adapter_version, cursor_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(source_id) DO UPDATE SET
+                    adapter_id = excluded.adapter_id,
+                    adapter_version = excluded.adapter_version,
+                    cursor_json = excluded.cursor_json,
+                    updated_at = excluded.updated_at
+                """,
+                (source_id, adapter_id, adapter_version, _json(dict(cursor)), utc_now()),
+            )
+
+    def request_adapter_run(
+        self,
+        source_id: str,
+        *,
+        requested_by: str = "operator",
+    ) -> Dict[str, Any]:
+        """Queue one source-scoped run, deduplicating active requests."""
+        source = self.registry.get(source_id)
+        if not source.get("enabled"):
+            raise DataAssetError(f"来源未启用: {source_id}")
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT * FROM adapter_run_requests
+                WHERE source_id = ? AND state IN ('queued', 'running')
+                ORDER BY requested_at ASC LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+            if existing:
+                return self._adapter_request_row(existing)
+            request_id = uuid.uuid4().hex
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO adapter_run_requests (
+                    request_id, source_id, requested_by, state, requested_at
+                ) VALUES (?, ?, ?, 'queued', ?)
+                """,
+                (request_id, source_id, requested_by[:100], utc_now()),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM adapter_run_requests
+                WHERE source_id = ? AND state IN ('queued', 'running')
+                ORDER BY requested_at ASC LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+        return self._adapter_request_row(row)
+
+    def active_adapter_run_request(self, source_id: str) -> Optional[Dict[str, Any]]:
+        self.registry.get(source_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM adapter_run_requests
+                WHERE source_id = ? AND state IN ('queued', 'running')
+                ORDER BY requested_at ASC LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+        return self._adapter_request_row(row) if row else None
+
+    def claim_adapter_run_request(self) -> Optional[Dict[str, Any]]:
+        """Atomically claim the oldest manual collection request."""
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT * FROM adapter_run_requests
+                WHERE state = 'queued' ORDER BY requested_at ASC LIMIT 1
+                """
+            ).fetchone()
+            if not row:
+                return None
+            claimed_at = utc_now()
+            updated = connection.execute(
+                """
+                UPDATE adapter_run_requests SET state = 'running', claimed_at = ?
+                WHERE request_id = ? AND state = 'queued'
+                """,
+                (claimed_at, row["request_id"]),
+            )
+            if updated.rowcount != 1:
+                return None
+            claimed = connection.execute(
+                "SELECT * FROM adapter_run_requests WHERE request_id = ?",
+                (row["request_id"],),
+            ).fetchone()
+        return self._adapter_request_row(claimed)
+
+    def recover_interrupted_adapter_run_requests(self) -> int:
+        """Requeue manual requests claimed by a collector that stopped mid-run."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT request_id FROM adapter_run_requests WHERE state = 'running'"
+            ).fetchall()
+            connection.executemany(
+                """
+                UPDATE adapter_run_requests SET state = 'queued', claimed_at = NULL,
+                    error = '采集器重启，任务已自动重新排队'
+                WHERE request_id = ?
+                """,
+                [(row["request_id"],) for row in rows],
+            )
+        return len(rows)
+
+    def finish_adapter_run_request(
+        self,
+        request_id: str,
+        *,
+        run_id: Optional[str],
+        result_state: str,
+        error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if result_state not in {"healthy", "degraded", "failed", "cancelled"}:
+            raise ValueError(f"不支持的请求终态: {result_state}")
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE adapter_run_requests SET state = 'completed', finished_at = ?,
+                    run_id = ?, result_state = ?, error = ?
+                WHERE request_id = ? AND state = 'running'
+                """,
+                (utc_now(), run_id, result_state, error, request_id),
+            )
+            if updated.rowcount != 1:
+                raise DataAssetError(f"采集请求不在运行态: {request_id}")
+            row = connection.execute(
+                "SELECT * FROM adapter_run_requests WHERE request_id = ?",
+                (request_id,),
+            ).fetchone()
+        return self._adapter_request_row(row)
+
+    def quarantine_generic_snapshots(self) -> int:
+        """Keep archived snapshots but remove them from the formal search corpus."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT content_version_id FROM standard_documents
+                WHERE active = 1 AND parser_version LIKE 'qsou-generic-html/%'
+                """
+            ).fetchall()
+            ids = [row["content_version_id"] for row in rows]
+            if ids:
+                now = utc_now()
+                connection.executemany(
+                    "UPDATE standard_documents SET active = 0, superseded_at = ? WHERE content_version_id = ?",
+                    [(now, content_version_id) for content_version_id in ids],
+                )
+                connection.executemany(
+                    """
+                    UPDATE processing_outbox SET state = 'filtered',
+                        last_error = '通用页面快照不进入正式情报索引', updated_at = ?
+                    WHERE content_version_id = ?
+                    """,
+                    [(now, content_version_id) for content_version_id in ids],
+                )
+        return len(ids)
 
     def list_evidence(
         self,
@@ -773,6 +1239,23 @@ class DataAssetStore:
                     for content_version_id in ids
                 ],
             )
+
+    @staticmethod
+    def _adapter_run_row(row: sqlite3.Row) -> Dict[str, Any]:
+        value = dict(row)
+        for source_key, target_key in (
+            ("cursor_before_json", "cursor_before"),
+            ("cursor_after_json", "cursor_after"),
+            ("error_summary_json", "errors"),
+            ("metrics_json", "metrics"),
+        ):
+            raw = value.pop(source_key)
+            value[target_key] = json.loads(raw) if raw else None
+        return value
+
+    @staticmethod
+    def _adapter_request_row(row: sqlite3.Row) -> Dict[str, Any]:
+        return dict(row)
 
     @staticmethod
     def _safe_headers(headers: Mapping[Any, Any]) -> Dict[str, str]:

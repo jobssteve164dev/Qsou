@@ -180,6 +180,12 @@ export const dataAssetApi = {
   sources: async (): Promise<ApiResponse<{ sources: DataSourceStatus[] }>> => {
     return apiRequest<{ sources: DataSourceStatus[] }>('get', '/data/sources');
   },
+  triggerSource: async (sourceId: string): Promise<ApiResponse<{ request: { request_id: string; state: string } }>> => {
+    return apiRequest<{ request: { request_id: string; state: string } }>(
+      'post',
+      `/data/adapter-runs/${encodeURIComponent(sourceId)}/trigger`,
+    );
+  },
   evidence: async (limit = 20): Promise<ApiResponse<{ evidence: EvidenceRecord[] }>> => {
     return apiRequest<{ evidence: EvidenceRecord[] }>('get', `/data/evidence?limit=${limit}`);
   },

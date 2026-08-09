@@ -31,6 +31,27 @@ async def list_sources():
     return {"sources": store.list_sources()}
 
 
+@router.get("/adapter-runs")
+async def list_adapter_runs(
+    source_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """查看每个来源适配器的真实运行终态和产出指标。"""
+    try:
+        return {"runs": store.list_adapter_runs(source_id=source_id, limit=limit)}
+    except (ValueError, DataAssetError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/adapter-runs/{source_id}/trigger", status_code=202)
+async def trigger_adapter_run(source_id: str):
+    """把指定来源加入采集队列；重复点击不会制造并行任务。"""
+    try:
+        return {"request": store.request_adapter_run(source_id)}
+    except (ValueError, DataAssetError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/evidence")
 async def list_evidence(
     source_id: Optional[str] = Query(default=None),

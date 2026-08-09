@@ -13,52 +13,8 @@ BOT_NAME = 'qsou_crawler'
 SPIDER_MODULES = ['qsou_crawler.spiders']
 NEWSPIDER_MODULE = 'qsou_crawler.spiders'
 
-# 插件化蜘蛛加载器
-SPIDER_LOADER_CLASS = 'qsou_crawler.plugin_loader.PluginSpiderLoader'
-
-# 插件发现配置
-# - 目录扫描：相对于 crawler/ 根目录
-CRAWLER_PLUGIN_DIRS = [
-    'plugins'
-]
-# - Entry point 分组名
-CRAWLER_PLUGIN_ENTRYPOINT_GROUP = 'qsou_crawler.plugins'
-
-# ============================================
-# JS渲染 - Playwright 集成
-# ============================================
-TWISTED_REACTOR = 'twisted.internet.asyncioreactor.AsyncioSelectorReactor'
-DOWNLOAD_HANDLERS = {
-    'http': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
-    'https': 'scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler',
-}
-PLAYWRIGHT_BROWSER_TYPE = 'chromium'
-PLAYWRIGHT_LAUNCH_OPTIONS = {
-    'headless': True
-}
-
-# ============================================
-# 增量抓取 - DeltaFetch
-# ============================================
-EXTENSIONS = {
-    'scrapy_deltafetch.DeltaFetch': 100,
-}
-DELTAFETCH_ENABLED = True
-DELTAFETCH_DIR = 'deltafetch'
-
-# ============================================
-# 采集质量监控 - Spidermon
-# ============================================
-EXTENSIONS.update({
-    'spidermon.contrib.scrapy.extensions.Spidermon': 500,
-})
-SPIDERMON_ENABLED = True
-SPIDERMON_SPIDER_OPENMONITORS = (
-    'qsou_crawler.monitors.SpiderOpenMonitorSuite',
-)
-SPIDERMON_SPIDER_CLOSEMONITORS = (
-    'qsou_crawler.monitors.SpiderCloseMonitorSuite',
-)
+# 生产扩展点统一由 AdapterRegistry 管理；不再并行扫描旧插件目录。
+SPIDER_LOADER_CLASS = 'scrapy.spiderloader.SpiderLoader'
 
 # ============================================
 # 机器人协议遵循 (Robots.txt Compliance)
@@ -127,31 +83,14 @@ ITEM_PIPELINES = {
     'qsou_crawler.pipelines.data_processing_pipeline.DataProcessingPipeline': 500,  # 数据处理
 }
 
-# ============================================
-# 分布式爬虫配置 (Scrapy-Redis)
-# ============================================
-# 默认沿用分布式调度；容器基线可使用单机调度，避免把 Redis 变成数据落地前置条件。
-if os.getenv('QSOU_STANDALONE_CRAWLER', 'false').lower() != 'true':
-    SCHEDULER = "scrapy_redis.scheduler.Scheduler"
-    DUPEFILTER_CLASS = "scrapy_redis.dupefilter.RFPDupeFilter"
-    SCHEDULER_PERSIST = True
-
-# Redis连接设置
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
-
 # 自主数据资产基线
 QSOU_DATA_ROOT = os.getenv('QSOU_DATA_ROOT', '')
 QSOU_SOURCE_REGISTRY = os.getenv('QSOU_SOURCE_REGISTRY', '')
 QSOU_OUTBOX_DISPATCH_ENABLED = os.getenv('QSOU_OUTBOX_DISPATCH_ENABLED', 'true').lower() == 'true'
 QSOU_OUTBOX_BATCH_SIZE = int(os.getenv('QSOU_OUTBOX_BATCH_SIZE', 10))
 
-# ============================================
-# 缓存设置
-# ============================================
-HTTPCACHE_ENABLED = True
-HTTPCACHE_EXPIRATION_SECS = 3600  # 1小时过期
-HTTPCACHE_DIR = 'httpcache'
-HTTPCACHE_IGNORE_HTTP_CODES = [500, 502, 503, 504, 408, 429]
+# 不使用框架缓存替代原始证据归档；每次访问都进入可审计证据链。
+HTTPCACHE_ENABLED = False
 
 # ============================================
 # 日志设置
@@ -298,7 +237,6 @@ ALLOWED_DOMAINS_ONLY = True
 DEFAULT_REQUEST_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
     'Connection': 'keep-alive',
     'Upgrade-Insecure-Requests': '1',
     'DNT': '1',  # Do Not Track

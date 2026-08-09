@@ -60,6 +60,7 @@ class RawEvidenceDownloaderMiddleware:
 				encoding=getattr(response, "encoding", None),
 				collector=f"scrapy:{spider.name}",
 			)
+			spider.crawler.stats.inc_value("adapter/evidence_archived")
 			response.meta["qsou_evidence"] = {
 				"raw_object_id": evidence["raw_object_id"],
 				"source_id": evidence["source_id"],
@@ -69,9 +70,11 @@ class RawEvidenceDownloaderMiddleware:
 			}
 			return response
 		except UnknownSourceError:
+			spider.crawler.stats.inc_value("adapter/failures")
 			spider.logger.error("响应来源未登记，拒绝进入正式数据链: %s", response.url)
 			raise
 		except Exception:
+			spider.crawler.stats.inc_value("adapter/failures")
 			spider.logger.exception("原始证据归档失败，拒绝解析响应: %s", response.url)
 			raise
 
@@ -158,7 +161,6 @@ class AntiDetectionMiddleware:
 	def process_request(self, request: Request, spider):
 		request.headers.setdefault(b"Accept", b"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.headers.setdefault(b"Accept-Language", b"zh-CN,zh;q=0.9,en;q=0.8")
-		request.headers.setdefault(b"Accept-Encoding", b"gzip, deflate, br")
 		request.headers.setdefault(b"Connection", b"keep-alive")
 		request.headers.setdefault(b"Upgrade-Insecure-Requests", b"1")
 		return None

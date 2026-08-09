@@ -62,8 +62,9 @@ services:
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
       LOG_FILE: /app/crawler/logs/scrapy.log
-      QSOU_CRAWLER_SPIDERS: ${QSOU_CRAWLER_SPIDERS:-company_announcement,financial_news}
-      QSOU_CRAWL_INTERVAL_SECONDS: ${QSOU_CRAWL_INTERVAL_SECONDS:-1800}
+      QSOU_SOURCE_IDS: ${QSOU_SOURCE_IDS:-}
+      QSOU_CRAWL_POLL_SECONDS: ${QSOU_CRAWL_POLL_SECONDS:-60}
+      QSOU_ADAPTER_MAX_DETAILS: ${QSOU_ADAPTER_MAX_DETAILS:-12}
     volumes:
       - qsou-data:/var/lib/qsou
       - qsou-crawler-logs:/app/crawler/logs

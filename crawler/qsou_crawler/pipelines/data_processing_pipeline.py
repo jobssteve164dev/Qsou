@@ -8,7 +8,6 @@ import logging
 from typing import Dict, Any
 from scrapy import Item
 from scrapy.exceptions import DropItem
-from celery import Celery
 import time
 
 from qsou_crawler.items import NewsArticleItem, CompanyAnnouncementItem
@@ -50,6 +49,7 @@ class DataProcessingPipeline:
         """初始化Celery连接"""
         try:
             import os
+            from celery import Celery
             self.celery_app = Celery('qsou-data-processor')
             self.celery_app.config_from_object({
                 'broker_url': os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/1'),
@@ -76,6 +76,7 @@ class DataProcessingPipeline:
             # 原始响应已在下载器中间件归档；此处登记标准文档和可靠待处理记录。
             standard_document = self.asset_store.register_document(self.convert_item_to_dict(item))
             self.batch_items.append(standard_document)
+            spider.crawler.stats.inc_value("adapter/documents_indexed")
             
             # 如果达到批次大小，发送到数据处理系统
             if len(self.batch_items) >= self.batch_size:
@@ -87,6 +88,7 @@ class DataProcessingPipeline:
         except Exception as e:
             self.logger.error(f"处理项目失败: {str(e)}")
             self.stats['errors'] += 1
+            spider.crawler.stats.inc_value("adapter/failures")
             raise DropItem(f"处理失败: {str(e)}")
     
     def close_spider(self, spider):

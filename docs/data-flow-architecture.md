@@ -25,7 +25,7 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
 
 ```text
 来源登记 config/sources.json
-  → 持续采集调度器按周期运行 Spider
+  → 持续调度器按每个来源的频率运行版本化适配器
   → Scrapy Downloader Middleware 归档原始响应
   → Spider 解析并关联 raw_object_id
   → DataProcessingPipeline 登记身份、时间和内容版本
@@ -40,8 +40,10 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
 - `qsou_data/store.py` 负责原始文件、SQLite 目录、身份版本、可靠待处理状态、本地搜索、导出和回放。
 - `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
 - `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 先登记标准文档，再按配置提交派生处理；提交失败不会删除本地待处理记录。
-- `crawler/index_evidence.py` 为未被专用 Spider 解析的有效 HTML 生成可搜索页面快照；它是有原始证据约束的兜底规范化，不会伪造内容或吞掉后续专用解析版本。
-- `crawler/run_schedule.py` 负责持续运行正式 Spider，并把最近一轮与下一轮状态写入共享数据目录。
+- `crawler/qsou_crawler/adapters/` 为九个来源提供一对一、可版本化的入口发现和详情解析契约。
+- `crawler/run_schedule.py` 按来源频率独立调度，并把入口、详情、文档、失败和游标写入运行账本。
+- `adapter_run_requests` 为逐源“立即采集”提供持久队列、去重、原子认领和重启恢复，不另建第二套调度心智。
+- 通用 HTML 快照仍保留原始证据，但不进入正式搜索语料；入口页不能掩盖专用适配器失败。
 - `data-processor/tasks.py` 将处理、过滤、索引和失败状态回写数据资产目录。
 - `api-gateway/app/api/v1/endpoints/data_assets.py` 提供来源、证据、版本、导出与回放入口。
 - `web-frontend/src/pages/api/` 在服务端持有 HttpOnly 会话并代理内部 API；浏览器不保存令牌，API 不发布宿主机端口。
@@ -52,13 +54,14 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
 
 当前仍没有以下完整能力：
 
-- 自动验证来源分页、公告编号、游标和连续时间窗口是否完整。
+- 使用外部独立对账源自动证明来源分页、公告编号和连续时间窗口绝对完整。
 - 保存请求上下文、附件关系及 WARC 级会话证据；当前基线保存响应正文和安全响应头。
 - 仅从原始响应按指定解析器版本重建标准文档；当前回放从已保存标准文档开始。
 - 从原始证据恢复标准文档、全文索引与向量索引的定期演练和差异报告。
 - 跨节点对象存储、多实例目录服务、用户知识资产、实体事件层和订阅闭环。
+- 搜狐财经在获得有效授权 feed 前保持待授权，不参与自动采集；这是来源接入边界，不以绕过 robots 或导入停更 RSS 填数。
 
-当前基线已经改变了事实权威，但还不能仅凭保存数量证明来源完整覆盖。
+当前基线已经改变了事实权威，并能按来源显示入口、详情和文档产出；仍不能仅凭保存数量证明来源绝对完整覆盖。
 
 ## 4. 目标组件职责
 

@@ -26,6 +26,7 @@ const formatTime = (value?: string | null) => {
 const collectorMessage = (collector?: DataAssetStatus['collector']) => {
   if (!collector) return { label: '正在读取', tone: 'bg-slate-200' };
   const map: Record<string, { label: string; tone: string }> = {
+    starting: { label: '正在启动采集网络', tone: 'bg-cyan-500' },
     running: { label: '正在采集来源数据', tone: 'bg-cyan-500' },
     idle: { label: '运行正常，等待下一轮', tone: 'bg-emerald-500' },
     degraded: { label: '部分采集任务失败', tone: 'bg-amber-500' },
@@ -37,11 +38,28 @@ const collectorMessage = (collector?: DataAssetStatus['collector']) => {
   return map[collector.state] || map.unknown;
 };
 
+const sourceState = (source: DataSourceStatus) => {
+  const states: Record<DataSourceStatus['collection_state'], { label: string; tone: string; description: string }> = {
+    healthy: { label: '详情入库正常', tone: 'bg-emerald-50 text-emerald-800', description: '最近一轮已从入口发现详情并生成可搜索文档' },
+    degraded: { label: '需要检查', tone: 'bg-amber-50 text-amber-800', description: '入口可以访问，但最近一轮没有生成合格文档' },
+    failed: { label: '采集失败', tone: 'bg-rose-50 text-rose-800', description: '最近一轮没有完成入口访问或解析' },
+    queued: { label: '已排队', tone: 'bg-cyan-50 text-cyan-800', description: '已收到立即采集请求，采集器会按顺序处理' },
+    running: { label: '正在采集', tone: 'bg-cyan-50 text-cyan-800', description: '当前正在运行这一来源的采集规则' },
+    cancelled: { label: '已中止', tone: 'bg-slate-100 text-slate-700', description: '最近一轮采集被中止' },
+    stale: { label: '数据已过期', tone: 'bg-amber-50 text-amber-800', description: '最近一次成功运行已经超过两倍采集周期' },
+    authorization_required: { label: '待授权', tone: 'bg-violet-50 text-violet-800', description: '来源不允许通用自动采集，接入获授权的数据通道后才能运行' },
+    disabled: { label: '未启用', tone: 'bg-slate-100 text-slate-600', description: '该来源当前不参与自动采集' },
+    not_started: { label: '尚未运行', tone: 'bg-slate-100 text-slate-600', description: '来源已经登记，采集规则还没有完成首轮运行' },
+  };
+  return states[source.collection_state] || states.not_started;
+};
+
 const DataAssetsPage: React.FC = () => {
   const [status, setStatus] = useState<DataAssetStatus | null>(null);
   const [sources, setSources] = useState<DataSourceStatus[]>([]);
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -64,6 +82,19 @@ const DataAssetsPage: React.FC = () => {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  const triggerSource = useCallback(async (sourceId: string) => {
+    setTriggering(sourceId);
+    setError(null);
+    const result = await dataAssetApi.triggerSource(sourceId);
+    if (!result.success) {
+      setError(result.error || '暂时无法发起采集');
+      setTriggering(null);
+      return;
+    }
+    await load();
+    setTriggering(null);
   }, [load]);
 
   const sourceNames = useMemo(
@@ -128,26 +159,41 @@ const DataAssetsPage: React.FC = () => {
                 </div>
                 <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:text-right">
                   <div><dt className="text-slate-500">最近完成</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.last_finished_at)}</dd></div>
-                  <div><dt className="text-slate-500">下次运行</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.next_run_at)}</dd></div>
+                  <div><dt className="text-slate-500">下次检查</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.next_run_at)}</dd></div>
                 </dl>
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-semibold text-slate-950">来源覆盖</h2><p className="mt-1 text-sm text-slate-500">一手来源优先；“已登记”不等于已经完整采集。</p></div>
+              <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-semibold text-slate-950">情报来源网络</h2><p className="mt-1 text-sm text-slate-500">只有最近一轮真正发现详情并生成文档，才会显示为正常。</p></div>
               <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
-                {sources.map((source) => (
-                  <article key={source.source_id} className="bg-white p-5 sm:p-6">
+                {sources.map((source) => {
+                  const state = sourceState(source);
+                  return (
+                    <article key={source.source_id} className="bg-white p-5 sm:p-6" title={state.description}>
                     <div className="flex items-start justify-between gap-4">
-                      <div><h3 className="font-semibold text-slate-950">{source.source_name}</h3><p className="mt-1 text-xs text-slate-500">{source.authority_tier === 'primary' ? '一手来源' : source.authority_tier === 'secondary' ? '补充来源' : '线索来源'}</p></div>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${source.raw_count > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{source.raw_count > 0 ? '已采集' : '待采集'}</span>
+                      <div><h3 className="font-semibold text-slate-950">{source.source_name}</h3><p className="mt-1 text-xs text-slate-500">{source.authority_tier === 'primary' ? '一手来源' : source.authority_tier === 'secondary' ? '补充来源' : '线索来源'} · 采集规则 v{source.adapter_version}</p></div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${state.tone}`}>{state.label}</span>
                     </div>
-                    <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-sm">
-                      <div><dt className="text-slate-500">证据数</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.raw_count}</dd></div>
-                      <div><dt className="text-slate-500">最近采集</dt><dd className="mt-1 text-slate-700">{formatTime(source.last_fetched_at)}</dd></div>
+                    <p className="mt-3 min-h-10 text-sm leading-5 text-slate-600">{state.description}</p>
+                    <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4 text-sm">
+                      <div><dt className="text-xs text-slate-500">原始证据</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.raw_count}</dd></div>
+                      <div><dt className="text-xs text-slate-500">发现详情</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.last_run?.detail_discovered ?? 0}</dd></div>
+                      <div><dt className="text-xs text-slate-500">可搜索文档</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.active_documents}</dd></div>
                     </dl>
-                  </article>
-                ))}
+                    <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500"><span>最近完成</span><span className="text-right text-slate-700">{formatTime(source.last_run?.finished_at)}</span></div>
+                    <button
+                      type="button"
+                      onClick={() => triggerSource(source.source_id)}
+                      disabled={!source.enabled || triggering === source.source_id || source.collection_state === 'queued' || source.collection_state === 'running'}
+                      className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${triggering === source.source_id ? 'animate-spin' : ''}`} aria-hidden="true" />
+                      {!source.enabled ? '需要授权通道' : source.collection_state === 'queued' ? '等待采集' : source.collection_state === 'running' ? '正在采集' : '立即采集'}
+                    </button>
+                    </article>
+                  );
+                })}
               </div>
             </div>
 

@@ -186,6 +186,76 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertEqual(search["total_count"], 1)
         self.assertEqual(search["results"][0]["raw_object_id"], evidence["raw_object_id"])
 
+    def test_adapter_run_records_real_stage_metrics_and_advances_cursor_only_when_healthy(self):
+        run = self.store.begin_adapter_run(
+            source_id="yicai",
+            adapter_id="yicai-news",
+            adapter_version="1.0.0",
+        )
+        finished = self.store.finish_adapter_run(
+            run["run_id"],
+            state="healthy",
+            metrics={
+                "entrypoints_total": 1,
+                "entrypoints_succeeded": 1,
+                "detail_discovered": 5,
+                "detail_fetched": 4,
+                "documents_emitted": 3,
+                "documents_indexed": 3,
+                "evidence_archived": 5,
+                "failures": 1,
+            },
+            cursor={"latest_published_at": "2026-08-08T09:00:00+08:00"},
+        )
+
+        self.assertEqual(finished["state"], "healthy")
+        self.assertEqual(finished["detail_discovered"], 5)
+        self.assertEqual(
+            self.store.get_source_cursor("yicai")["latest_published_at"],
+            "2026-08-08T09:00:00+08:00",
+        )
+        source = next(item for item in self.store.list_sources() if item["source_id"] == "yicai")
+        self.assertEqual(source["collection_state"], "healthy")
+        self.assertEqual(source["last_run"]["documents_emitted"], 3)
+        self.assertEqual(source["last_run"]["metrics"]["documents_indexed"], 3)
+
+    def test_manual_adapter_requests_are_deduplicated_claimed_and_closed(self):
+        first = self.store.request_adapter_run("sse", requested_by="admin")
+        duplicate = self.store.request_adapter_run("sse", requested_by="admin")
+
+        self.assertEqual(first["request_id"], duplicate["request_id"])
+        self.assertEqual(first["state"], "queued")
+        source = next(item for item in self.store.list_sources() if item["source_id"] == "sse")
+        self.assertEqual(source["collection_state"], "queued")
+
+        claimed = self.store.claim_adapter_run_request()
+        self.assertEqual(claimed["request_id"], first["request_id"])
+        self.assertEqual(claimed["state"], "running")
+
+        closed = self.store.finish_adapter_run_request(
+            first["request_id"],
+            run_id="run-1",
+            result_state="healthy",
+        )
+        self.assertEqual(closed["state"], "completed")
+        self.assertEqual(closed["result_state"], "healthy")
+        self.assertIsNone(self.store.active_adapter_run_request("sse"))
+
+    def test_generic_snapshots_are_preserved_but_removed_from_formal_search(self):
+        evidence = self._archive("通用快照原始页面")
+        document = self.store.register_document(
+            {
+                **self._document(evidence, "通用入口页面快照", "通用入口页面快照正文，不能替代来源适配器产生的正式情报文档。"),
+                "parser_version": "qsou-generic-html/1",
+            }
+        )
+        self.store.mark_indexed([document["content_version_id"]])
+
+        self.assertEqual(self.store.search_documents("通用入口页面")["total_count"], 1)
+        self.assertEqual(self.store.quarantine_generic_snapshots(), 1)
+        self.assertEqual(self.store.search_documents("通用入口页面")["total_count"], 0)
+        self.assertEqual(len(list(self.store.export_documents())), 1)
+
     def _archive(self, body: str):
         return self.store.archive_response(
             source_id="yicai",
