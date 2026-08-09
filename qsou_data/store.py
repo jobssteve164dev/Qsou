@@ -590,6 +590,15 @@ class DataAssetStore:
             raise DataAssetError(f"原始证据文件不可用: {raw_object_id}")
         return path
 
+    def evidence_has_document(self, raw_object_id: str) -> bool:
+        """Return whether one immutable response is already linked to a document."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM document_evidence WHERE raw_object_id = ? LIMIT 1",
+                (raw_object_id,),
+            ).fetchone()
+        return row is not None
+
     def get_document(self, content_version_id: str) -> Dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(

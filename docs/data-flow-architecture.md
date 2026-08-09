@@ -40,6 +40,7 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
 - `qsou_data/store.py` 负责原始文件、SQLite 目录、身份版本、可靠待处理状态、本地搜索、导出和回放。
 - `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
 - `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 先登记标准文档，再按配置提交派生处理；提交失败不会删除本地待处理记录。
+- `crawler/index_evidence.py` 为未被专用 Spider 解析的有效 HTML 生成可搜索页面快照；它是有原始证据约束的兜底规范化，不会伪造内容或吞掉后续专用解析版本。
 - `crawler/run_schedule.py` 负责持续运行正式 Spider，并把最近一轮与下一轮状态写入共享数据目录。
 - `data-processor/tasks.py` 将处理、过滤、索引和失败状态回写数据资产目录。
 - `api-gateway/app/api/v1/endpoints/data_assets.py` 提供来源、证据、版本、导出与回放入口。
