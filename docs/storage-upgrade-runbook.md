@@ -50,6 +50,9 @@ python -m qsou_data.migrate backfill
 3. 逐个校验旧文件、目标对象和备份对象的正文 SHA-256。
 4. 写入 `schema_migrations` 与 `migration_audits`，记录阶段、数量、摘要和结果。
 
+回填从 SQLite 的单一只读事务快照读取全部表。采集器可以继续写入；回填期间新增的
+完整批次留给下一次幂等回填，不会出现父表与关联表跨时间点读取导致的外键缺口。
+
 目录库统一写入边界会把 PostgreSQL 不接受的文本 NUL 字节规范化为 Unicode
 替代字符；SQLite 新写入、PostgreSQL 新写入、历史迁移和摘要校验使用同一规则。
 迁移结果中的 `text_nul_bytes_normalized` 记录本次规范化数量，避免静默处理。

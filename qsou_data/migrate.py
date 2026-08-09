@@ -125,6 +125,7 @@ class LegacySqliteMigrator:
             source = sqlite3.connect(f"file:{self.legacy_catalog}?mode=ro", uri=True, timeout=30)
             source.row_factory = sqlite3.Row
             source.execute("PRAGMA foreign_keys = ON")
+            source.execute("BEGIN")
             source_version = int(source.execute("PRAGMA data_version").fetchone()[0])
             try:
                 report = self._copy_and_verify(

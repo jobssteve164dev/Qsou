@@ -231,6 +231,84 @@ class StorageMigrationTest(unittest.TestCase):
             [(f"two{TEXT_NUL_REPLACEMENT}value",)],
         )
 
+    def test_backfill_uses_one_snapshot_while_collector_keeps_writing(self) -> None:
+        source_root = self.root / "concurrent-source"
+        target_root = self.root / "concurrent-target"
+        source = DataAssetStore(root=source_root, registry=self.registry)
+        first_evidence = source.archive_response(
+            source_id="yicai",
+            url="https://www.yicai.com/news/102000003.html",
+            status_code=200,
+            response_headers={"Content-Type": "text/html"},
+            body=b"first",
+            fetched_at="2026-08-09T00:00:00Z",
+        )
+        source.register_document(
+            {
+                "source_id": "yicai",
+                "source_document_id": "102000003",
+                "raw_object_id": first_evidence["raw_object_id"],
+                "title": "first",
+                "content": "first",
+                "url": first_evidence["url"],
+                "fetched_at": "2026-08-09T00:00:00Z",
+            }
+        )
+        target = DataAssetStore(root=target_root, registry=self.registry)
+
+        class ConcurrentWriteMigrator(LegacySqliteMigrator):
+            wrote_during_migration = False
+
+            def _copy_objects(self, connection):
+                result = super()._copy_objects(connection)
+                if not self.wrote_during_migration:
+                    self.wrote_during_migration = True
+                    second_evidence = source.archive_response(
+                        source_id="yicai",
+                        url="https://www.yicai.com/news/102000004.html",
+                        status_code=200,
+                        response_headers={"Content-Type": "text/html"},
+                        body=b"second",
+                        fetched_at="2026-08-09T00:01:00Z",
+                    )
+                    source.register_document(
+                        {
+                            "source_id": "yicai",
+                            "source_document_id": "102000004",
+                            "raw_object_id": second_evidence["raw_object_id"],
+                            "title": "second",
+                            "content": "second",
+                            "url": second_evidence["url"],
+                            "fetched_at": "2026-08-09T00:01:00Z",
+                        }
+                    )
+                return result
+
+        migrator = ConcurrentWriteMigrator(
+            target,
+            legacy_root=source_root,
+            legacy_catalog=source.catalog_path,
+        )
+        first_report = migrator.run("backfill")
+        self.assertEqual(
+            first_report["table_counts"]["raw_objects"],
+            {"source": 1, "target": 1},
+        )
+        self.assertEqual(
+            first_report["table_counts"]["document_evidence"],
+            {"source": 1, "target": 1},
+        )
+
+        second_report = migrator.run("backfill")
+        self.assertEqual(
+            second_report["table_counts"]["raw_objects"],
+            {"source": 2, "target": 2},
+        )
+        self.assertEqual(
+            second_report["table_counts"]["document_evidence"],
+            {"source": 2, "target": 2},
+        )
+
     def test_startup_backfill_restores_sqlite_runtime_backend(self) -> None:
         report = {"status": "verified", "phase": "backfill"}
         with (
