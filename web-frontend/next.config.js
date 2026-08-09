@@ -4,6 +4,7 @@ const apiInternalUrl = (process.env.API_INTERNAL_URL || 'http://localhost:8888')
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  output: 'standalone',
   async rewrites() {
     return [
       {
