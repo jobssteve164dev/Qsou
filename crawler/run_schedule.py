@@ -49,7 +49,7 @@ def write_status(**values: object) -> None:
             previous = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
             timeline = {
                 key: previous[key]
-                for key in ("last_started_at", "last_finished_at", "next_run_at")
+                for key in ("last_started_at", "last_finished_at")
                 if previous.get(key)
             }
         except (OSError, json.JSONDecodeError):

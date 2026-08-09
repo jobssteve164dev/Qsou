@@ -84,8 +84,9 @@ LOG_ENCODING = 'utf-8'
 # ============================================
 # 请求设置
 # ============================================
-# 公告 PDF 可能达到数十 MiB，正式采集优先完成下载，不用短超时制造失败。
-DOWNLOAD_TIMEOUT = int(os.getenv('QSOU_DOWNLOAD_TIMEOUT_SECONDS', '180'))
+# 公告 PDF 可能达到数十 MiB；生产节点实测 35 MiB 官方公告可能需要数分钟。
+# 正式采集优先完成下载，不用短超时触发重复传输并制造失败。
+DOWNLOAD_TIMEOUT = int(os.getenv('QSOU_DOWNLOAD_TIMEOUT_SECONDS', '900'))
 # 重试次数
 RETRY_TIMES = 3
 # 重试HTTP状态码
