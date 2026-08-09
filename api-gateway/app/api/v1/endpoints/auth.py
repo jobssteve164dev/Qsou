@@ -1,13 +1,16 @@
-"""
-开发环境最小可用的认证端点
-提供 /auth/login 与 /auth/me，便于前端静默登录联调
-仅在 DEBUG 或 SKIP_AUTH_IN_DEV 开启时可用
-"""
+"""Baseline username/password authentication endpoints."""
 
-from datetime import datetime, timedelta
+import base64
+import binascii
+import hashlib
+import hmac
+import json
+import secrets
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -35,22 +38,63 @@ class LoginResponse(BaseModel):
 
 
 def _is_auth_enabled() -> bool:
-    # 在开发阶段默认启用；可通过环境变量关闭
-    return settings.DEBUG or settings.SKIP_AUTH_IN_DEV
+    return (
+        bool(settings.QSOU_ADMIN_USERNAME and settings.QSOU_ADMIN_PASSWORD)
+        or settings.DEBUG
+        or settings.SKIP_AUTH_IN_DEV
+    )
 
 
-def _fake_token(username: str) -> str:
-    exp = (datetime.utcnow() + timedelta(hours=8)).isoformat()
-    return f"dev-{username}-{exp}"
+def _encode_token(username: str) -> str:
+    payload = {
+        "sub": username,
+        "exp": int(time.time()) + settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ).rstrip(b"=")
+    signature = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"), encoded, hashlib.sha256
+    ).hexdigest()
+    return f"{encoded.decode('ascii')}.{signature}"
 
 
-def _fake_user(username: str) -> User:
+def _decode_token(token: str) -> str:
+    try:
+        encoded_text, signature = token.split(".", 1)
+        encoded = encoded_text.encode("ascii")
+        expected = hmac.new(
+            settings.SECRET_KEY.encode("utf-8"), encoded, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError("invalid signature")
+        padded = encoded + b"=" * (-len(encoded) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        if int(payload["exp"]) <= int(time.time()):
+            raise ValueError("expired token")
+        return str(payload["sub"])
+    except (
+        binascii.Error,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _user(username: str) -> User:
     return User(
         id="1" if username == "admin" else "2",
         username=username,
         email=f"{username}@example.com",
-        role="admin" if username == "admin" else "user",
-        created_at=datetime.utcnow().isoformat(),
+        role=(
+            "admin"
+            if username in {"admin", settings.QSOU_ADMIN_USERNAME}
+            else "user"
+        ),
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -59,23 +103,28 @@ async def login(payload: LoginRequest):
     if not _is_auth_enabled():
         raise HTTPException(status_code=404, detail="Auth disabled in this environment")
 
-    # 最小校验：接受演示账号 admin/admin123 与 user/user123
-    valid = (
-        (payload.username == "admin" and payload.password == "admin123")
-        or (payload.username == "user" and payload.password == "user123")
-    )
+    if settings.QSOU_ADMIN_USERNAME and settings.QSOU_ADMIN_PASSWORD:
+        valid = secrets.compare_digest(
+            payload.username, settings.QSOU_ADMIN_USERNAME
+        ) and secrets.compare_digest(
+            payload.password,
+            settings.QSOU_ADMIN_PASSWORD,
+        )
+    else:
+        valid = (
+            (payload.username == "admin" and payload.password == "admin123")
+            or (payload.username == "user" and payload.password == "user123")
+        )
     if not valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return LoginResponse(token=_fake_token(payload.username), user=_fake_user(payload.username))
+    return LoginResponse(token=_encode_token(payload.username), user=_user(payload.username))
 
 
 @router.get("/me", response_model=User)
-async def me(token: Optional[str] = None):
+async def me(authorization: Optional[str] = Header(default=None)):
     if not _is_auth_enabled():
         raise HTTPException(status_code=404, detail="Auth disabled in this environment")
-
-    # 前端通过 Authorization: Bearer <token> 发送；为简化，这里直接返回 admin
-    return _fake_user("admin")
-
-
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    return _user(_decode_token(authorization.removeprefix("Bearer ").strip()))

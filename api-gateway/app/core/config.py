@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     
     # 安全配置
     SECRET_KEY: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
+    QSOU_ADMIN_USERNAME: str = Field(default="", env="QSOU_ADMIN_USERNAME")
+    QSOU_ADMIN_PASSWORD: str = Field(default="", env="QSOU_ADMIN_PASSWORD")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
     
