@@ -70,6 +70,11 @@ class ElasticsearchService:
         限制ES健康查询耗时，避免阻塞整体统计。
         """
         if not self.client or not self.is_connected:
+            if await self.connect():
+                return {
+                    "status": "connected",
+                    "cluster_status": "unknown",
+                }
             return {"status": "disconnected", "error": "No connection"}
         
         try:

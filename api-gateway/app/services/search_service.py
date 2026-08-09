@@ -171,6 +171,8 @@ class SearchService:
         )
         
         try:
+            if settings.ENABLE_ELASTICSEARCH and not self.elasticsearch.is_connected:
+                await self.elasticsearch.connect()
             if search_type == "keyword":
                 result = (
                     await self._keyword_search(query, filters, page, page_size, sort_by)

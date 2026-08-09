@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from alembic import command
 from alembic.config import Config
@@ -151,6 +151,12 @@ class ProductionComposeContractTest(unittest.TestCase):
             services["indexer"]["depends_on"]["elasticsearch"]["condition"],
             "service_healthy",
         )
+        self.assertEqual(services["indexer"]["image"], "qsou-api")
+        self.assertEqual(
+            services["indexer"]["command"],
+            ["python", "-m", "qsou_data.indexer"],
+        )
+        self.assertNotIn("build", services["indexer"])
         self.assertNotIn("healthcheck", services["indexer"])
         self.assertIn("qsou-elasticsearch-data", compose["volumes"])
         self.assertEqual(
@@ -174,8 +180,27 @@ class ProductionComposeContractTest(unittest.TestCase):
         self.assertIn("qsou_data/migrate.py", ignored)
         self.assertIn("qsou_data/start_api.py", ignored)
 
+    def test_api_image_contains_indexer_runtime_dependencies(self):
+        def package_names(path):
+            return {
+                line.split("==", 1)[0].split("[", 1)[0].lower()
+                for line in path.read_text().splitlines()
+                if line and not line.startswith("#")
+            }
+
+        api_packages = package_names(PROJECT_ROOT / "deploy/requirements-api.txt")
+        indexer_packages = package_names(PROJECT_ROOT / "deploy/requirements-indexer.txt")
+        self.assertTrue(indexer_packages <= api_packages)
+
 
 class ElasticsearchProjectionTest(unittest.TestCase):
+    def test_health_check_reconnects_after_elasticsearch_starts(self):
+        service = ElasticsearchService()
+        service.connect = AsyncMock(return_value=True)
+        health = __import__("asyncio").run(service.health_check())
+        self.assertEqual(health["status"], "connected")
+        service.connect.assert_awaited_once()
+
     def test_search_hides_inactive_document_versions(self):
         body = ElasticsearchService()._build_search_query("政策")
         filters = body["query"]["bool"]["filter"]

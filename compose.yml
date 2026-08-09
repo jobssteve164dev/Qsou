@@ -95,9 +95,8 @@ services:
 
   indexer:
     platform: linux/amd64
-    build:
-      context: .
-      dockerfile: deploy/indexer.Dockerfile
+    image: qsou-api
+    command: ["python", "-m", "qsou_data.indexer"]
     environment:
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
