@@ -35,7 +35,10 @@ class RawEvidenceDownloaderMiddleware:
 				collector=f"scrapy:{spider.name}",
 			)
 			spider.crawler.stats.inc_value("adapter/evidence_archived")
-			response.meta["qsou_evidence"] = {
+			# Downloader middleware runs before Scrapy attaches ``request`` to the
+			# response.  Persist the identity on the request that Scrapy will later
+			# expose as ``response.meta`` inside the spider middleware and callback.
+			request.meta["qsou_evidence"] = {
 				"raw_object_id": evidence["raw_object_id"],
 				"source_id": evidence["source_id"],
 				"fetched_at": fetched_at,

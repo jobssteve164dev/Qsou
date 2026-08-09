@@ -47,6 +47,21 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn("qsou.szlk.uk", crawler_settings.USER_AGENT)
         self.assertFalse(crawler_settings.QSOU_OUTBOX_DISPATCH_ENABLED)
 
+    def test_downloader_evidence_identity_stays_on_request_until_spider_stage(self):
+        project_root = Path(__file__).resolve().parents[1]
+        middleware = (
+            project_root / "crawler/qsou_crawler/middlewares.py"
+        ).read_text(encoding="utf-8")
+        spider = (
+            project_root / "crawler/qsou_crawler/spiders/source_adapter_spider.py"
+        ).read_text(encoding="utf-8")
+        scheduler = (project_root / "crawler/run_schedule.py").read_text(encoding="utf-8")
+
+        self.assertIn('request.meta["qsou_evidence"]', middleware)
+        self.assertNotIn('response.meta["qsou_evidence"] =', middleware)
+        self.assertIn("errback=self.handle_request_error", spider)
+        self.assertIn('"LOG_FILE="', scheduler)
+
     def test_collector_image_uses_an_explicit_runtime_allowlist(self):
         project_root = Path(__file__).resolve().parents[1]
         dockerfile = (project_root / "deploy/crawler.Dockerfile").read_text(encoding="utf-8")

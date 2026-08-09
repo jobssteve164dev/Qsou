@@ -85,6 +85,12 @@ class SourceAdapterSpider(scrapy.Spider):
         self.crawler.stats.inc_value("adapter/documents_emitted")
         yield document
 
+    def handle_request_error(self, failure) -> None:
+        request = failure.request
+        request_kind = request.meta.get("qsou_request_kind", "request")
+        message = failure.getErrorMessage()
+        self._record_error(f"{request_kind} 请求失败: {request.url}: {message}")
+
     def closed(self, reason: str) -> None:
         if not self.report_path:
             return
@@ -112,12 +118,14 @@ class SourceAdapterSpider(scrapy.Spider):
     def _request(self, specification: RequestSpec, callback, cb_kwargs=None):
         metadata = dict(specification.metadata)
         metadata["handle_httpstatus_all"] = True
+        metadata["qsou_request_kind"] = specification.kind
         return scrapy.Request(
             url=specification.url,
             method=specification.method,
             body=specification.body,
             headers=dict(specification.headers),
             callback=callback,
+            errback=self.handle_request_error,
             cb_kwargs=cb_kwargs or {},
             meta=metadata,
             dont_filter=specification.kind == "listing",

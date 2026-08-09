@@ -130,6 +130,8 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
                 f"report_path={report_path}",
                 "-L",
                 "INFO",
+                "-s",
+                "LOG_FILE=",
             ],
             cwd=CRAWLER_ROOT,
             check=False,
