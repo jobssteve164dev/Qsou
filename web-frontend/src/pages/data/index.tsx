@@ -181,7 +181,10 @@ const DataAssetsPage: React.FC = () => {
                       <div><dt className="text-xs text-slate-500">发现详情</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.last_run?.detail_discovered ?? 0}</dd></div>
                       <div><dt className="text-xs text-slate-500">可搜索文档</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.active_documents}</dd></div>
                     </dl>
-                    <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500"><span>最近完成</span><span className="text-right text-slate-700">{formatTime(source.last_run?.finished_at)}</span></div>
+                    <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500">
+                      <span>{source.collection_state === 'running' ? '本轮开始' : '最近完成'}</span>
+                      <span className="text-right text-slate-700">{formatTime(source.collection_state === 'running' ? source.last_run?.started_at : source.last_run?.finished_at)}</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => triggerSource(source.source_id)}
