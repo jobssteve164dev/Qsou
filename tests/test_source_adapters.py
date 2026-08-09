@@ -86,10 +86,13 @@ class SourceAdapterContractTest(unittest.TestCase):
     def test_collector_image_uses_an_explicit_runtime_allowlist(self):
         project_root = Path(__file__).resolve().parents[1]
         dockerfile = (project_root / "deploy/crawler.Dockerfile").read_text(encoding="utf-8")
+        api_dockerfile = (project_root / "deploy/api.Dockerfile").read_text(encoding="utf-8")
         dockerignore = (project_root / ".dockerignore").read_text(encoding="utf-8")
         self.assertNotIn("COPY crawler /app/crawler", dockerfile)
         self.assertIn("source_adapter_spider.py", dockerfile)
         self.assertIn("crawler/qsou_crawler/adapters", dockerfile)
+        self.assertIn("pip install --no-cache-dir --no-compile", dockerfile)
+        self.assertIn("pip install --no-cache-dir --no-compile", api_dockerfile)
         self.assertIn("crawler/plugins", dockerignore)
         self.assertIn("company_announcement_spider.py", dockerignore)
 

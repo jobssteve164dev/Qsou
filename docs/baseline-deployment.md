@@ -30,6 +30,8 @@ data/qsou/
 
 容器镜像应在专用部署主机或 CI 构建，不要在资源敏感的共享开发机直接构建。先创建一份只属于部署环境的配置：
 
+生产镜像必须由各自 Dockerfile 的显式 `COPY` 白名单组成，不能把仓库、构建缓存或开发依赖整体复制进运行镜像。Python 运行镜像安装依赖时禁用字节码预编译；运行期也禁止写入 `.pyc`，避免同时携带源码和可再生字节码。发布包只允许包含目标服务镜像、Compose 文件和发布清单。
+
 ```bash
 cp deploy/baseline.env.example deploy/baseline.env
 ```
