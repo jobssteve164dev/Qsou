@@ -151,6 +151,7 @@ class ProductionComposeContractTest(unittest.TestCase):
             services["indexer"]["depends_on"]["elasticsearch"]["condition"],
             "service_healthy",
         )
+        self.assertNotIn("healthcheck", services["indexer"])
         self.assertIn("qsou-elasticsearch-data", compose["volumes"])
         self.assertEqual(
             services["elasticsearch"]["image"],
