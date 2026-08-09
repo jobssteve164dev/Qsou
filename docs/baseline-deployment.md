@@ -26,7 +26,7 @@ data/qsou/
 
 PostgreSQL 与原始对象必须按同一恢复点验收。Elasticsearch、Qdrant 和模型输出不属于事实权威，可从标准文档重建。
 
-旧 SQLite 目录只允许由一次性只读迁移脚本导入；运行服务不再支持 SQLite。对象存储升级、校验和回滚步骤见 [PostgreSQL 目录库与对象存储升级手册](storage-upgrade-runbook.md)。
+历史目录迁移已经完成，迁移器与兼容分支均不再进入运行制品。对象存储升级、校验和回滚步骤见 [PostgreSQL 目录库与对象存储升级手册](storage-upgrade-runbook.md)。
 
 ## 3. 通过远程 GitOps 发布
 

@@ -13,7 +13,6 @@ COPY qsou_data /app/qsou_data
 COPY config/sources.json /app/config/sources.json
 COPY alembic.ini /app/alembic.ini
 COPY migrations /app/migrations
-COPY scripts/migrate_sqlite_to_postgres.py /app/scripts/migrate_sqlite_to_postgres.py
 COPY scripts/migrate_file_objects_to_s3.py /app/scripts/migrate_file_objects_to_s3.py
 COPY deploy/database-migrate /app/deploy/database-migrate
 COPY api-gateway /app/api-gateway

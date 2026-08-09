@@ -4,15 +4,6 @@ set -eu
 cd /app
 alembic -c /app/alembic.ini upgrade head
 
-legacy_catalog=/var/lib/qsou/catalog.sqlite3
-if [ -f "$legacy_catalog" ]; then
-    python /app/scripts/migrate_sqlite_to_postgres.py \
-        --sqlite-path "$legacy_catalog" \
-        --data-root /var/lib/qsou
-else
-    echo 'QSOU_SQLITE_IMPORT=not_required'
-fi
-
 if [ "${QSOU_OBJECT_STORAGE_BACKEND:-file}" = "s3" ]; then
     python /app/scripts/migrate_file_objects_to_s3.py --data-root /var/lib/qsou
     python -m qsou_data.verify --require-backup

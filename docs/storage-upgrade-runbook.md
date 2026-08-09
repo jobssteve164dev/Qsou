@@ -8,7 +8,7 @@
 - S3 兼容对象存储保存不可变原始正文及首次采集元数据；配置备份桶时，每次写入同时落主桶与备份桶。
 - `raw_objects.body_path` 始终保存对象键，现有 `objects/<前缀>/<标识>.body` 不变。
 - PostgreSQL 是 API、采集器和索引器唯一允许使用的运行目录库。
-- 旧 SQLite 文件只作为一次性脚本的只读输入；导入、备份恢复与生产验收全部通过后，按精确文件清单删除，不保留运行回退开关。
+- 历史目录迁移已经完成；运行制品不再包含旧目录迁移器、文件探测或回退开关。
 - API、采集器和索引器必须使用同一个 PostgreSQL 与对象存储配置，不能混合写入。
 
 ## 2. 后端配置
@@ -34,30 +34,19 @@ QSOU_OBJECT_STORAGE_SECRET_KEY=...
 
 凭据只进入远程部署环境，不写入仓库、发布包或命令输出。
 
-## 3. 一次性目录迁移顺序
+## 3. 迁移入口终态
 
-1. 停止所有旧目录写入，核对没有悬挂发布或迁移任务。
-2. 通过 GitOps 数据库绑定为迁移服务注入 `DATABASE_URL`。
-3. 从终态成功的 API 制品运行受治理的 `/app/deploy/database-migrate`，不得把迁移塞进 API 启动命令。
-4. 入口先执行 `alembic upgrade head`，再在旧文件存在时执行：
-
-   ```bash
-   python /app/scripts/migrate_sqlite_to_postgres.py \
-     --sqlite-path /var/lib/qsou/catalog.sqlite3 \
-     --data-root /var/lib/qsou
-   ```
-
-5. 脚本以 SQLite `mode=ro` 打开单一事务快照，逐表执行 PostgreSQL 原生 upsert，并按主键稳定排序比较源/目标行数与 SHA-256 摘要。任何不一致都会回滚整个 PostgreSQL 事务。
-6. 对象后端为 S3 时，入口随后执行 `migrate_file_objects_to_s3.py`，逐个核对本地源、主桶、备份桶三方哈希；已完成的迁移根据 PostgreSQL 迁移标记直接跳过，不再依赖本地旧对象目录。
-7. 运行 `python -m qsou_data.verify --require-backup`，核对外键孤儿、主备对象哈希、目录摘要和迁移版本。
-
-迁移会把 PostgreSQL 不接受的文本 NUL 字节规范化为 Unicode 替代字符，并在结果中记录数量。脚本只报告可删除的 SQLite、WAL 与 SHM 精确路径，不自行删除。
+1. 通过 GitOps 数据库绑定为迁移服务注入 `DATABASE_URL`。
+2. 从终态成功的 API 制品运行受治理的 `/app/deploy/database-migrate`，不得把迁移塞进 API 启动命令。
+3. 入口执行 `alembic upgrade head`，保证 PostgreSQL schema 到达当前版本。
+4. 对象后端为 S3 时，入口随后执行 `migrate_file_objects_to_s3.py`，逐个核对本地源、主桶、备份桶三方哈希；已完成的迁移根据 PostgreSQL 迁移标记直接跳过。
+5. 运行 `python -m qsou_data.verify --require-backup`，核对外键孤儿、主备对象哈希、目录摘要和迁移版本。
 
 ## 4. 切换与回滚
 
 只有迁移与统一验收都得到 `status=verified` 后，才允许恢复 API、采集器和索引器写入。Elasticsearch 首次同步完成前，API 健康检查保持不就绪。
 
-采集器和索引器在制品内核对 Alembic 版本、旧目录导入标记，以及 S3 模式下的对象迁移标记；标记不齐时只报告等待状态，不发起采集、目录写入或索引重建。该门禁不执行迁移，迁移仍由独立的受治理入口一次性完成。
+采集器和索引器在制品内核对 Alembic 版本，以及 S3 模式下的对象迁移标记；标记不齐时只报告等待状态，不发起采集、目录写入或索引重建。该门禁不执行迁移，迁移仍由独立的受治理入口完成。
 
 API 在迁移标记齐全前拒绝除登录外的写入和搜索 POST，请求只得到“数据升级正在完成”的 503，不暴露迁移实现细节；只读健康探针和受治理迁移入口不受影响。
 

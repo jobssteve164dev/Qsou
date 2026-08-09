@@ -1,7 +1,6 @@
 import io
 import hashlib
 import os
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,12 +9,6 @@ from unittest.mock import patch
 from qsou_data.catalog import PostgresConnection, TEXT_NUL_REPLACEMENT
 from qsou_data.objects import ObjectStorageError, S3ObjectStore
 from scripts.migrate_file_objects_to_s3 import _copy_object, _source_path
-from scripts.migrate_sqlite_to_postgres import (
-    _source_columns,
-    _source_file_candidates,
-    _update_digest,
-    _upsert_sql,
-)
 
 
 class _MissingObject(Exception):
@@ -66,13 +59,6 @@ class StorageMigrationTest(unittest.TestCase):
         self.environment.stop()
         self.temporary_directory.cleanup()
 
-    def test_one_time_import_builds_native_postgres_upsert(self) -> None:
-        self.assertEqual(
-            _upsert_sql("sample", ("id", "value"), ("id",)),
-            "INSERT INTO sample (id, value) VALUES (%s, %s) "
-            "ON CONFLICT (id) DO UPDATE SET value = excluded.value",
-        )
-
     def test_postgres_connection_normalizes_nul_without_sql_translation(self) -> None:
         class FakeResult:
             returns_rows = False
@@ -106,45 +92,6 @@ class StorageMigrationTest(unittest.TestCase):
                 ),
             ],
         )
-
-    def test_migration_digest_normalizes_nul_identically_on_both_sides(self) -> None:
-        source_digest = hashlib.sha256()
-        target_digest = hashlib.sha256()
-        _update_digest(source_digest, [{"value": "one\x00value"}], ("value",))
-        _update_digest(
-            target_digest,
-            [{"value": f"one{TEXT_NUL_REPLACEMENT}value"}],
-            ("value",),
-        )
-        self.assertEqual(source_digest.hexdigest(), target_digest.hexdigest())
-
-    def test_import_reads_only_declared_columns_and_reports_exact_source_files(self) -> None:
-        catalog = self.root / "catalog.sqlite3"
-        connection = sqlite3.connect(catalog)
-        connection.row_factory = sqlite3.Row
-        try:
-            connection.execute("CREATE TABLE raw_objects (raw_object_id TEXT PRIMARY KEY, source_id TEXT)")
-            self.assertEqual(
-                _source_columns(connection, "raw_objects"),
-                ["raw_object_id", "source_id"],
-            )
-            connection.commit()
-        finally:
-            connection.close()
-        self.assertEqual(_source_file_candidates(catalog), [str(catalog)])
-
-    def test_import_rejects_columns_missing_from_authoritative_schema(self) -> None:
-        catalog = self.root / "catalog.sqlite3"
-        connection = sqlite3.connect(catalog)
-        connection.row_factory = sqlite3.Row
-        try:
-            connection.execute(
-                "CREATE TABLE raw_objects (raw_object_id TEXT PRIMARY KEY, unexpected TEXT)"
-            )
-            with self.assertRaisesRegex(RuntimeError, "未声明字段"):
-                _source_columns(connection, "raw_objects")
-        finally:
-            connection.close()
 
     def test_file_object_migration_requires_safe_paths_and_verifies_both_buckets(self) -> None:
         client = _MemoryS3Client()

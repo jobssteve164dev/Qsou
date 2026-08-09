@@ -19,7 +19,6 @@ from qsou_data.indexer_state import read_indexer_state, write_indexer_state
 from qsou_data.migration_state import (
     ALEMBIC_REVISION,
     OBJECT_IMPORT_VERSION,
-    SQLITE_IMPORT_VERSION,
     migration_state,
     required_migrations,
 )
@@ -109,12 +108,10 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
             {"QSOU_OBJECT_STORAGE_BACKEND": "s3"},
         ):
             root = Path(directory)
-            (root / "catalog.sqlite3").touch()
             self.assertEqual(
                 required_migrations(root),
                 {
                     "schema": ALEMBIC_REVISION,
-                    "catalog": SQLITE_IMPORT_VERSION,
                     "objects": OBJECT_IMPORT_VERSION,
                 },
             )
@@ -134,7 +131,7 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
                 def execute(self, sql):
                     if "alembic_version" in sql:
                         return Result({"version_num": ALEMBIC_REVISION})
-                    return Result(all_rows=[{"version": SQLITE_IMPORT_VERSION}])
+                    return Result(all_rows=[])
 
             class Context:
                 def __enter__(self):
@@ -212,6 +209,13 @@ class ProductionComposeContractTest(unittest.TestCase):
         self.assertIn(".pytest_cache", ignored)
         self.assertFalse((PROJECT_ROOT / "qsou_data/migrate.py").exists())
         self.assertFalse((PROJECT_ROOT / "qsou_data/start_api.py").exists())
+        self.assertFalse((PROJECT_ROOT / "scripts/migrate_sqlite_to_postgres.py").exists())
+        for path in (
+            PROJECT_ROOT / "deploy/api.Dockerfile",
+            PROJECT_ROOT / "deploy/database-migrate",
+            PROJECT_ROOT / "qsou_data/migration_state.py",
+        ):
+            self.assertNotIn("sqlite", path.read_text().lower())
 
     def test_api_image_contains_indexer_runtime_dependencies(self):
         def package_names(path):

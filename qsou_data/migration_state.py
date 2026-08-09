@@ -9,14 +9,11 @@ from typing import Any, Callable
 
 
 ALEMBIC_REVISION = "20260809_01"
-SQLITE_IMPORT_VERSION = "one-time-sqlite-to-postgres-20260809"
 OBJECT_IMPORT_VERSION = "one-time-file-objects-to-s3-20260809"
 
 
-def required_migrations(data_root: Path) -> dict[str, str]:
+def required_migrations(_data_root: Path) -> dict[str, str]:
     required = {"schema": ALEMBIC_REVISION}
-    if (data_root.resolve() / "catalog.sqlite3").is_file():
-        required["catalog"] = SQLITE_IMPORT_VERSION
     if os.getenv("QSOU_OBJECT_STORAGE_BACKEND", "file").strip().lower() == "s3":
         required["objects"] = OBJECT_IMPORT_VERSION
     return required
@@ -46,7 +43,7 @@ def migration_state(store) -> dict[str, Any]:
     missing = []
     if not alembic or alembic["version_num"] != required["schema"]:
         missing.append("schema")
-    for name in ("catalog", "objects"):
+    for name in ("objects",):
         if name in required and required[name] not in applied:
             missing.append(name)
     return {
