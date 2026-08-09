@@ -211,6 +211,7 @@ dmypy.json
 # pytype static type analyzer
 .pytype/
 
+/.solopreneur/
 # Cython debug symbols
 cython_debug/
 
