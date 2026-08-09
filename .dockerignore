@@ -7,6 +7,10 @@ venv
 node_modules
 web-frontend/node_modules
 web-frontend/.next
+crawler/plugins
+crawler/qsou_crawler/spiders/company_announcement_spider.py
+crawler/qsou_crawler/spiders/financial_news_spider.py
+crawler/qsou_crawler/spiders/yicai_test_spider.py
 vendor
 data
 logs

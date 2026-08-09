@@ -10,7 +10,7 @@ COPY deploy/requirements-api.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY qsou_data /app/qsou_data
-COPY config /app/config
+COPY config/sources.json /app/config/sources.json
 COPY api-gateway /app/api-gateway
 
 RUN mkdir -p /app/api-gateway/logs /var/lib/qsou

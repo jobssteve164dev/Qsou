@@ -47,6 +47,16 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn("qsou.szlk.uk", crawler_settings.USER_AGENT)
         self.assertFalse(crawler_settings.QSOU_OUTBOX_DISPATCH_ENABLED)
 
+    def test_collector_image_uses_an_explicit_runtime_allowlist(self):
+        project_root = Path(__file__).resolve().parents[1]
+        dockerfile = (project_root / "deploy/crawler.Dockerfile").read_text(encoding="utf-8")
+        dockerignore = (project_root / ".dockerignore").read_text(encoding="utf-8")
+        self.assertNotIn("COPY crawler /app/crawler", dockerfile)
+        self.assertIn("source_adapter_spider.py", dockerfile)
+        self.assertIn("crawler/qsou_crawler/adapters", dockerfile)
+        self.assertIn("crawler/plugins", dockerignore)
+        self.assertIn("company_announcement_spider.py", dockerignore)
+
     def test_primary_announcement_adapters_discover_official_pdf_details(self):
         samples = {
             "sse": {
