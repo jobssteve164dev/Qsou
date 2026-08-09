@@ -40,8 +40,8 @@ const collectorMessage = (collector?: DataAssetStatus['collector']) => {
 
 const sourceState = (source: DataSourceStatus) => {
   const states: Record<DataSourceStatus['collection_state'], { label: string; tone: string; description: string }> = {
-    healthy: { label: '详情入库正常', tone: 'bg-emerald-50 text-emerald-800', description: '最近一轮已从入口发现详情并生成可搜索文档' },
-    degraded: { label: '需要检查', tone: 'bg-amber-50 text-amber-800', description: '入口可以访问，但最近一轮没有生成合格文档' },
+    healthy: { label: '详情入库正常', tone: 'bg-emerald-50 text-emerald-800', description: '最近一轮完整获取了全部已发现详情，并生成可搜索文档' },
+    degraded: { label: '需要检查', tone: 'bg-amber-50 text-amber-800', description: '最近一轮存在详情获取或解析缺口，需要检查' },
     failed: { label: '采集失败', tone: 'bg-rose-50 text-rose-800', description: '最近一轮没有完成入口访问或解析' },
     queued: { label: '已排队', tone: 'bg-cyan-50 text-cyan-800', description: '已收到立即采集请求，采集器会按顺序处理' },
     running: { label: '正在采集', tone: 'bg-cyan-50 text-cyan-800', description: '当前正在运行这一来源的采集规则' },
@@ -165,7 +165,7 @@ const DataAssetsPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-semibold text-slate-950">情报来源网络</h2><p className="mt-1 text-sm text-slate-500">只有最近一轮真正发现详情并生成文档，才会显示为正常。</p></div>
+              <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-semibold text-slate-950">情报来源网络</h2><p className="mt-1 text-sm text-slate-500">只有最近一轮完整获取已发现详情并生成文档，才会显示为正常。</p></div>
               <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
                 {sources.map((source) => {
                   const state = sourceState(source);
