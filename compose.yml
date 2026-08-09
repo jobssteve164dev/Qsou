@@ -1,4 +1,4 @@
-name: qsou-baseline
+name: qsou
 
 services:
   api:
