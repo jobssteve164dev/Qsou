@@ -218,16 +218,9 @@ class SearchService:
         return result
     
     async def get_suggestions(self, query: str, size: int = 5) -> List[str]:
-        """获取搜索建议"""
+        """仅返回真实派生索引提供的搜索建议。"""
         try:
-            # 从Elasticsearch获取建议
             suggestions = await self.elasticsearch.get_suggestions(query, size)
-            
-            # 如果Elasticsearch建议不足，可以添加基于历史搜索的建议
-            if len(suggestions) < size:
-                additional_suggestions = await self._get_additional_suggestions(query, size - len(suggestions))
-                suggestions.extend(additional_suggestions)
-            
             return suggestions[:size]
             
         except Exception as e:
@@ -464,34 +457,8 @@ class SearchService:
             return vector
             
         except Exception as e:
-            logger.error("查询向量化失败，使用备用方案", query=query, error=str(e))
-            
-            # 备用方案：使用基于哈希的确定性向量
-            import hashlib
-            import random
-            
-            expected = settings.EMBEDDING_DIMENSION
-            seed = int(hashlib.md5(query.encode()).hexdigest()[:8], 16)
-            random.seed(seed)
-            vector = [random.uniform(-1, 1) for _ in range(expected)]
-            norm = sum(x * x for x in vector) ** 0.5
-            if norm > 0:
-                vector = [x / norm for x in vector]
-            
-            return vector
-    
-    async def _get_additional_suggestions(self, query: str, size: int) -> List[str]:
-        """获取额外的搜索建议"""
-        # 基于查询生成相关建议
-        base_suggestions = [
-            f"{query}分析报告",
-            f"{query}投资机会",
-            f"{query}市场趋势",
-            f"{query}行业动态",
-            f"{query}风险评估"
-        ]
-        
-        return base_suggestions[:size]
+            logger.error("查询向量化失败", query=query, error=str(e))
+            raise RuntimeError("语义向量生成失败") from e
 
 
 # 全局搜索服务实例

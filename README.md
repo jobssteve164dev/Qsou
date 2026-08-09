@@ -53,7 +53,7 @@ flowchart LR
 
 ## 当前实现与主要差距
 
-**Observed in code：** 当前基线已经在 Scrapy 解析之前保存原始响应，按来源、逻辑文档和内容版本登记标准文档，并把待处理状态持久化到 SQLite。FastAPI 提供自有数据搜索、来源状态、证据查看、开放导出和回放接口；Next.js 提供“搜索”和“我的数据”入口。Elasticsearch、Qdrant 与 Celery 是可选派生能力，关闭后基线仍可运行。
+**Observed in code：** 当前基线已经在 Scrapy 解析之前保存原始响应，按来源、逻辑文档和内容版本登记标准文档，并把待处理状态持久化到 SQLite。持续采集器随部署启动并公开真实运行状态；FastAPI 提供受认证保护的自有数据搜索、来源状态、证据查看、开放导出和回放接口；Next.js 以同域 HttpOnly 会话提供“搜索”和“数据资产”两个用户入口。API 只存在于项目内部网络。Elasticsearch、Qdrant 与 Celery 是可选派生能力，关闭后基线仍可运行。
 
 **仍待完成：** 当前回放从已保存标准文档开始，尚未完成仅凭原始响应重新执行解析器并重建所有派生层的恢复演练；来源登记也尚未自动证明分页、编号和时间窗口完整性。多实例存储、用户知识资产、实体事件层和订阅仍在基线之外。
 
@@ -65,14 +65,16 @@ flowchart LR
 ```bash
 cp deploy/baseline.env.example deploy/baseline.env
 # 在专用部署主机或 CI 构建，不在资源敏感的共享开发机执行
-docker compose --env-file deploy/baseline.env up -d --build api web
+docker compose --env-file deploy/baseline.env up -d --build
 ```
-远程部署前必须在 `deploy/baseline.env` 中设置浏览器可访问的 API 地址和 CORS 来源。完整步骤、宿主机验证和数据备份边界见 [基线部署](./docs/baseline-deployment.md)。历史完整开发栈说明见 [快速开始](./docs/QUICK_START.md) 和 [本地开发环境](./docs/local-development-setup.md)。
+远程部署前必须在 `deploy/baseline.env` 中设置独立登录凭据、签名密钥和采集周期。完整步骤、宿主机验证和数据备份边界见 [基线部署](./docs/baseline-deployment.md)。历史完整开发栈说明见 [快速开始](./docs/QUICK_START.md) 和 [本地开发环境](./docs/local-development-setup.md)。
 
 ### 验证部署
-- 前端界面: http://localhost:3000
-- API文档: http://localhost:8000/docs  
-- 我的数据: http://localhost:3000/data
+- 登录入口: http://localhost:3000/login
+- 搜索入口: http://localhost:3000
+- 数据资产: http://localhost:3000/data
+
+生产环境只发布 Web 端口。API 文档仅在本地调试模式提供，不属于公网产品入口。
 
 ## 当前设计优先级
 

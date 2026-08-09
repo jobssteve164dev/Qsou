@@ -8,10 +8,10 @@
 
 ```bash
 cp deploy/baseline.env.example deploy/baseline.env
-docker compose --env-file deploy/baseline.env up -d --build api web
+docker compose --env-file deploy/baseline.env up -d --build
 ```
 
-远程部署前先修改 `QSOU_PUBLIC_API_URL` 和 `QSOU_CORS_ORIGINS`。不要在资源敏感的共享开发机直接构建容器。验证步骤和宿主机运行方式见[自主数据基线部署](./baseline-deployment.md)。
+远程部署前先配置登录凭据、Web 端口和采集周期。API 不发布宿主机端口，浏览器通过 Web 的同域会话代理访问数据。不要在资源敏感的共享开发机直接构建容器。验证步骤和宿主机运行方式见[自主数据基线部署](./baseline-deployment.md)。
 
 ## 历史完整开发栈
 

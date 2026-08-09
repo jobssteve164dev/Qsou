@@ -2,50 +2,28 @@
 API v1 主路由
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.v1.endpoints import search, documents, intelligence, health, data_processing, auth, data_assets
+from app.api.v1.endpoints import auth, data_assets, search
+from app.api.v1.endpoints.auth import require_current_user
 
 api_router = APIRouter()
 
 # 注册子路由
 api_router.include_router(
-    search.router, 
-    prefix="/search", 
-    tags=["搜索引擎"]
-)
-
-api_router.include_router(
-    documents.router, 
-    prefix="/documents", 
-    tags=["文档管理"]
-)
-
-api_router.include_router(
-    intelligence.router, 
-    prefix="/intelligence", 
-    tags=["智能分析"]
-)
-
-api_router.include_router(
-    health.router, 
-    prefix="/system", 
-    tags=["系统监控"]
-)
-
-api_router.include_router(
-    data_processing.router, 
-    prefix="/process", 
-    tags=["数据处理"]
+    search.router,
+    prefix="/search",
+    tags=["自有数据搜索"],
+    dependencies=[Depends(require_current_user)],
 )
 
 api_router.include_router(
     data_assets.router,
     prefix="/data",
     tags=["数据资产"],
+    dependencies=[Depends(require_current_user)],
 )
 
-# 开发环境最小认证路由
 api_router.include_router(
     auth.router,
     prefix="/auth",

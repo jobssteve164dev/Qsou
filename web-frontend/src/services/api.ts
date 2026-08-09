@@ -17,21 +17,16 @@ import {
 
 // 创建axios实例
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1',
+  baseURL: '/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 请求拦截器 - 添加认证token
+// 请求拦截器：会话由同域 HttpOnly Cookie 管理，浏览器代码不接触令牌。
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      (config.headers as any).Authorization = `Bearer ${token}`;
-    }
-
     // 生成并附加 Trace-ID，便于后端/日志串联
     const traceId = (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     (config.headers as any)['X-Trace-ID'] = traceId;
@@ -63,8 +58,9 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = `/login?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      }
     }
     try {
       const traceId = error.response?.headers?.['x-request-id'] || (error.config as any)?.metadata?.traceId;
@@ -101,7 +97,7 @@ async function apiRequest<T>(
     const traceId = error?.response?.headers?.['x-request-id'] || (error?.config as any)?.metadata?.traceId;
     return {
       success: false,
-      error: error.response?.data?.message || error.message || '网络请求失败',
+      error: error.response?.data?.detail?.message || error.response?.data?.detail || error.response?.data?.error || error.message || '网络请求失败',
       // @ts-expect-error 附带 traceId 便于 UI/日志串联（可选字段）
       traceId,
     };
@@ -145,6 +141,8 @@ export const searchApi = {
       category: item.category || '',
       tags: item.tags || [],
       score: item.relevance_score,
+      source_id: item.source_id,
+      raw_object_id: item.raw_object_id,
     }));
 
     const mapped: SearchResponse = {
@@ -186,12 +184,10 @@ export const dataAssetApi = {
     return apiRequest<{ evidence: EvidenceRecord[] }>('get', `/data/evidence?limit=${limit}`);
   },
   evidenceContentUrl: (rawObjectId: string): string => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1';
-    return `${base}/data/evidence/${encodeURIComponent(rawObjectId)}/content`;
+    return `/api/v1/data/evidence/${encodeURIComponent(rawObjectId)}/content`;
   },
   exportUrl: (): string => {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888/api/v1';
-    return `${base}/data/export`;
+    return '/api/v1/data/export';
   },
 };
 
@@ -227,14 +223,12 @@ export const analysisApi = {
 export const authApi = {
   // 登录
   login: async (credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> => {
-    const response = await apiRequest<LoginResponse>('post', '/auth/login', credentials);
-    
-    // 如果登录成功，保存token到localStorage
-    if (response.success && response.data?.token) {
-      localStorage.setItem('auth_token', response.data.token);
+    try {
+      const response = await axios.post('/api/session/login', credentials);
+      return { success: true, data: response.data } as ApiResponse<LoginResponse>;
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || '登录失败' };
     }
-    
-    return response;
   },
 
   // 注册
@@ -248,12 +242,17 @@ export const authApi = {
 
   // 登出
   logout: async (): Promise<void> => {
-    localStorage.removeItem('auth_token');
+    await axios.post('/api/session/logout');
   },
 
   // 获取当前用户信息
   getCurrentUser: async (): Promise<ApiResponse<any>> => {
-    return apiRequest('get', '/auth/me');
+    try {
+      const response = await axios.get('/api/session/me');
+      return { success: true, data: response.data.user };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || '登录已过期' };
+    }
   },
 };
 

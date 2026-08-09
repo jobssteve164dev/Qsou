@@ -17,5 +17,4 @@ RUN mkdir -p /app/crawler/logs /var/lib/qsou
 
 WORKDIR /app/crawler
 
-ENTRYPOINT ["scrapy"]
-CMD ["crawl", "financial_news"]
+CMD ["python", "/app/crawler/run_schedule.py"]

@@ -141,6 +141,17 @@ class DataAssetStoreTest(unittest.TestCase):
                 }
             )
 
+    def test_status_reports_observed_collector_state(self):
+        status_path = self.root / "data" / "collector-status.json"
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.write_text(
+            json.dumps({"state": "idle", "last_finished_at": "2026-08-09T02:00:00Z"}),
+            encoding="utf-8",
+        )
+        status = self.store.status()
+        self.assertEqual(status["collector"]["state"], "idle")
+        self.assertEqual(status["collector"]["last_finished_at"], "2026-08-09T02:00:00Z")
+
     def _archive(self, body: str):
         return self.store.archive_response(
             source_id="yicai",

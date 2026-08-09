@@ -7,7 +7,6 @@ import hmac
 import json
 import secrets
 import time
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -25,11 +24,8 @@ class LoginRequest(BaseModel):
 
 
 class User(BaseModel):
-    id: str
     username: str
-    email: str
     role: str = "admin"
-    created_at: str
 
 
 class LoginResponse(BaseModel):
@@ -38,11 +34,7 @@ class LoginResponse(BaseModel):
 
 
 def _is_auth_enabled() -> bool:
-    return (
-        bool(settings.QSOU_ADMIN_USERNAME and settings.QSOU_ADMIN_PASSWORD)
-        or settings.DEBUG
-        or settings.SKIP_AUTH_IN_DEV
-    )
+    return bool(settings.QSOU_ADMIN_USERNAME and settings.QSOU_ADMIN_PASSWORD)
 
 
 def _encode_token(username: str) -> str:
@@ -86,15 +78,8 @@ def _decode_token(token: str) -> str:
 
 def _user(username: str) -> User:
     return User(
-        id="1" if username == "admin" else "2",
         username=username,
-        email=f"{username}@example.com",
-        role=(
-            "admin"
-            if username in {"admin", settings.QSOU_ADMIN_USERNAME}
-            else "user"
-        ),
-        created_at=datetime.now(timezone.utc).isoformat(),
+        role="admin",
     )
 
 
@@ -103,28 +88,28 @@ async def login(payload: LoginRequest):
     if not _is_auth_enabled():
         raise HTTPException(status_code=404, detail="Auth disabled in this environment")
 
-    if settings.QSOU_ADMIN_USERNAME and settings.QSOU_ADMIN_PASSWORD:
-        valid = secrets.compare_digest(
-            payload.username, settings.QSOU_ADMIN_USERNAME
-        ) and secrets.compare_digest(
-            payload.password,
-            settings.QSOU_ADMIN_PASSWORD,
-        )
-    else:
-        valid = (
-            (payload.username == "admin" and payload.password == "admin123")
-            or (payload.username == "user" and payload.password == "user123")
-        )
+    valid = secrets.compare_digest(
+        payload.username, settings.QSOU_ADMIN_USERNAME
+    ) and secrets.compare_digest(
+        payload.password,
+        settings.QSOU_ADMIN_PASSWORD,
+    )
     if not valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return LoginResponse(token=_encode_token(payload.username), user=_user(payload.username))
 
 
-@router.get("/me", response_model=User)
-async def me(authorization: Optional[str] = Header(default=None)):
+async def require_current_user(
+    authorization: Optional[str] = Header(default=None),
+) -> User:
     if not _is_auth_enabled():
         raise HTTPException(status_code=404, detail="Auth disabled in this environment")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     return _user(_decode_token(authorization.removeprefix("Bearer ").strip()))
+
+
+@router.get("/me", response_model=User)
+async def me(authorization: Optional[str] = Header(default=None)):
+    return await require_current_user(authorization)

@@ -14,7 +14,6 @@ from app.api.v1.endpoints import auth
 
 def _configure(monkeypatch):
     monkeypatch.setattr(auth.settings, "DEBUG", False)
-    monkeypatch.setattr(auth.settings, "SKIP_AUTH_IN_DEV", False)
     monkeypatch.setattr(auth.settings, "QSOU_ADMIN_USERNAME", "owner")
     monkeypatch.setattr(auth.settings, "QSOU_ADMIN_PASSWORD", "strong-password")
     monkeypatch.setattr(auth.settings, "SECRET_KEY", "test-signing-key")

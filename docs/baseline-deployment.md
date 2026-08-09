@@ -1,6 +1,6 @@
 # Qsou 自主数据基线部署
 
-本文用于部署已经落地的最小生产基线：API 与前端不依赖 Elasticsearch、Qdrant、Redis 或传统搜索引擎即可运行；采集器按需启动，并与 API 共享原始证据和标准文档存储。
+本文用于部署已经落地的单用户生产基线：Web、API 与持续采集器组成一个闭环，不依赖 Elasticsearch、Qdrant、Redis 或传统搜索引擎即可运行。采集器与 API 共享原始证据和标准文档存储。
 
 ## 1. 本基线交付什么
 
@@ -9,7 +9,8 @@
 - SQLite 数据目录：保存来源、文档身份、内容版本和可靠待处理状态。
 - 自有数据关键词搜索、来源状态、证据查看、JSONL 导出和标准文档回放。
 - 面向用户的“搜索”和“我的数据”页面。
-- 可选采集器；派生全文索引、向量索引与 AI 处理默认关闭，不影响基线使用。
+- 持续采集器及可观察运行状态；派生全文索引、向量索引与 AI 处理默认关闭，不影响基线使用。
+- 私人登录会话。浏览器只访问 Web，同域服务端代理使用 HttpOnly Cookie 持有会话，API 不直接暴露到公网。
 
 当前回放会把已经生成的标准文档重新放入派生处理队列，不访问外部来源。它还不是“仅凭原始响应重新执行解析器”的完整灾难恢复演练；这一边界必须保留，不能把当前能力表述成全链重建已经完成。
 
@@ -33,48 +34,39 @@ data/qsou/
 cp deploy/baseline.env.example deploy/baseline.env
 ```
 
-远程部署时，至少修改：
+部署前至少修改：
 
-- `QSOU_PUBLIC_API_URL`：必须是最终用户浏览器能访问的 API 地址，不能保留为 `localhost`。
-- `QSOU_CORS_ORIGINS`：填写前端真实来源，保持 JSON 数组格式。
-- `QSOU_API_PORT`、`QSOU_WEB_PORT`：端口冲突时再修改。
+- `QSOU_WEB_PORT`：唯一宿主机入口端口，默认 `3000`。
 - `QSOU_ADMIN_USERNAME`、`QSOU_ADMIN_PASSWORD`与 `QSOU_SECRET_KEY`：登录账号、强密码与随机签名密钥，必须只保存在部署环境中。
+- `QSOU_ACCESS_TOKEN_EXPIRE_MINUTES`：服务端会话有效期，默认与 Cookie 一致为 24 小时。
+- `QSOU_CRAWLER_SPIDERS` 与 `QSOU_CRAWL_INTERVAL_SECONDS`：持续运行的采集器列表和轮询间隔。
 
-只暴露前端域名时，将 `QSOU_PUBLIC_API_URL` 设为同域的 `https://<domain>/api/v1`。Next.js 会在容器网络内将该路径转发给 `api` 服务，用户无需访问第二个端口或域名。
+Compose 只把 Web 的 `3000` 发布到宿主机。API 的 `8000` 仅通过项目内部网络提供给 Web 服务端代理；完整项目重新发布后，端口自动发现也只能选择 Web，不会把公网域名切到 API。
 
 在部署主机启动 API 和前端：
 
 ```bash
-docker compose --env-file deploy/baseline.env up -d --build api web
+docker compose --env-file deploy/baseline.env up -d --build
 ```
 
-按需运行一次采集任务：
-
-```bash
-docker compose --env-file deploy/baseline.env --profile collector up collector
-```
-
-将 `QSOU_SPIDER` 改为 `company_announcement` 可运行公告采集器。采集器是一次性任务，退出不代表 API 或前端故障。
+采集器启动后立即执行首轮采集，随后按 `QSOU_CRAWL_INTERVAL_SECONDS` 周期运行。每轮状态写入共享数据目录的 `collector-status.json`，前台“数据资产”页面直接显示正在运行、等待下一轮或部分失败，不用“暂无新数据”掩盖故障。
 
 ## 4. 验证部署
 
 以下检查都成功，才算基线部署完成：
 
-```bash
-curl --fail http://localhost:8000/health
-curl --fail http://localhost:8000/api/v1/data/status
-curl --fail http://localhost:8000/api/v1/data/sources
-curl --fail http://localhost:3000/
-```
+宿主机只应看到 Web 的 `3000`，不应存在 API 的 `8000` 发布端口。容器健康检查直接访问 API 的 `/health`；公网验收从 Web 域名开始。
 
 浏览器验证：
 
-1. 打开前端并搜索已采集关键词。
-2. 打开“我的数据”，确认来源、原始证据和可搜索文档数量来自真实接口。
-3. 打开一条证据正文。
-4. 导出 JSONL，确认每条记录包含 `source_id`、`raw_object_id`、时间和版本标识。
+1. 在无旧 Cookie 的浏览器上下文打开域名，必须进入登录页，不能直接出现应用或“退出登录”。
+2. 登录后搜索已采集关键词。
+3. 打开“数据资产”，确认采集状态、来源、原始证据和可搜索文档数量来自真实接口。
+4. 打开一条证据正文。
+5. 导出 JSONL，确认每条记录包含 `source_id`、`raw_object_id`、时间和版本标识。
+6. 重新发布完整项目后再次访问域名，页面必须仍由 Web 提供，不能返回 API 根路径 JSON。
 
-如果尚未运行采集器，数量为 0 是正常空库状态，不应填充演示数据或虚构成功率。
+首轮采集尚未完成时数量为 0 是正常空库状态，不应填充演示数据、虚构热门搜索或成功率；但采集器状态必须可见。
 
 ## 5. 不使用容器的宿主机验证
 
@@ -92,7 +84,7 @@ ENABLE_DERIVED_SEARCH=false ENABLE_DERIVED_PROCESSING=false \
 ```bash
 cd web-frontend
 npm ci
-NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1 npm run build
+API_INTERNAL_URL=http://localhost:8000 npm run build
 npm run start -- -p 3000
 ```
 

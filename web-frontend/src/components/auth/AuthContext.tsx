@@ -1,233 +1,152 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useRouter } from 'next/router';
-import { authApi } from '@/services/api';
+
 import { User } from '@/types';
-import { errorUtils } from '@/utils';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   hasRole: (role: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
-  // 是否启用开发环境静默登录
-  const enableDevSilentLogin =
-    typeof process !== 'undefined' &&
-    process.env.NODE_ENV === 'development' &&
-    (process.env.NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN ?? 'true') !== 'false';
-
-  // 开发环境静默登录
-  const devSilentLogin = async (): Promise<boolean> => {
-    if (!enableDevSilentLogin) return false;
-    try {
-      const loginRes = await authApi.login({ username: 'admin', password: 'admin123' });
-      if (loginRes.success && loginRes.data?.token) {
-        const me = await authApi.getCurrentUser();
-        if (me.success && me.data) {
-          setUser(me.data);
-          return true;
-        }
-      }
-    } catch (error) {
-      // 在开发模式下打印更详细的错误，便于定位
-      // eslint-disable-next-line no-console
-      console.error('[Dev Mode] 静默登录失败:', errorUtils.getErrorMessage(error));
-    }
-    return false;
-  };
-
-  // 检查当前用户状态
-  const checkAuthStatus = async () => {
+  const checkSession = useCallback(async () => {
     setLoading(true);
-    const token = localStorage.getItem('auth_token');
-    
-    if (!token) {
-      // 开发环境尝试静默登录
-      const ok = await devSilentLogin();
-      setLoading(false);
-      if (ok) return; // 已完成静默登录并设置了用户
-      return; // 未开启或失败，保持未登录状态
-    }
-
     try {
-      const response = await authApi.getCurrentUser();
-      
-      if (response.success && response.data) {
-        setUser(response.data);
-      } else {
-        // Token 无效，清除本地存储
-        localStorage.removeItem('auth_token');
+      const response = await fetch('/api/session/me', {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!response.ok) {
         setUser(null);
+        return;
       }
-    } catch (error) {
-      console.error('检查认证状态失败:', error);
-      localStorage.removeItem('auth_token');
+      const payload = await response.json();
+      setUser(payload.user || null);
+    } catch {
       setUser(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  // 登录
-  const login = async (username: string, password: string): Promise<boolean> => {
-    try {
-      const response = await authApi.login({ username, password });
-      
-      if (response.success && response.data) {
-        setUser(response.data.user);
-        return true;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      console.error('登录失败:', errorUtils.getErrorMessage(error));
-      return false;
-    }
-  };
-
-  // 登出
-  const logout = () => {
-    localStorage.removeItem('auth_token');
-    setUser(null);
-    router.push('/login');
-  };
-
-  // 检查是否已认证
-  const isAuthenticated = !!user;
-
-  // 检查用户角色
-  const hasRole = (role: string): boolean => {
-    if (!user) return false;
-    return user.role === role || user.role === 'admin';
-  };
-
-  // 初始化时检查认证状态
-  useEffect(() => {
-    checkAuthStatus();
   }, []);
 
-  // 监听路由变化，检查页面权限
   useEffect(() => {
-    const handleRouteChange = async (url: string) => {
-      // 受保护的路由列表
-      const protectedRoutes = ['/intelligence', '/monitor'];
-      const adminRoutes = ['/monitor'];
-      
-      const isProtectedRoute = protectedRoutes.some(route => url.startsWith(route));
-      const isAdminRoute = adminRoutes.some(route => url.startsWith(route));
-      
-      if (!loading) {
-        if (isProtectedRoute && !isAuthenticated) {
-          // 在开发环境下，尝试静默登录一次，避免点击受保护页面立即被重定向
-          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-          if (!token && enableDevSilentLogin) {
-            setLoading(true);
-            const ok = await devSilentLogin();
-            setLoading(false);
-            if (ok) {
-              // 已登录，继续原目标路由
-              router.replace(url);
-              return;
-            }
-          }
-          router.push(`/login?returnUrl=${encodeURIComponent(url)}`);
-        } else if (isAdminRoute && !hasRole('admin')) {
-          router.push('/403'); // 权限不足页面
-        }
+    checkSession();
+  }, [checkSession]);
+
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      const response = await fetch('/api/session/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.user) {
+        return { ok: false, error: payload.error || '登录失败，请稍后重试' };
       }
-    };
-
-    router.events.on('routeChangeStart', handleRouteChange);
-    
-    // 检查当前页面
-    if (!loading) {
-      handleRouteChange(router.pathname);
+      setUser(payload.user);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: '暂时无法连接登录服务，请稍后重试' };
     }
+  }, []);
 
-    return () => {
-      router.events.off('routeChangeStart', handleRouteChange);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, loading, isAuthenticated, user]); // hasRole 依赖于 user，不需要单独添加
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/session/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } finally {
+      setUser(null);
+    }
+  }, []);
 
-  const value: AuthContextType = {
-    user,
-    loading,
-    login,
-    logout,
-    isAuthenticated,
-    hasRole,
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      loading,
+      login,
+      logout,
+      isAuthenticated: Boolean(user),
+      hasRole: (role: string) => Boolean(user && (user.role === role || user.role === 'admin')),
+    }),
+    [loading, login, logout, user],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Hook 用于使用认证上下文
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
-// 高阶组件：保护需要认证的页面
+export const AuthBoundary: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      const returnUrl = router.asPath.startsWith('/') ? router.asPath : '/';
+      router.replace(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+    }
+  }, [isAuthenticated, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-100">
+        <div className="text-center" role="status" aria-live="polite">
+          <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          <p className="text-sm text-slate-300">正在确认登录状态</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+  return <>{children}</>;
+};
+
 export const withAuth = <P extends object>(
   WrappedComponent: React.ComponentType<P>,
-  requiredRole?: string
+  requiredRole?: string,
 ) => {
   const AuthenticatedComponent: React.FC<P> = (props) => {
-    const { user, loading, isAuthenticated, hasRole } = useAuth();
+    const { hasRole } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!loading) {
-        if (!isAuthenticated) {
-          router.push(`/login?returnUrl=${encodeURIComponent(router.asPath)}`);
-        } else if (requiredRole && !hasRole(requiredRole)) {
-          router.push('/403');
-        }
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, isAuthenticated, user, router]); // hasRole 依赖于 user，不需要单独添加
+      if (requiredRole && !hasRole(requiredRole)) router.replace('/403');
+    }, [hasRole, router]);
 
-    if (loading) {
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">验证身份中...</p>
-          </div>
-        </div>
-      );
-    }
-
-    if (!isAuthenticated || (requiredRole && !hasRole(requiredRole))) {
-      return null; // 重定向将由 useEffect 处理
-    }
-
-    return <WrappedComponent {...props} />;
+    if (requiredRole && !hasRole(requiredRole)) return null;
+    return (
+      <AuthBoundary>
+        <WrappedComponent {...props} />
+      </AuthBoundary>
+    );
   };
-
   AuthenticatedComponent.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name})`;
-  
   return AuthenticatedComponent;
 };

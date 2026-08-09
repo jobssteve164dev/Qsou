@@ -1,169 +1,90 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { Search, BarChart3, Settings, Database, LogOut } from 'lucide-react';
-import { Button } from './ui/Button';
-import { StatsFooter } from './ui/StatsFooter';
+import { Database, LogOut, Search } from 'lucide-react';
+
 import { useAuth } from './auth/AuthContext';
-import { useSystemStats } from '@/hooks/useSystemStats';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+const navigation = [
+  { name: '搜索', href: '/', icon: Search },
+  { name: '数据资产', href: '/data', icon: Database },
+];
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const router = useRouter();
-  const currentPath = router.pathname;
-  const { user, logout, hasRole } = useAuth();
-  const { stats, loading: statsLoading } = useSystemStats();
+  const { user, logout } = useAuth();
 
-  const navigation = [
-    {
-      name: '搜索',
-      href: '/',
-      icon: Search,
-      current: currentPath === '/',
-    },
-    {
-      name: '我的数据',
-      href: '/data',
-      icon: Database,
-      current: currentPath.startsWith('/data'),
-    },
-    {
-      name: '智能分析',
-      href: '/intelligence',
-      icon: BarChart3,
-      current: currentPath.startsWith('/intelligence'),
-    },
-    ...(hasRole('admin') ? [{
-      name: '系统监控',
-      href: '/monitor',
-      icon: Settings,
-      current: currentPath.startsWith('/monitor'),
-    }] : []),
-  ];
-
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 顶部导航栏 */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* 左侧 - Logo */}
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">Q</span>
-                </div>
-                <span className="text-xl font-bold text-gray-900">QSou</span>
-              </Link>
-            </div>
+    <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-950">
+      <a
+        href="#main-content"
+        className="sr-only z-50 rounded-md bg-white px-4 py-2 text-slate-950 focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+      >
+        跳到主要内容
+      </a>
+      <header className="border-b border-slate-800 bg-slate-950 text-white">
+        <div className="mx-auto flex min-h-16 max-w-6xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex min-h-11 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-400 font-semibold text-slate-950">Q</span>
+            <span>
+              <span className="block text-base font-semibold leading-5">QSou</span>
+              <span className="hidden text-xs text-slate-400 sm:block">自主投资数据</span>
+            </span>
+          </Link>
 
-            {/* 中间 - 导航菜单 */}
-            <nav className="hidden md:flex space-x-8">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`
-                      inline-flex items-center px-1 pt-1 text-sm font-medium
-                      ${
-                        item.current
-                          ? 'border-b-2 border-primary-500 text-primary-600'
-                          : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }
-                    `}
-                  >
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.name}
-                  </Link>
-                );
-              })}
-            </nav>
+          <nav aria-label="主导航" className="ml-auto flex items-center gap-1 sm:ml-8">
+            {navigation.map((item) => {
+              const active = item.href === '/' ? router.pathname === '/' : router.pathname.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+                    active ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </nav>
 
-            {/* 右侧 - 用户菜单 */}
-            <div className="flex items-center space-x-4">
-              {user && (
-                <div className="text-sm text-gray-700">
-                  欢迎, <span className="font-medium">{user.username}</span>
-                  {user.role === 'admin' && (
-                    <span className="ml-1 px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded-full">
-                      管理员
-                    </span>
-                  )}
-                </div>
-              )}
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                退出登录
-              </Button>
-            </div>
+          <div className="hidden h-7 w-px bg-slate-800 sm:block" />
+          <div className="hidden text-right sm:block">
+            <div className="text-sm font-medium text-slate-100">{user?.username}</div>
+            <div className="text-xs text-slate-400">私人空间</div>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            aria-label="退出登录"
+            title="退出登录"
+          >
+            <LogOut className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
       </header>
 
-      {/* 移动端导航菜单 */}
-      <div className="md:hidden bg-white border-b border-gray-200">
-        <div className="px-2 pt-2 pb-3 space-y-1">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`
-                  block px-3 py-2 text-base font-medium rounded-md
-                  ${
-                    item.current
-                      ? 'bg-primary-50 border-primary-500 text-primary-700'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                  }
-                `}
-              >
-                <div className="flex items-center">
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 主要内容区域 */}
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         {children}
       </main>
 
-      {/* 统计信息页脚 */}
-      <StatsFooter 
-        statsData={stats ? {
-          documents_count: stats.documents_count,
-          searches_today: stats.searches_today,
-          analysis_reports: stats.analysis_reports,
-        } : undefined}
-        loading={statsLoading}
-      />
-
-      {/* 底部版权信息 */}
-      <footer className="bg-white border-t border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="text-center text-sm text-gray-500">
-            <p>© 2026 QSou 自主投资数据</p>
-          </div>
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <span>QSou · 你的数据，始终可追溯、可导出</span>
+          <span>搜索结果不构成投资建议</span>
         </div>
       </footer>
     </div>

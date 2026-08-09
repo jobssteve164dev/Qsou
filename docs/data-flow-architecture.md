@@ -25,20 +25,25 @@ Qsou 的事实权威必须是来源登记与不可变原始证据，而不是 El
 
 ```text
 来源登记 config/sources.json
+  → 持续采集调度器按周期运行 Spider
   → Scrapy Downloader Middleware 归档原始响应
   → Spider 解析并关联 raw_object_id
   → DataProcessingPipeline 登记身份、时间和内容版本
   → SQLite processing_outbox
   → 可选 Celery / Elasticsearch / Qdrant 派生链
-  → FastAPI 自有数据搜索、证据查看、导出与回放
+  → FastAPI 认证后的自有数据搜索、证据查看、导出与回放
+  → Next.js 同域会话代理
+  → 搜索与数据资产界面
 ```
 
 - `qsou_data/registry.py` 负责版本化来源登记与 URL 归属校验。
 - `qsou_data/store.py` 负责原始文件、SQLite 目录、身份版本、可靠待处理状态、本地搜索、导出和回放。
 - `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
 - `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 先登记标准文档，再按配置提交派生处理；提交失败不会删除本地待处理记录。
+- `crawler/run_schedule.py` 负责持续运行正式 Spider，并把最近一轮与下一轮状态写入共享数据目录。
 - `data-processor/tasks.py` 将处理、过滤、索引和失败状态回写数据资产目录。
 - `api-gateway/app/api/v1/endpoints/data_assets.py` 提供来源、证据、版本、导出与回放入口。
+- `web-frontend/src/pages/api/` 在服务端持有 HttpOnly 会话并代理内部 API；浏览器不保存令牌，API 不发布宿主机端口。
 
 基线默认关闭派生搜索和派生处理，API 会直接搜索自有标准文档；这使 Elasticsearch、Qdrant 和 Redis 不再是最小部署的硬依赖。
 
