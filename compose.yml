@@ -14,6 +14,9 @@ services:
       QSOU_DATA_ROOT: /var/lib/qsou
       QSOU_SOURCE_REGISTRY: /app/config/sources.json
       CORS_ORIGINS: '${QSOU_CORS_ORIGINS:-["http://localhost:3000"]}'
+      SECRET_KEY: ${QSOU_SECRET_KEY:?QSOU_SECRET_KEY is required}
+      QSOU_ADMIN_USERNAME: ${QSOU_ADMIN_USERNAME:?QSOU_ADMIN_USERNAME is required}
+      QSOU_ADMIN_PASSWORD: ${QSOU_ADMIN_PASSWORD:?QSOU_ADMIN_PASSWORD is required}
     ports:
       - "${QSOU_API_PORT:-8000}:8000"
     volumes:
@@ -40,7 +43,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${QSOU_PUBLIC_API_URL:-http://localhost:8000/api/v1}
       API_INTERNAL_URL: http://api:8000
-      NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN: "true"
+      NEXT_PUBLIC_ENABLE_DEV_SILENT_LOGIN: "false"
     ports:
       - "${QSOU_WEB_PORT:-3000}:3000"
     depends_on:
