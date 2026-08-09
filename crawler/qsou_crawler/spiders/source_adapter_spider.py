@@ -117,7 +117,6 @@ class SourceAdapterSpider(scrapy.Spider):
 
     def _request(self, specification: RequestSpec, callback, cb_kwargs=None):
         metadata = dict(specification.metadata)
-        metadata["handle_httpstatus_all"] = True
         metadata["qsou_request_kind"] = specification.kind
         return scrapy.Request(
             url=specification.url,

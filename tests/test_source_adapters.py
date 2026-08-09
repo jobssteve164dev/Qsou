@@ -46,6 +46,7 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertTrue(crawler_settings.ROBOTSTXT_OBEY)
         self.assertIn("qsou.szlk.uk", crawler_settings.USER_AGENT)
         self.assertFalse(crawler_settings.QSOU_OUTBOX_DISPATCH_ENABLED)
+        self.assertEqual(crawler_settings.REQUEST_FINGERPRINTER_IMPLEMENTATION, "2.7")
 
     def test_downloader_evidence_identity_stays_on_request_until_spider_stage(self):
         project_root = Path(__file__).resolve().parents[1]
@@ -60,6 +61,7 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn('request.meta["qsou_evidence"]', middleware)
         self.assertNotIn('response.meta["qsou_evidence"] =', middleware)
         self.assertIn("errback=self.handle_request_error", spider)
+        self.assertNotIn('metadata["handle_httpstatus_all"]', spider)
         self.assertIn('"LOG_FILE="', scheduler)
 
     def test_collector_image_uses_an_explicit_runtime_allowlist(self):

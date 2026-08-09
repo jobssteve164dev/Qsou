@@ -116,6 +116,7 @@ MAX_CONTENT_LENGTH = 1000000  # 最大内容长度 (1MB)
 # 监控和统计
 TELNETCONSOLE_ENABLED = False  # 禁用telnet控制台（安全考虑）
 STATS_CLASS = 'scrapy.statscollectors.MemoryStatsCollector'
+REQUEST_FINGERPRINTER_IMPLEMENTATION = '2.7'
 
 # Request meta settings
 DEFAULT_REQUEST_HEADERS = {
