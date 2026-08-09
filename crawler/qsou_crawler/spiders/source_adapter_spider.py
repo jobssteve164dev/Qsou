@@ -51,10 +51,16 @@ class SourceAdapterSpider(scrapy.Spider):
             return
         self.crawler.stats.inc_value("adapter/entrypoints_succeeded")
         try:
-            references = self.adapter.discover(self._payload(response))
+            payload = self._payload(response)
+            listing_requests = self.adapter.listing_requests(payload)
+            references = self.adapter.discover(payload)
         except Exception as exc:
             self._record_error(f"入口解析失败: {response.url}: {exc}")
             return
+        if listing_requests:
+            self.crawler.stats.inc_value("adapter/entrypoints_total", len(listing_requests))
+            for specification in listing_requests:
+                yield self._request(specification, self.parse_listing)
         for reference in references:
             if reference.url in self._seen_details or len(self._seen_details) >= self.max_details:
                 continue

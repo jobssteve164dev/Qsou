@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sqlite3
-import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -14,6 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from .catalog import Catalog
+from .objects import ObjectStorageError, configured_object_store
 from .registry import SourceRegistry, project_root
 
 
@@ -80,7 +80,7 @@ def _json(value: Any) -> str:
 
 
 class DataAssetStore:
-    """以文件归档和 SQLite 目录构成最小可部署事实权威。"""
+    """以不可变对象归档和关系目录库构成数据事实权威。"""
 
     def __init__(
         self,
@@ -89,30 +89,25 @@ class DataAssetStore:
     ) -> None:
         self.root = Path(root or default_data_root()).resolve()
         self.registry = registry or SourceRegistry()
+        self.catalog = Catalog(self.root)
+        self.object_store = configured_object_store(self.root)
         self.objects_dir = self.root / "objects"
-        self.catalog_path = self.root / "catalog.sqlite3"
-        self.objects_dir.mkdir(parents=True, exist_ok=True)
+        self.object_cache_dir = self.root / "object-cache"
+        self.catalog_path = self.catalog.sqlite_path
+        self.root.mkdir(parents=True, exist_ok=True)
         self._initialize_catalog()
 
     @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(str(self.catalog_path), timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 30000")
-        try:
+    def _connection(self) -> Iterator[Any]:
+        with self.catalog.connection() as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
     def _initialize_catalog(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
+            if self.catalog.backend == "sqlite":
+                connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("BEGIN IMMEDIATE")
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS raw_objects (
@@ -236,16 +231,56 @@ class DataAssetStore:
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_adapter_requests_one_active
                     ON adapter_run_requests(source_id)
                     WHERE state IN ('queued', 'running');
+
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL,
+                    details_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS migration_audits (
+                    migration_id TEXT PRIMARY KEY,
+                    source_backend TEXT NOT NULL,
+                    target_backend TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    table_counts_json TEXT,
+                    catalog_digest TEXT,
+                    object_count INTEGER NOT NULL DEFAULT 0,
+                    object_bytes INTEGER NOT NULL DEFAULT 0,
+                    error TEXT
+                );
                 """
+            )
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations (version, applied_at, details_json)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "2026-08-postgres-object-storage-v1",
+                    utc_now(),
+                    _json(
+                        {
+                            "catalog_backends": ["sqlite", "postgres"],
+                            "object_backends": ["file", "s3"],
+                        }
+                    ),
+                ),
             )
 
     def health(self) -> Dict[str, Any]:
         with self._connection() as connection:
             connection.execute("SELECT 1").fetchone()
+        object_storage = self.object_store.health()
         return {
             "status": "healthy",
             "data_root": str(self.root),
-            "catalog": str(self.catalog_path),
+            "catalog_backend": self.catalog.backend,
+            "catalog": self.catalog.label,
+            "object_storage": object_storage,
         }
 
     def archive_response(
@@ -270,8 +305,11 @@ class DataAssetStore:
         raw_object_id = stable_hash(source_id, canonical_url, content_hash)
         fetched_at = fetched_at or utc_now()
         relative_body_path = Path("objects") / raw_object_id[:2] / f"{raw_object_id}.body"
-        body_path = self.root / relative_body_path
-        self._write_once(body_path, body)
+        body_key = relative_body_path.as_posix()
+        try:
+            self.object_store.put_once(body_key, body, content_type or "application/octet-stream")
+        except ObjectStorageError as exc:
+            raise DataAssetError(str(exc)) from exc
 
         safe_headers = self._safe_headers(response_headers or {})
         metadata = {
@@ -280,15 +318,23 @@ class DataAssetStore:
             "url": canonical_url,
             "status_code": int(status_code),
             "content_hash": content_hash,
-            "body_path": relative_body_path.as_posix(),
+            "body_path": body_key,
             "content_type": content_type or "application/octet-stream",
             "encoding": encoding,
             "response_headers": safe_headers,
             "collector": collector,
             "fetched_at": fetched_at,
         }
-        metadata_path = body_path.with_suffix(".json")
-        self._write_once(metadata_path, json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8"))
+        metadata_key = str(Path(body_key).with_suffix(".json"))
+        try:
+            self.object_store.put_once(
+                metadata_key,
+                json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8"),
+                "application/json",
+                verify_existing=False,
+            )
+        except ObjectStorageError as exc:
+            raise DataAssetError(str(exc)) from exc
 
         with self._connection() as connection:
             existing = connection.execute(
@@ -319,7 +365,7 @@ class DataAssetStore:
                         canonical_url,
                         int(status_code),
                         content_hash,
-                        relative_body_path.as_posix(),
+                        body_key,
                         content_type or "application/octet-stream",
                         encoding,
                         _json(safe_headers),
@@ -1051,10 +1097,14 @@ class DataAssetStore:
 
     def evidence_body_path(self, raw_object_id: str) -> Path:
         evidence = self.get_evidence(raw_object_id)
-        path = (self.root / evidence["body_path"]).resolve()
-        if self.root not in path.parents or not path.is_file():
-            raise DataAssetError(f"原始证据文件不可用: {raw_object_id}")
-        return path
+        try:
+            return self.object_store.materialize(
+                evidence["body_path"],
+                self.object_cache_dir,
+                evidence["content_hash"],
+            )
+        except ObjectStorageError as exc:
+            raise DataAssetError(f"原始证据文件不可用: {raw_object_id}: {exc}") from exc
 
     def evidence_has_document(self, raw_object_id: str) -> bool:
         """Return whether one immutable response is already linked to a document."""
@@ -1241,7 +1291,7 @@ class DataAssetStore:
             )
 
     @staticmethod
-    def _adapter_run_row(row: sqlite3.Row) -> Dict[str, Any]:
+    def _adapter_run_row(row: Mapping[str, Any]) -> Dict[str, Any]:
         value = dict(row)
         for source_key, target_key in (
             ("cursor_before_json", "cursor_before"),
@@ -1254,7 +1304,7 @@ class DataAssetStore:
         return value
 
     @staticmethod
-    def _adapter_request_row(row: sqlite3.Row) -> Dict[str, Any]:
+    def _adapter_request_row(row: Mapping[str, Any]) -> Dict[str, Any]:
         return dict(row)
 
     @staticmethod
@@ -1273,29 +1323,7 @@ class DataAssetStore:
             safe[normalized] = value
         return safe
 
-    def _evidence_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+    def _evidence_row(self, row: Mapping[str, Any]) -> Dict[str, Any]:
         value = dict(row)
         value["response_headers"] = json.loads(value.pop("response_headers_json"))
         return value
-
-    @staticmethod
-    def _write_once(path: Path, payload: bytes) -> None:
-        if path.exists():
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-        temporary_path = Path(temporary_name)
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            try:
-                os.link(str(temporary_path), str(path))
-            except FileExistsError:
-                pass
-            finally:
-                temporary_path.unlink(missing_ok=True)
-        except Exception:
-            temporary_path.unlink(missing_ok=True)
-            raise

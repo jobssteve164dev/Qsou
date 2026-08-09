@@ -83,7 +83,7 @@ class BaselineApiTest(unittest.TestCase):
             self.assertEqual(status.json()["raw_objects"], 1)
             self.assertEqual(status.json()["active_documents"], 1)
             self.assertEqual(status.json()["registered_sources"], 9)
-            self.assertEqual(status.json()["active_sources"], 8)
+            self.assertEqual(status.json()["active_sources"], 9)
 
             trigger = client.post("/api/v1/data/adapter-runs/yicai/trigger", headers=headers)
             self.assertEqual(trigger.status_code, 202)
@@ -93,9 +93,6 @@ class BaselineApiTest(unittest.TestCase):
                 trigger.json()["request"]["request_id"],
                 duplicate_trigger.json()["request"]["request_id"],
             )
-
-            blocked_trigger = client.post("/api/v1/data/adapter-runs/sohu-finance/trigger", headers=headers)
-            self.assertEqual(blocked_trigger.status_code, 400)
 
             search = client.post(
                 "/api/v1/search",

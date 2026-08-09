@@ -31,7 +31,7 @@ class SourceAdapterContractTest(unittest.TestCase):
                 "eastmoney": "1.1.0",
                 "sina-finance": "1.1.0",
                 "netease-finance": "1.1.0",
-                "sohu-finance": "1.0.0",
+                "sec-edgar": "1.0.0",
                 "caijing": "1.0.0",
                 "yicai": "1.2.0",
             },
@@ -174,7 +174,6 @@ class SourceAdapterContractTest(unittest.TestCase):
             "eastmoney": "https://finance.eastmoney.com/a/202608081234567890.html",
             "sina-finance": "https://finance.sina.com.cn/stock/marketresearch/2026-08-08/doc-abcdef123456.shtml",
             "netease-finance": "https://www.163.com/money/article/ABCDEFGH00258105.html",
-            "sohu-finance": "https://www.sohu.com/a/123456789_100001",
             "caijing": "https://economy.caijing.com.cn/20260808/1234567.shtml",
             "yicai": "https://www.yicai.com/news/102999999.html",
         }
@@ -210,6 +209,68 @@ class SourceAdapterContractTest(unittest.TestCase):
                     else expected_url
                 )
                 self.assertEqual([item.url for item in references], [expected])
+
+    def test_sec_edgar_uses_declared_automated_access_and_daily_master_index(self):
+        adapter = self.registry.create("sec-edgar")
+        initial = adapter.initial_requests()
+        self.assertEqual(len(initial), 1)
+        self.assertIn("/Archives/edgar/daily-index/", initial[0].url)
+        self.assertIn("QSou", initial[0].headers["User-Agent"])
+
+        quarter = ResponsePayload(
+            url="https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/index.json",
+            body=json.dumps(
+                {
+                    "directory": {
+                        "item": [
+                            {"name": "master.20260806.idx"},
+                            {"name": "master.20260807.idx"},
+                            {"name": "sitemap.20260807.xml"},
+                        ]
+                    }
+                }
+            ).encode(),
+            content_type="application/json",
+            metadata={"sec_stage": "quarter_index"},
+        )
+        followups = adapter.listing_requests(quarter)
+        self.assertEqual(
+            [item.url for item in followups],
+            ["https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/master.20260807.idx"],
+        )
+
+        master = ResponsePayload(
+            url=followups[0].url,
+            body=(
+                "CIK|Company Name|Form Type|Date Filed|Filename\n"
+                "1045810|NVIDIA CORP|8-K|2026-08-07|edgar/data/1045810/0001045810-26-000123.txt\n"
+                "1045810|NVIDIA CORP|UPLOAD|2026-08-07|edgar/data/1045810/0001045810-26-000124.txt\n"
+            ).encode(),
+            content_type="text/plain",
+            metadata={"sec_stage": "daily_master", "master_index": "master.20260807.idx"},
+        )
+        references = adapter.discover(master)
+        self.assertEqual(len(references), 1)
+        self.assertEqual(references[0].source_document_id, "0001045810-26-000123")
+        self.assertEqual(references[0].metadata["form_type"], "8-K")
+        self.assertEqual(references[0].document_type, "filing")
+
+        filing = adapter.parse_document(
+            ResponsePayload(
+                url=references[0].url,
+                body=(
+                    "<html><body><main><h1>Current report</h1>"
+                    "<p>The registrant announced material operating results and filed the attached disclosure.</p>"
+                    "<p>The complete submission preserves the official filing evidence and accession identity.</p>"
+                    "</main></body></html>"
+                ).encode(),
+            ),
+            references[0],
+        )
+        self.assertIsNotNone(filing)
+        self.assertEqual(filing["source_id"], "sec-edgar")
+        self.assertEqual(filing["parser_version"], "sec-edgar-filings/1.0.0")
+        self.assertEqual(filing["metadata"]["accession_number"], "0001045810-26-000123")
 
     def test_structured_article_parser_emits_provenance_and_version(self):
         adapter = self.registry.create("yicai")

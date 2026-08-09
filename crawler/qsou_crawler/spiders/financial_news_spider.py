@@ -21,7 +21,6 @@ class FinancialNewsSpider(scrapy.Spider):
         'eastmoney.com',
         'sina.com.cn', 
         '163.com',
-        'sohu.com',
         'caijing.com.cn',
         'yicai.com'
     ]
@@ -40,9 +39,6 @@ class FinancialNewsSpider(scrapy.Spider):
         # 网易财经
         'https://money.163.com/special/002557S6/rss_newstop.xml',
         'https://money.163.com/',
-        
-        # 搜狐财经
-        'https://business.sohu.com/',
         
         # 财经网
         'https://www.caijing.com.cn/',
@@ -96,8 +92,6 @@ class FinancialNewsSpider(scrapy.Spider):
             yield from self.parse_sina(response)
         elif '163.com' in domain:
             yield from self.parse_163(response)
-        elif 'sohu.com' in domain:
-            yield from self.parse_sohu(response)
         elif 'caijing.com.cn' in domain:
             yield from self.parse_caijing(response)
         elif 'yicai.com' in domain:
@@ -165,22 +159,6 @@ class FinancialNewsSpider(scrapy.Spider):
                         url=full_url,
                         callback=self.parse_news_detail,
                         meta={'source': '163.com'}
-                    )
-    
-    def parse_sohu(self, response):
-        """解析搜狐财经新闻"""
-        news_links = response.css('a[href*="/business/"]::attr(href)').getall()
-        news_links.extend(response.css('a[href*="business.sohu.com"]::attr(href)').getall())
-        
-        for link in news_links:
-            if link and link not in self.processed_urls:
-                full_url = urljoin(response.url, link)
-                if self.is_valid_news_url(full_url):
-                    self.processed_urls.add(link)
-                    yield scrapy.Request(
-                        url=full_url,
-                        callback=self.parse_news_detail,
-                        meta={'source': 'sohu.com'}
                     )
     
     def parse_caijing(self, response):
@@ -504,8 +482,6 @@ class FinancialNewsSpider(scrapy.Spider):
         elif 'sina.com.cn' in domain:
             return f"{start_url}&page={page}"
         elif '163.com' in domain:
-            return f"{start_url}?page={page}"
-        elif 'sohu.com' in domain:
             return f"{start_url}?page={page}"
         elif 'caijing.com.cn' in domain:
             return f"{start_url}?page={page}"

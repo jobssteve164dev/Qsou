@@ -296,6 +296,11 @@ class SourceAdapter:
             )
         return references
 
+    def listing_requests(self, response: ResponsePayload) -> list[RequestSpec]:
+        """Return follow-up listing requests for sources with a directory index."""
+        del response
+        return []
+
     def detail_request(self, reference: DocumentReference) -> RequestSpec:
         return RequestSpec(
             url=reference.url,

@@ -20,11 +20,13 @@
 
 ```text
 data/qsou/
-├── catalog.sqlite3      # 身份、版本与处理状态目录
+├── catalog.sqlite3      # 默认基线：身份、版本与处理状态目录
 └── objects/             # 按内容标识保存的原始正文与元数据
 ```
 
 这两个部分必须作为同一个备份单元。Elasticsearch、Qdrant 和模型输出不属于基线事实权威。
+
+仓库同时支持把目录库升级为 PostgreSQL、把原始证据升级到 S3 兼容对象存储；默认配置不会自动切换。回填、最终增量、校验和回滚步骤见 [PostgreSQL 目录库与对象存储升级手册](storage-upgrade-runbook.md)。
 
 ## 3. 在部署主机运行容器版本
 
@@ -97,7 +99,7 @@ npm run start -- -p 3000
 ## 6. 上线前边界
 
 - `config/sources.json` 中的 `rights_status=review_required` 是待复核状态，不是数据保存或再分发许可结论。
-- 搜狐财经当前为 `authorization_required`，保持登记但不参与自动调度；接入获授权且持续更新的 feed 后，必须升级适配器版本再启用。
+- SEC EDGAR 的 `automated_access_allowed` 仅覆盖按官方开发者规则进行的程序化访问；运行时必须保留声明 User-Agent、低于每秒 10 次并遵守 robots。
 - 来源状态区分入口成功、详情发现、详情获取与文档产出；仍没有外部独立对账源来证明历史窗口绝对完整，也没有条款变更自动检查。
 - SQLite 加共享文件卷适合单实例基线；多 API 实例、跨节点采集或大规模数据前，需要迁移到支持并发与对象存储的实现，但不能改变原始证据的权威地位。
 - 备份必须覆盖来源登记、整个数据根目录及部署配置，并通过恢复演练验证，不能只备份搜索索引。
