@@ -123,7 +123,7 @@ export const searchApi = {
     if (params.end_date) filters.end_date = params.end_date;
     if (Object.keys(filters).length > 0) payload.filters = filters;
 
-    const res = await apiRequest<any>('post', '/search', payload);
+    const res = await apiRequest<any>('post', '/search/', payload);
     if (!res.success || !res.data) return res as ApiResponse<SearchResponse>;
 
     // 将后端返回形状转换为前端所需 SearchResponse 形状
