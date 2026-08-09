@@ -38,7 +38,18 @@ def run_configured_migration() -> Dict[str, Any] | None:
         previous_backend = os.environ.get("QSOU_CATALOG_BACKEND")
         os.environ["QSOU_CATALOG_BACKEND"] = "postgres"
         try:
-            result = LegacySqliteMigrator(DataAssetStore()).run(phase)
+            try:
+                result = LegacySqliteMigrator(DataAssetStore()).run(phase)
+            except Exception as exc:
+                if phase != "backfill" or runtime_backend != "sqlite":
+                    raise
+                result = {
+                    "status": "failed",
+                    "phase": phase,
+                    "runtime_backend": runtime_backend,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:1000],
+                }
         finally:
             if previous_backend is None:
                 os.environ.pop("QSOU_CATALOG_BACKEND", None)

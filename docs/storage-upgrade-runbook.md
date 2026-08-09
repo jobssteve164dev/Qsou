@@ -50,6 +50,15 @@ python -m qsou_data.migrate backfill
 3. 逐个校验旧文件、目标对象和备份对象的正文 SHA-256。
 4. 写入 `schema_migrations` 与 `migration_audits`，记录阶段、数量、摘要和结果。
 
+目录库统一写入边界会把 PostgreSQL 不接受的文本 NUL 字节规范化为 Unicode
+替代字符；SQLite 新写入、PostgreSQL 新写入、历史迁移和摘要校验使用同一规则。
+迁移结果中的 `text_nul_bytes_normalized` 记录本次规范化数量，避免静默处理。
+
+线上后端仍为 SQLite 时，回填失败会输出
+`QSOU_DATABASE_MIGRATION_RESULT` 的 `status=failed` 结果并继续启动 API；自动发布不会
+因为目标库或历史数据异常而中断现有服务。最终增量和生产验收仍然失败关闭，未通过时
+不能切换到 PostgreSQL。
+
 切换前停止 SQLite 写入，并只对最终增量任务设置写入冻结确认：
 
 ```bash

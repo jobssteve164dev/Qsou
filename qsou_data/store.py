@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from .catalog import Catalog
+from .catalog import Catalog, normalize_catalog_value
 from .objects import ObjectStorageError, configured_object_store
 from .registry import SourceRegistry, project_root
 
@@ -296,6 +296,14 @@ class DataAssetStore:
         encoding: Optional[str] = None,
         collector: str = "qsou-crawler",
     ) -> Dict[str, Any]:
+        source_id = normalize_catalog_value(str(source_id))
+        url = normalize_catalog_value(str(url))
+        content_type = normalize_catalog_value(
+            str(content_type or "application/octet-stream")
+        )
+        encoding = normalize_catalog_value(encoding) if encoding is not None else None
+        collector = normalize_catalog_value(str(collector))
+        fetched_at = normalize_catalog_value(fetched_at) if fetched_at is not None else None
         self.registry.get(source_id)
         if not isinstance(body, bytes):
             raise DataAssetError("原始证据正文必须是 bytes")
@@ -379,7 +387,7 @@ class DataAssetStore:
         return self.get_evidence(raw_object_id)
 
     def register_document(self, raw_document: Mapping[str, Any]) -> Dict[str, Any]:
-        document = dict(raw_document)
+        document = dict(normalize_catalog_value(dict(raw_document)))
         metadata = dict(document.get("metadata") or {})
         url = canonicalize_url(str(document.get("url") or metadata.get("final_url") or ""))
         if not url:
@@ -1312,6 +1320,7 @@ class DataAssetStore:
         safe: Dict[str, str] = {}
         for raw_key, raw_value in headers.items():
             key = raw_key.decode("latin-1") if isinstance(raw_key, bytes) else str(raw_key)
+            key = normalize_catalog_value(key)
             normalized = key.lower()
             if normalized not in SAFE_RESPONSE_HEADERS:
                 continue
@@ -1320,7 +1329,7 @@ class DataAssetStore:
                 value = ", ".join(values)
             else:
                 value = raw_value.decode("latin-1") if isinstance(raw_value, bytes) else str(raw_value)
-            safe[normalized] = value
+            safe[normalized] = normalize_catalog_value(value)
         return safe
 
     def _evidence_row(self, row: Mapping[str, Any]) -> Dict[str, Any]:

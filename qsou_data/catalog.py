@@ -7,7 +7,7 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 
 class CatalogConfigurationError(RuntimeError):
@@ -15,6 +15,55 @@ class CatalogConfigurationError(RuntimeError):
 
 
 _INSERT_IGNORE_RE = re.compile(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", re.IGNORECASE)
+TEXT_NUL_REPLACEMENT = "\ufffd"
+
+
+def normalize_catalog_value(value: Any) -> Any:
+    """Return a stable catalog value accepted by SQLite and PostgreSQL."""
+    if isinstance(value, str):
+        return value.replace("\x00", TEXT_NUL_REPLACEMENT)
+    if isinstance(value, Mapping):
+        return {
+            normalize_catalog_value(key): normalize_catalog_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [normalize_catalog_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(normalize_catalog_value(item) for item in value)
+    return value
+
+
+def _normalize_parameters(parameters: Sequence[Any]) -> tuple[Any, ...]:
+    return tuple(normalize_catalog_value(value) for value in parameters)
+
+
+class SQLiteConnection:
+    """Normalize catalog writes before SQLite can retain PostgreSQL-invalid text."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def execute(self, sql: str, parameters: Sequence[Any] = ()):
+        return self.connection.execute(sql, _normalize_parameters(parameters))
+
+    def executemany(self, sql: str, parameters):
+        return self.connection.executemany(
+            sql,
+            (_normalize_parameters(row) for row in parameters),
+        )
+
+    def executescript(self, script: str) -> None:
+        self.connection.executescript(script)
+
+    def commit(self) -> None:
+        self.connection.commit()
+
+    def rollback(self) -> None:
+        self.connection.rollback()
+
+    def close(self) -> None:
+        self.connection.close()
 
 
 class PostgresConnection:
@@ -30,11 +79,17 @@ class PostgresConnection:
                 "SELECT pg_advisory_xact_lock(%s)",
                 (781_937_611,),
             )
-        return self.connection.execute(_postgres_sql(sql), tuple(parameters))
+        return self.connection.execute(
+            _postgres_sql(sql),
+            _normalize_parameters(parameters),
+        )
 
     def executemany(self, sql: str, parameters):
         cursor = self.connection.cursor()
-        cursor.executemany(_postgres_sql(sql), parameters)
+        cursor.executemany(
+            _postgres_sql(sql),
+            (_normalize_parameters(row) for row in parameters),
+        )
         return cursor
 
     def executescript(self, script: str) -> None:
@@ -75,10 +130,11 @@ class Catalog:
     @contextmanager
     def connection(self) -> Iterator[Any]:
         if self.backend == "sqlite":
-            connection = sqlite3.connect(str(self.sqlite_path), timeout=30)
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute("PRAGMA busy_timeout = 30000")
+            sqlite_connection = sqlite3.connect(str(self.sqlite_path), timeout=30)
+            sqlite_connection.row_factory = sqlite3.Row
+            sqlite_connection.execute("PRAGMA foreign_keys = ON")
+            sqlite_connection.execute("PRAGMA busy_timeout = 30000")
+            connection = SQLiteConnection(sqlite_connection)
         else:
             try:
                 import psycopg

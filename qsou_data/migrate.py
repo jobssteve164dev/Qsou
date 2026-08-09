@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
+from .catalog import normalize_catalog_value
 from .store import DataAssetError, DataAssetStore, _json, default_data_root, utc_now
 
 
@@ -27,7 +28,7 @@ MIGRATION_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("source_cursors", ("source_id",)),
     ("adapter_run_requests", ("request_id",)),
 )
-MIGRATION_VERSION = "legacy-sqlite-to-postgres-object-storage-v1"
+MIGRATION_VERSION = "legacy-sqlite-to-postgres-object-storage-v2"
 BATCH_SIZE = 100
 
 
@@ -44,7 +45,9 @@ def _update_digest(
 ) -> int:
     count = 0
     for row in rows:
-        encoded = _json([row[column] for column in columns]).encode("utf-8")
+        encoded = _json(
+            [normalize_catalog_value(row[column]) for column in columns]
+        ).encode("utf-8")
         digest.update(len(encoded).to_bytes(8, "big"))
         digest.update(encoded)
         count += 1
@@ -184,6 +187,7 @@ class LegacySqliteMigrator:
             raise DataAssetError("执行迁移时缺少目标目录库")
         table_counts: Dict[str, Dict[str, int]] = {}
         table_digests: Dict[str, str] = {}
+        text_nul_bytes_normalized = 0
         object_count, object_bytes = self._copy_objects(source)
 
         with self.target._connection() as target:
@@ -201,9 +205,18 @@ class LegacySqliteMigrator:
                     source_rows = source_cursor.fetchmany(BATCH_SIZE)
                     if not source_rows:
                         break
+                    normalized_rows = []
+                    for row in source_rows:
+                        values = []
+                        for column in columns:
+                            value = row[column]
+                            if isinstance(value, str):
+                                text_nul_bytes_normalized += value.count("\x00")
+                            values.append(normalize_catalog_value(value))
+                        normalized_rows.append(tuple(values))
                     target.executemany(
                         _upsert_sql(table, columns, keys),
-                        [tuple(row[column] for column in columns) for row in source_rows],
+                        normalized_rows,
                     )
                     source_count += _update_digest(source_hasher, source_rows, columns)
                 source_digest = source_hasher.hexdigest()
@@ -236,6 +249,7 @@ class LegacySqliteMigrator:
                 "catalog_digest": catalog_digest,
                 "object_count": object_count,
                 "object_bytes": object_bytes,
+                "text_nul_bytes_normalized": text_nul_bytes_normalized,
             }
             version = f"{MIGRATION_VERSION}-{phase}"
             target.execute(
