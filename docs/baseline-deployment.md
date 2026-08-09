@@ -39,6 +39,8 @@ cp deploy/baseline.env.example deploy/baseline.env
 - `QSOU_CORS_ORIGINS`：填写前端真实来源，保持 JSON 数组格式。
 - `QSOU_API_PORT`、`QSOU_WEB_PORT`：端口冲突时再修改。
 
+只暴露前端域名时，将 `QSOU_PUBLIC_API_URL` 设为同域的 `https://<domain>/api/v1`。Next.js 会在容器网络内将该路径转发给 `api` 服务，用户无需访问第二个端口或域名。
+
 在部署主机启动 API 和前端：
 
 ```bash

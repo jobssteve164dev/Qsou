@@ -1,3 +1,5 @@
+const apiInternalUrl = (process.env.API_INTERNAL_URL || 'http://localhost:8888').replace(/\/$/, '')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -5,8 +7,8 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:8888/api/v1/:path*', // 代理到FastAPI后端
+        source: '/api/v1/:path*',
+        destination: `${apiInternalUrl}/api/v1/:path*`,
       },
     ]
   },
