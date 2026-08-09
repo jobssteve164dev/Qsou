@@ -2,6 +2,7 @@ name: qsou
 
 services:
   api:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
@@ -34,6 +35,7 @@ services:
     restart: unless-stopped
 
   web:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
@@ -52,6 +54,7 @@ services:
     restart: unless-stopped
 
   collector:
+    platform: linux/amd64
     profiles: ["collector"]
     build:
       context: .
