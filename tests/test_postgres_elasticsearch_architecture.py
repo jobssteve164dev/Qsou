@@ -445,7 +445,71 @@ class ElasticsearchProjectionTest(unittest.TestCase):
         self.assertEqual(result["indexed_active_documents"], 1)
         self.assertEqual(result["pending_documents"], 1)
 
-    def test_cycle_rejects_stable_projection_count_mismatch(self):
+    def test_cycle_repairs_stable_projection_count_mismatch(self):
+        class Store:
+            marked = []
+
+            @staticmethod
+            def pending_documents_for_index(_limit):
+                return []
+
+            @staticmethod
+            def active_document_count():
+                return 2
+
+            @staticmethod
+            def documents_for_index():
+                return iter(
+                    [
+                        {"content_version_id": "one", "active": True},
+                        {"content_version_id": "two", "active": True},
+                    ]
+                )
+
+            @classmethod
+            def mark_indexed(cls, ids):
+                cls.marked.append(list(ids))
+
+        class Index:
+            counts = iter([1, 2])
+
+            @staticmethod
+            def ensure_ready():
+                return None
+
+            @staticmethod
+            def index_documents(documents, *, projection_generation=None):
+                self.assertIsNotNone(projection_generation)
+                return [document["content_version_id"] for document in documents]
+
+            @staticmethod
+            def delete_stale(_generation):
+                return 0
+
+            @staticmethod
+            def refresh():
+                return None
+
+            @staticmethod
+            def active_document_count():
+                return next(Index.counts)
+
+        last_reconcile, result = run_cycle(
+            Store(),
+            Index(),
+            last_reconcile=100,
+            reconcile_seconds=3600,
+            batch_size=100,
+            now=101,
+        )
+        self.assertEqual(last_reconcile, 101)
+        self.assertEqual(result["reconciled"], 2)
+        self.assertTrue(result["converged"])
+        self.assertEqual(result["active_documents"], 2)
+        self.assertEqual(result["indexed_active_documents"], 2)
+        self.assertEqual(Store.marked, [["one", "two"]])
+
+    def test_cycle_rejects_mismatch_that_survives_full_repair(self):
         class Store:
             @staticmethod
             def pending_documents_for_index(_limit):
@@ -455,9 +519,30 @@ class ElasticsearchProjectionTest(unittest.TestCase):
             def active_document_count():
                 return 2
 
+            @staticmethod
+            def documents_for_index():
+                return iter([{"content_version_id": "one", "active": True}])
+
+            @staticmethod
+            def mark_indexed(_ids):
+                return None
+
         class Index:
             @staticmethod
             def ensure_ready():
+                return None
+
+            @staticmethod
+            def index_documents(documents, *, projection_generation=None):
+                self.assertIsNotNone(projection_generation)
+                return [document["content_version_id"] for document in documents]
+
+            @staticmethod
+            def delete_stale(_generation):
+                return 0
+
+            @staticmethod
+            def refresh():
                 return None
 
             @staticmethod

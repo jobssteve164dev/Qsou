@@ -30,6 +30,52 @@ def _event(event: str, **details) -> None:
     )
 
 
+def _reconcile_all(
+    store: DataAssetStore,
+    index: ElasticsearchIndex,
+    *,
+    reason: str,
+) -> tuple[int, int]:
+    generation = uuid.uuid4().hex
+    reconciled_ids = index.index_documents(
+        store.documents_for_index(),
+        projection_generation=generation,
+    )
+    removed = index.delete_stale(generation)
+    index.refresh()
+    store.mark_indexed(reconciled_ids)
+    _event(
+        "reconciled",
+        documents=len(reconciled_ids),
+        removed=removed,
+        reason=reason,
+    )
+    return len(reconciled_ids), removed
+
+
+def _projection_checkpoint(
+    store: DataAssetStore,
+    index: ElasticsearchIndex,
+) -> dict[str, int | bool]:
+    # A collector may commit another document between reading the two backends.
+    # Only a checkpoint with no outstanding PostgreSQL rows is comparable.
+    active_documents_before = store.active_document_count()
+    pending_before_count = len(store.pending_documents_for_index(1))
+    indexed_active_documents = index.active_document_count()
+    active_documents = store.active_document_count()
+    pending_after_count = len(store.pending_documents_for_index(1))
+    return {
+        "active_documents": active_documents,
+        "indexed_active_documents": indexed_active_documents,
+        "pending_documents": pending_after_count,
+        "converged": (
+            active_documents_before == active_documents
+            and pending_before_count == 0
+            and pending_after_count == 0
+        ),
+    }
+
+
 def run_cycle(
     store: DataAssetStore,
     index: ElasticsearchIndex,
@@ -43,17 +89,12 @@ def run_cycle(
     reconciled = 0
     index.ensure_ready()
     if current - last_reconcile >= reconcile_seconds:
-        generation = uuid.uuid4().hex
-        reconciled_ids = index.index_documents(
-            store.documents_for_index(),
-            projection_generation=generation,
+        reconciled, _ = _reconcile_all(
+            store,
+            index,
+            reason="scheduled",
         )
-        removed = index.delete_stale(generation)
-        index.refresh()
-        reconciled = len(reconciled_ids)
-        store.mark_indexed(reconciled_ids)
         last_reconcile = current
-        _event("reconciled", documents=reconciled, removed=removed)
 
     pending = store.pending_documents_for_index(batch_size)
     indexed = 0
@@ -63,31 +104,33 @@ def run_cycle(
         index.refresh()
         indexed = len(ids)
         _event("indexed", documents=indexed)
-    # A collector may commit another document between indexing this batch and
-    # reading the two backends.  Compare only a quiescent projection checkpoint;
-    # an outstanding PostgreSQL row means the indexer is legitimately catching up.
-    active_documents_before = store.active_document_count()
-    pending_before_count = len(store.pending_documents_for_index(1))
-    indexed_active_documents = index.active_document_count()
-    active_documents = store.active_document_count()
-    pending_after_count = len(store.pending_documents_for_index(1))
-    converged = (
-        active_documents_before == active_documents
-        and pending_before_count == 0
-        and pending_after_count == 0
-    )
-    if converged and active_documents != indexed_active_documents:
+    checkpoint = _projection_checkpoint(store, index)
+    if (
+        checkpoint["converged"]
+        and checkpoint["active_documents"]
+        != checkpoint["indexed_active_documents"]
+    ):
+        reconciled, _ = _reconcile_all(
+            store,
+            index,
+            reason="consistency_repair",
+        )
+        last_reconcile = current
+        checkpoint = _projection_checkpoint(store, index)
+    if (
+        checkpoint["converged"]
+        and checkpoint["active_documents"]
+        != checkpoint["indexed_active_documents"]
+    ):
         raise RuntimeError(
             "Elasticsearch 活动文档计数与 PostgreSQL 不一致: "
-            f"postgres={active_documents}, elasticsearch={indexed_active_documents}"
+            f"postgres={checkpoint['active_documents']}, "
+            f"elasticsearch={checkpoint['indexed_active_documents']}"
         )
     return last_reconcile, {
         "reconciled": reconciled,
         "indexed": indexed,
-        "active_documents": active_documents,
-        "indexed_active_documents": indexed_active_documents,
-        "pending_documents": pending_after_count,
-        "converged": converged,
+        **checkpoint,
     }
 
 
