@@ -205,13 +205,13 @@ class ProductionComposeContractTest(unittest.TestCase):
             services["api"]["healthcheck"]["test"][-1],
         )
 
-    def test_release_context_excludes_runtime_and_retired_sqlite_entrypoints(self):
+    def test_release_context_excludes_runtime_and_removes_retired_entrypoints(self):
         ignored = set((PROJECT_ROOT / ".dockerignore").read_text().splitlines())
         self.assertIn(".solopreneur", ignored)
         self.assertIn(".playwright-cli", ignored)
         self.assertIn(".pytest_cache", ignored)
-        self.assertIn("qsou_data/migrate.py", ignored)
-        self.assertIn("qsou_data/start_api.py", ignored)
+        self.assertFalse((PROJECT_ROOT / "qsou_data/migrate.py").exists())
+        self.assertFalse((PROJECT_ROOT / "qsou_data/start_api.py").exists())
 
     def test_api_image_contains_indexer_runtime_dependencies(self):
         def package_names(path):
