@@ -152,6 +152,40 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertEqual(status["collector"]["state"], "idle")
         self.assertEqual(status["collector"]["last_finished_at"], "2026-08-09T02:00:00Z")
 
+    def test_archived_html_can_become_a_searchable_snapshot(self):
+        import sys
+
+        crawler_path = str(Path(__file__).resolve().parents[1] / "crawler")
+        sys.path.insert(0, crawler_path)
+        try:
+            from index_evidence import index_pending_html_evidence
+        finally:
+            sys.path.remove(crawler_path)
+
+        evidence = self.store.archive_response(
+            source_id="yicai",
+            url="https://www.yicai.com/news/example",
+            status_code=200,
+            response_headers={b"Content-Type": b"text/html; charset=utf-8"},
+            content_type="text/html; charset=utf-8",
+            encoding="utf-8",
+            body=(
+                "<html><head><title>上市公司季度经营数据</title></head>"
+                "<body><article><h1>上市公司季度经营数据</h1>"
+                "<p>公司本季度营业收入保持增长，经营现金流改善，核心业务订单稳定。"
+                "管理层同时披露下一季度将继续控制资本开支并提升交付效率，"
+                "相关经营数据已经过董事会审阅并向投资者公开。</p>"
+                "</article></body></html>"
+            ).encode("utf-8"),
+        )
+
+        result = index_pending_html_evidence(self.store)
+        search = self.store.search_documents("经营现金流")
+
+        self.assertEqual(result["indexed"], 1)
+        self.assertEqual(search["total_count"], 1)
+        self.assertEqual(search["results"][0]["raw_object_id"], evidence["raw_object_id"])
+
     def _archive(self, body: str):
         return self.store.archive_response(
             source_id="yicai",

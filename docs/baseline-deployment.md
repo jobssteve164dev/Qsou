@@ -49,7 +49,7 @@ Compose 只把 Web 的 `3000` 发布到宿主机。API 的 `8000` 仅通过项�
 docker compose --env-file deploy/baseline.env up -d --build
 ```
 
-采集器启动后立即执行首轮采集，随后按 `QSOU_CRAWL_INTERVAL_SECONDS` 周期运行。每轮状态写入共享数据目录的 `collector-status.json`，前台“数据资产”页面直接显示正在运行、等待下一轮或部分失败，不用“暂无新数据”掩盖故障。
+采集器启动后立即执行首轮采集，随后按 `QSOU_CRAWL_INTERVAL_SECONDS` 周期运行。每轮先保存原始响应和 Spider 结构化条目，再把未被专用解析覆盖的有效 HTML 生成可搜索页面快照。状态写入共享数据目录的 `collector-status.json`，前台“数据资产”页面直接显示正在运行、等待下一轮或部分失败，不用“暂无新数据”掩盖故障。
 
 ## 4. 验证部署
 

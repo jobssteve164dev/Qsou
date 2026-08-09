@@ -11,6 +11,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from index_evidence import index_pending_html_evidence
+
 
 DATA_ROOT = Path(os.getenv("QSOU_DATA_ROOT", "/var/lib/qsou"))
 STATUS_PATH = DATA_ROOT / "collector-status.json"
@@ -70,15 +72,22 @@ def run_cycle() -> None:
         )
         results[spider] = completed.returncode
 
+    indexing = index_pending_html_evidence()
+
     finished_at = utc_now()
     next_run_at = finished_at + timedelta(seconds=INTERVAL_SECONDS)
-    state = "idle" if results and all(code == 0 for code in results.values()) else "degraded"
+    state = (
+        "idle"
+        if results and all(code == 0 for code in results.values()) and not indexing["errors"]
+        else "degraded"
+    )
     write_status(
         state=state,
         last_started_at=iso(started_at),
         last_finished_at=iso(finished_at),
         next_run_at=iso(next_run_at),
         results=results,
+        indexing=indexing,
         updated_at=iso(finished_at),
     )
     wait_until(next_run_at)
