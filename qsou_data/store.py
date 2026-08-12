@@ -525,6 +525,7 @@ class DataAssetStore:
             "raw_objects": raw_count,
             "document_versions": document_count,
             "active_documents": active_count,
+            "archive_size_bytes": self.object_store.size_bytes("objects/"),
             "processing": {row["state"]: row["count"] for row in outbox_rows},
             "collector": collector,
             "network": network_states,

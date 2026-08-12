@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from qsou_data.catalog import PostgresConnection, TEXT_NUL_REPLACEMENT
-from qsou_data.objects import ObjectStorageError, S3ObjectStore
+from qsou_data.objects import FileObjectStore, ObjectStorageError, S3ObjectStore
 from scripts.migrate_file_objects_to_s3 import _copy_object, _source_path
 
 
@@ -46,6 +46,15 @@ class _MemoryS3Client:
             "ContentType": value["ContentType"],
             "Metadata": value["Metadata"],
         }
+
+    def list_objects_v2(self, *, Bucket, Prefix, ContinuationToken=None):
+        del ContinuationToken
+        contents = [
+            {"Key": key, "Size": len(value["Body"])}
+            for (bucket, key), value in self.objects.items()
+            if bucket == Bucket and key.startswith(Prefix)
+        ]
+        return {"Contents": contents, "IsTruncated": False}
 
 
 class StorageMigrationTest(unittest.TestCase):
@@ -122,6 +131,23 @@ class StorageMigrationTest(unittest.TestCase):
         self.assertEqual(target.get_backup_bytes(key), payload)
         with self.assertRaisesRegex(RuntimeError, "对象键越界"):
             _source_path(self.root.resolve(), "../outside")
+
+    def test_archive_size_counts_primary_objects_under_the_archive_prefix(self) -> None:
+        file_store = FileObjectStore(self.root / "file-store")
+        file_store.put_once("objects/aa/one.body", b"body", "application/octet-stream")
+        file_store.put_once("objects/aa/one.json", b"metadata", "application/json")
+        file_store.put_once("cache/ignored", b"ignored", "application/octet-stream")
+        self.assertEqual(file_store.size_bytes("objects/"), len(b"bodymetadata"))
+
+        client = _MemoryS3Client()
+        s3_store = S3ObjectStore.__new__(S3ObjectStore)
+        s3_store.endpoint_url = "https://objects.example"
+        s3_store.bucket = "primary"
+        s3_store.backup_bucket = "backup"
+        s3_store.client = client
+        s3_store.put_once("objects/aa/one.body", b"body", "application/octet-stream")
+        s3_store.put_once("objects/aa/one.json", b"metadata", "application/json")
+        self.assertEqual(s3_store.size_bytes("objects/"), len(b"bodymetadata"))
 
     def test_s3_primary_backup_cache_and_restore_are_hash_checked(self) -> None:
         client = _MemoryS3Client()

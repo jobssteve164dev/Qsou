@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   FileArchive,
+  HardDrive,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
@@ -21,6 +22,13 @@ const formatTime = (value?: string | null) => {
   if (!value) return '尚无记录';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
+};
+
+const formatBytes = (value: number) => {
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(value) / Math.log(1024)) - 1, units.length - 1);
+  return `${(value / 1024 ** (unitIndex + 1)).toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
 };
 
 const collectorMessage = (collector?: DataAssetStatus['collector']) => {
@@ -137,12 +145,13 @@ const DataAssetsPage: React.FC = () => {
           <div className="py-20 text-center" role="status"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" /><p className="text-slate-600">正在读取数据资产</p></div>
         ) : status ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {[
                 { label: '登记来源', value: status.registered_sources, icon: ShieldCheck },
                 { label: '原始证据', value: status.raw_objects, icon: FileArchive },
                 { label: '可搜索文档', value: status.active_documents, icon: Database },
                 { label: '保留版本', value: status.document_versions, icon: Clock3 },
+                { label: '存档大小', value: formatBytes(status.archive_size_bytes), icon: HardDrive },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="flex items-center justify-between"><span className="text-sm text-slate-500">{item.label}</span><item.icon className="h-5 w-5 text-slate-400" aria-hidden="true" /></div>

@@ -90,6 +90,10 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertEqual(status["raw_objects"], 2)
         self.assertEqual(status["document_versions"], 2)
         self.assertEqual(status["active_documents"], 1)
+        expected_archive_size = sum(
+            path.stat().st_size for path in (self.root / "data" / "objects").rglob("*") if path.is_file()
+        )
+        self.assertEqual(status["archive_size_bytes"], expected_archive_size)
 
         # 来源恢复到历史内容时，既有版本应重新成为当前版本，不能留下零个活动文档。
         restored_v1 = self.store.register_document(

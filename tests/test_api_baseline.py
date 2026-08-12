@@ -89,6 +89,7 @@ class BaselineApiTest(unittest.TestCase):
             self.assertEqual(status.status_code, 200)
             self.assertEqual(status.json()["raw_objects"], 1)
             self.assertEqual(status.json()["active_documents"], 1)
+            self.assertGreater(status.json()["archive_size_bytes"], len("Qsou 基线原始证据".encode("utf-8")))
             self.assertEqual(status.json()["registered_sources"], 9)
             self.assertEqual(status.json()["active_sources"], 9)
 

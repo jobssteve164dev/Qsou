@@ -138,6 +138,7 @@ export interface DataAssetStatus {
   raw_objects: number;
   document_versions: number;
   active_documents: number;
+  archive_size_bytes: number;
   processing: Record<string, number>;
   network?: Record<string, number>;
   collector: {

@@ -86,6 +86,14 @@ class FileObjectStore:
     def health(self) -> dict[str, str]:
         return {"backend": self.backend, "root": str(self.root), "status": "healthy"}
 
+    def size_bytes(self, prefix: str = "") -> int:
+        directory = self._path(prefix) if prefix else self.root
+        if not directory.exists():
+            return 0
+        if directory.is_file():
+            return directory.stat().st_size
+        return sum(path.stat().st_size for path in directory.rglob("*") if path.is_file())
+
     def _path(self, key: str) -> Path:
         path = (self.root / key).resolve()
         if self.root != path and self.root not in path.parents:
@@ -259,6 +267,26 @@ class S3ObjectStore:
             "backup_bucket": self.backup_bucket or "",
             "status": "healthy",
         }
+
+    def size_bytes(self, prefix: str = "") -> int:
+        total = 0
+        continuation_token = None
+        try:
+            while True:
+                parameters = {"Bucket": self.bucket, "Prefix": prefix}
+                if continuation_token:
+                    parameters["ContinuationToken"] = continuation_token
+                response = self.client.list_objects_v2(**parameters)
+                total += sum(int(item.get("Size") or 0) for item in response.get("Contents", []))
+                if not response.get("IsTruncated"):
+                    return total
+                continuation_token = response.get("NextContinuationToken")
+                if not continuation_token:
+                    raise ObjectStorageError("对象存储分页响应缺少继续标记")
+        except ObjectStorageError:
+            raise
+        except Exception as exc:
+            raise ObjectStorageError(f"统计原始证据存档大小失败: {exc}") from exc
 
     def _put_once(
         self,
