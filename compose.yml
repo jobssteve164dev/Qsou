@@ -1,5 +1,11 @@
 name: qsou
 
+x-gitops:
+  database_migration:
+    service: api
+    command:
+      - /app/deploy/database-migrate
+
 services:
   api:
     platform: linux/amd64
