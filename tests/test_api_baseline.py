@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -28,8 +29,39 @@ os.environ["SECRET_KEY"] = "test-signing-key"
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, readiness_check
 from qsou_data import DataAssetStore
+
+
+class ApiReadinessTest(unittest.TestCase):
+    def test_readiness_accepts_completed_migrations_without_search_services(self):
+        data_health = {
+            "status": "healthy",
+            "migrations": {"status": "ready", "missing": []},
+            "object_storage": {"status": "healthy"},
+        }
+        with patch(
+            "app.main.search_service.data_assets.health",
+            return_value=data_health,
+        ):
+            response = __import__("asyncio").run(readiness_check())
+
+        self.assertEqual(response["status"], "ready")
+        self.assertEqual(response["data_assets"], data_health)
+
+    def test_readiness_rejects_missing_migrations(self):
+        data_health = {
+            "status": "unavailable",
+            "migrations": {"status": "waiting", "missing": ["schema"]},
+            "object_storage": {"status": "healthy"},
+        }
+        with patch(
+            "app.main.search_service.data_assets.health",
+            return_value=data_health,
+        ):
+            response = __import__("asyncio").run(readiness_check())
+
+        self.assertEqual(response.status_code, 503)
 
 
 @unittest.skipUnless(

@@ -175,9 +175,39 @@ async def health_check():
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
 
+@app.get("/ready")
+async def readiness_check():
+    """API readiness: required data migrations and storage are available."""
+    try:
+        data_health = search_service.data_assets.health()
+        if data_health.get("status") != "healthy":
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data_assets": data_health,
+                },
+            )
+        return {
+            "status": "ready",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data_assets": data_health,
+        }
+    except Exception as e:
+        logger.error(f"API 就绪检查失败: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+
 @app.get("/live")
 async def liveness_check():
-    """Process liveness for staged GitOps rollout; readiness remains on /health."""
+    """Process liveness for staged GitOps rollout."""
     return {
         "status": "alive",
         "timestamp": datetime.now(timezone.utc).isoformat(),

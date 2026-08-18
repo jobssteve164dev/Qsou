@@ -200,7 +200,11 @@ class ProductionComposeContractTest(unittest.TestCase):
         self.assertNotIn("ports", services["elasticsearch"])
         self.assertEqual(set(services["web"]["ports"]), {"${QSOU_WEB_PORT:-3000}:3000"})
         self.assertIn(
-            "http://localhost:8000/live",
+            "http://localhost:8000/ready",
+            services["api"]["healthcheck"]["test"][-1],
+        )
+        self.assertNotIn(
+            "http://localhost:8000/health",
             services["api"]["healthcheck"]["test"][-1],
         )
 
