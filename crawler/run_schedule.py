@@ -44,6 +44,9 @@ def iso(value: datetime) -> str:
 
 def write_status(**values: object) -> None:
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    source_ids = values.pop("source_ids", None)
+    if source_ids is None:
+        source_ids = [adapter.source_id for adapter in selected_adapters()]
     timeline: dict[str, object] = {}
     if STATUS_PATH.is_file():
         try:
@@ -56,7 +59,7 @@ def write_status(**values: object) -> None:
         except (OSError, json.JSONDecodeError):
             timeline = {}
     payload = {
-        "source_ids": [adapter.source_id for adapter in selected_adapters()],
+        "source_ids": source_ids,
         "poll_seconds": POLL_SECONDS,
         **timeline,
         **values,
@@ -324,6 +327,11 @@ def main() -> int:
         STORE,
         on_wait=lambda state: write_status(
             state="waiting_for_migration",
+            source_ids=SOURCE_IDS
+            or [
+                source["source_id"]
+                for source in STORE.registry.all(enabled_only=True)
+            ],
             migration=state,
             updated_at=iso(utc_now()),
         ),

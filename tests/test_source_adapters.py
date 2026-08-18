@@ -283,6 +283,7 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn('latest.get("adapter_version") != adapter.version', scheduler)
         self.assertIn("max_details_per_run=", scheduler)
         self.assertIn("inline_document", spider)
+        self.assertIn("source_ids=SOURCE_IDS", scheduler)
         self.assertGreaterEqual(scheduler.count("run_requested_sources()"), 3)
         self.assertNotIn('("last_started_at", "last_finished_at", "next_run_at")', scheduler)
 
