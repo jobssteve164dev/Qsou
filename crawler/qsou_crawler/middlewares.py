@@ -2,7 +2,7 @@
 
 from scrapy import Item
 
-from qsou_data import DataAssetStore
+from qsou_data import DataAssetStore, assert_automated_access
 from qsou_data.registry import UnknownSourceError
 from qsou_data.store import utc_now
 
@@ -19,7 +19,13 @@ class RawEvidenceDownloaderMiddleware:
 
 	def process_response(self, request, response, spider):
 		try:
-			source = self.store.registry.resolve_url(response.url)
+			source = self.store.effective_source(spider.source_id)
+			assert_automated_access(source)
+			registered = self.store.registry.resolve_url(response.url, enabled_only=False)
+			if registered["source_id"] != source["source_id"]:
+				raise ValueError(
+					f"响应来源与运行来源不一致: {registered['source_id']}/{source['source_id']}"
+				)
 			content_type_value = response.headers.get(b"Content-Type", b"application/octet-stream")
 			content_type = content_type_value.decode("latin-1") if isinstance(content_type_value, bytes) else str(content_type_value)
 			fetched_at = utc_now()
@@ -54,6 +60,12 @@ class RawEvidenceDownloaderMiddleware:
 			spider.crawler.stats.inc_value("adapter/failures")
 			spider.logger.exception("原始证据归档失败，拒绝解析响应: %s", response.url)
 			raise
+
+	def process_request(self, request, spider):
+		"""Re-check authorization before every network request so revocation takes effect."""
+		source = self.store.effective_source(spider.source_id)
+		assert_automated_access(source)
+		return None
 
 
 class EvidenceLinkMiddleware:

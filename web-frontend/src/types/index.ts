@@ -160,6 +160,18 @@ export interface DataSourceStatus {
   document_types: string[];
   schedule?: string;
   rights_status?: string;
+  rights_reference?: string;
+  rights_scope?: string;
+  registered_rights_status?: string;
+  authorization?: {
+    decision: 'allowed' | 'revoked';
+    basis?: 'official_terms' | 'open_data_policy' | 'direct_permission' | 'licensed_feed';
+    reference_url?: string;
+    scope?: string;
+    notes?: string;
+    decided_at?: string;
+    decided_by?: string;
+  } | null;
   health_state: string;
   adapter_id: string;
   adapter_version: string;

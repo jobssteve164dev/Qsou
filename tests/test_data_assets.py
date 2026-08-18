@@ -295,6 +295,42 @@ class DataAssetStoreTest(unittest.TestCase):
                 max_details_per_run=501,
             )
 
+    def test_source_authorization_enables_legacy_source_and_revocation_stops_it(self):
+        authorized = self.store.record_source_authorization(
+            "safe",
+            decision="allowed",
+            basis="direct_permission",
+            reference_url="https://example.org/permissions/safe",
+            scope="公开统计发布正文与随附数据文件的自动采集",
+            notes="验收授权",
+            enable=True,
+            decided_by="admin",
+        )
+        self.assertTrue(authorized["enabled"])
+        self.assertTrue(authorized["can_enable"])
+        self.assertEqual(authorized["authorization"]["decided_by"], "admin")
+
+        queued = self.store.request_adapter_run("safe", requested_by="admin")
+        revoked = self.store.record_source_authorization(
+            "safe",
+            decision="revoked",
+            notes="授权到期",
+            decided_by="admin",
+        )
+        self.assertFalse(revoked["enabled"])
+        self.assertFalse(revoked["can_enable"])
+        self.assertEqual(revoked["authorization"]["decision"], "revoked")
+        with self.store._connection() as connection:
+            closed = dict(
+                connection.execute(
+                    "SELECT * FROM adapter_run_requests WHERE request_id = %s",
+                    (queued["request_id"],),
+                ).fetchone()
+            )
+        self.assertEqual(closed["state"], "cancelled")
+        with self.assertRaisesRegex(DataAssetError, "没有允许自动访问"):
+            self.store.request_adapter_run("safe", requested_by="admin")
+
     def test_generic_snapshots_are_preserved_but_removed_from_formal_search(self):
         evidence = self._archive("通用快照原始页面")
         document = self.store.register_document(

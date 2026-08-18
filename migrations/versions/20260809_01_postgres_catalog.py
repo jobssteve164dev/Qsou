@@ -15,7 +15,7 @@ def upgrade() -> None:
     baseline_tables = [
         table
         for name, table in metadata.tables.items()
-        if name != "source_runtime_settings"
+        if name not in {"source_runtime_settings", "source_authorizations"}
     ]
     metadata.create_all(
         op.get_bind(),

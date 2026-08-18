@@ -35,8 +35,13 @@ class SourceAdapterSpider(scrapy.Spider):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.adapter = AdapterRegistry().create(source_id)
         self.source_id = source_id
+        self.asset_store = DataAssetStore()
+        effective_source = self.asset_store.effective_source(source_id)
+        self.adapter = AdapterRegistry(self.asset_store.registry).create(
+            source_id,
+            effective_source,
+        )
         self.report_path = Path(report_path) if report_path else None
         self.allowed_domains = list(self.adapter.source.get("domains", []))
         configured_max = (
@@ -45,7 +50,6 @@ class SourceAdapterSpider(scrapy.Spider):
             or os.getenv("QSOU_ADAPTER_MAX_DETAILS", "100")
         )
         self.max_details = max(1, min(int(configured_max), 500))
-        self.asset_store = DataAssetStore()
         self._seen_details: set[str] = set()
         self._documents: list[dict[str, Any]] = []
         self._errors: list[str] = []
@@ -84,6 +88,11 @@ class SourceAdapterSpider(scrapy.Spider):
         for reference in unseen[:remaining]:
             self._seen_details.add(reference.url)
             self.crawler.stats.inc_value("adapter/detail_discovered")
+            if reference.metadata.get("inline_document"):
+                document = self._parse_inline_document(payload, reference)
+                if document:
+                    yield document
+                continue
             specification = self.adapter.detail_request(reference)
             yield self._request(
                 specification,
@@ -121,6 +130,21 @@ class SourceAdapterSpider(scrapy.Spider):
                 self.parse_media,
             )
         yield document
+
+    def _parse_inline_document(self, payload: ResponsePayload, reference: DocumentReference):
+        """Parse a bounded official API response without downloading the same URL twice."""
+        self.crawler.stats.inc_value("adapter/detail_fetched")
+        try:
+            document = self.adapter.parse_document(payload, reference)
+        except Exception as exc:
+            self._record_error(f"官方数据解析失败: {payload.url}: {exc}")
+            return None
+        if not document:
+            self._record_error(f"官方数据没有产出合格文档: {payload.url}")
+            return None
+        self._documents.append(document)
+        self.crawler.stats.inc_value("adapter/documents_emitted")
+        return document
 
     def parse_media(self, response: scrapy.http.Response):
         if not 200 <= response.status < 300:

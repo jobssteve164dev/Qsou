@@ -70,6 +70,13 @@ const DataAssetsPage: React.FC = () => {
   const [triggering, setTriggering] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState<string | null>(null);
   const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
+  const [authorizationEditing, setAuthorizationEditing] = useState<string | null>(null);
+  const [authorizationForm, setAuthorizationForm] = useState({
+    basis: 'official_terms' as 'official_terms' | 'open_data_policy' | 'direct_permission' | 'licensed_feed',
+    reference_url: '',
+    scope: '公开发布内容的定期自动采集、证据留存与站内检索',
+    notes: '',
+  });
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -92,6 +99,37 @@ const DataAssetsPage: React.FC = () => {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  const saveAuthorization = useCallback(async (source: DataSourceStatus) => {
+    setSavingSettings(source.source_id);
+    setError(null);
+    const result = await dataAssetApi.recordSourceAuthorization(source.source_id, {
+      decision: 'allowed',
+      ...authorizationForm,
+      enable: true,
+    });
+    if (!result.success) {
+      setError(result.error || '暂时无法保存采集授权');
+      setSavingSettings(null);
+      return;
+    }
+    setAuthorizationEditing(null);
+    await load();
+    setSavingSettings(null);
+  }, [authorizationForm, load]);
+
+  const revokeAuthorization = useCallback(async (source: DataSourceStatus) => {
+    if (!window.confirm(`撤销 ${source.source_name} 的自动采集授权并立即关闭采集？`)) return;
+    setSavingSettings(source.source_id);
+    setError(null);
+    const result = await dataAssetApi.recordSourceAuthorization(source.source_id, {
+      decision: 'revoked',
+      notes: '由治理面撤销',
+    });
+    if (!result.success) setError(result.error || '暂时无法撤销采集授权');
+    await load();
+    setSavingSettings(null);
   }, [load]);
 
   const triggerSource = useCallback(async (sourceId: string) => {
@@ -207,6 +245,56 @@ const DataAssetsPage: React.FC = () => {
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${state.tone}`}>{state.label}</span>
                     </div>
                     <p className="mt-3 min-h-10 text-sm leading-5 text-slate-600">{state.description}</p>
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">采集授权 · {source.can_enable ? '有效' : '待登记'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{source.can_enable ? (source.authorization?.scope || '允许采集已登记的公开数据') : '登记可核验依据后即可开启采集'}</p>
+                        </div>
+                        {source.can_enable ? (
+                          <button type="button" onClick={() => revokeAuthorization(source)} disabled={savingSettings === source.source_id} className="shrink-0 text-xs font-medium text-rose-700 hover:text-rose-900 disabled:opacity-50">撤销</button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthorizationEditing(authorizationEditing === source.source_id ? null : source.source_id);
+                              setAuthorizationForm({
+                                basis: 'official_terms',
+                                reference_url: source.rights_reference || '',
+                                scope: '公开发布内容的定期自动采集、证据留存与站内检索',
+                                notes: '',
+                              });
+                            }}
+                            className="shrink-0 text-xs font-medium text-cyan-700 hover:text-cyan-900"
+                          >登记授权</button>
+                        )}
+                      </div>
+                      {source.can_enable && source.authorization?.reference_url ? (
+                        <a href={source.authorization.reference_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:text-cyan-900">查看授权依据 <ExternalLink className="h-3 w-3" aria-hidden="true" /></a>
+                      ) : null}
+                      {authorizationEditing === source.source_id ? (
+                        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                          <label className="block text-xs text-slate-600">依据类型
+                            <select value={authorizationForm.basis} onChange={(event) => setAuthorizationForm((current) => ({ ...current, basis: event.target.value as typeof current.basis }))} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800">
+                              <option value="official_terms">官方使用条款</option>
+                              <option value="open_data_policy">开放数据政策</option>
+                              <option value="direct_permission">直接书面授权</option>
+                              <option value="licensed_feed">已获许可的数据通道</option>
+                            </select>
+                          </label>
+                          <label className="block text-xs text-slate-600">授权依据地址
+                            <input type="url" value={authorizationForm.reference_url} onChange={(event) => setAuthorizationForm((current) => ({ ...current, reference_url: event.target.value }))} placeholder="https://…" className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800" />
+                          </label>
+                          <label className="block text-xs text-slate-600">允许采集的范围
+                            <textarea value={authorizationForm.scope} onChange={(event) => setAuthorizationForm((current) => ({ ...current, scope: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800" />
+                          </label>
+                          <label className="block text-xs text-slate-600">备注（可选）
+                            <input value={authorizationForm.notes} onChange={(event) => setAuthorizationForm((current) => ({ ...current, notes: event.target.value }))} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800" />
+                          </label>
+                          <button type="button" onClick={() => saveAuthorization(source)} disabled={savingSettings === source.source_id || !authorizationForm.reference_url || authorizationForm.scope.length < 8} className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-cyan-700 px-4 text-sm font-semibold text-white hover:bg-cyan-800 disabled:opacity-50">保存授权并开启采集</button>
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3">
                       <div className="col-span-2 flex items-center justify-between gap-3">
                         <span className="text-sm font-medium text-slate-700">

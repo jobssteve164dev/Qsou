@@ -190,6 +190,23 @@ export const dataAssetApi = {
       settings,
     );
   },
+  recordSourceAuthorization: async (
+    sourceId: string,
+    authorization: {
+      decision: 'allowed' | 'revoked';
+      basis?: 'official_terms' | 'open_data_policy' | 'direct_permission' | 'licensed_feed';
+      reference_url?: string;
+      scope?: string;
+      notes?: string;
+      enable?: boolean;
+    },
+  ): Promise<ApiResponse<{ source: DataSourceStatus }>> => {
+    return apiRequest<{ source: DataSourceStatus }>(
+      'post',
+      `/data/sources/${encodeURIComponent(sourceId)}/authorization`,
+      authorization,
+    );
+  },
   triggerSource: async (sourceId: string): Promise<ApiResponse<{ request: { request_id: string; state: string } }>> => {
     return apiRequest<{ request: { request_id: string; state: string } }>(
       'post',

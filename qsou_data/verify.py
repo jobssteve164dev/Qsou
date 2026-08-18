@@ -21,6 +21,7 @@ VERIFICATION_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("adapter_runs", ("run_id",)),
     ("source_cursors", ("source_id",)),
     ("source_runtime_settings", ("source_id",)),
+    ("source_authorizations", ("authorization_id",)),
     ("adapter_run_requests", ("request_id",)),
 )
 

@@ -3,11 +3,12 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from qsou_data import DataAssetError, DataAssetStore
+from app.api.v1.endpoints.auth import User, require_current_user
 
 
 router = APIRouter()
@@ -25,6 +26,15 @@ class SourceSettingsRequest(BaseModel):
     max_details_per_run: int = Field(ge=1, le=500, description="单次最多处理的详情数")
 
 
+class SourceAuthorizationRequest(BaseModel):
+    decision: str = Field(description="allowed 或 revoked")
+    basis: Optional[str] = Field(default=None, description="授权依据类型")
+    reference_url: Optional[str] = Field(default=None, description="可核验的授权依据地址")
+    scope: Optional[str] = Field(default=None, description="授权覆盖的数据与自动采集范围")
+    notes: Optional[str] = Field(default=None, max_length=2000, description="补充说明")
+    enable: bool = Field(default=False, description="授权登记后立即开启自动采集")
+
+
 @router.get("/status")
 async def data_asset_status():
     """查看已经掌握的数据规模与处理状态。"""
@@ -38,7 +48,11 @@ async def list_sources():
 
 
 @router.put("/sources/{source_id}/settings")
-async def update_source_settings(source_id: str, request: SourceSettingsRequest):
+async def update_source_settings(
+    source_id: str,
+    request: SourceSettingsRequest,
+    current_user: User = Depends(require_current_user),
+):
     """更新来源的采集开关、频率和单次上限；权利闸门始终优先。"""
     try:
         return {
@@ -47,6 +61,31 @@ async def update_source_settings(source_id: str, request: SourceSettingsRequest)
                 enabled=request.enabled,
                 schedule=request.schedule,
                 max_details_per_run=request.max_details_per_run,
+                updated_by=current_user.username,
+            )
+        }
+    except (ValueError, DataAssetError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/sources/{source_id}/authorization")
+async def record_source_authorization(
+    source_id: str,
+    request: SourceAuthorizationRequest,
+    current_user: User = Depends(require_current_user),
+):
+    """登记或撤销来源的自动采集授权，并返回立即生效的来源状态。"""
+    try:
+        return {
+            "source": store.record_source_authorization(
+                source_id,
+                decision=request.decision,
+                basis=request.basis,
+                reference_url=request.reference_url,
+                scope=request.scope,
+                notes=request.notes,
+                enable=request.enable,
+                decided_by=current_user.username,
             )
         }
     except (ValueError, DataAssetError) as exc:
@@ -66,10 +105,18 @@ async def list_adapter_runs(
 
 
 @router.post("/adapter-runs/{source_id}/trigger", status_code=202)
-async def trigger_adapter_run(source_id: str):
+async def trigger_adapter_run(
+    source_id: str,
+    current_user: User = Depends(require_current_user),
+):
     """把指定来源加入采集队列；重复点击不会制造并行任务。"""
     try:
-        return {"request": store.request_adapter_run(source_id)}
+        return {
+            "request": store.request_adapter_run(
+                source_id,
+                requested_by=current_user.username,
+            )
+        }
     except (ValueError, DataAssetError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

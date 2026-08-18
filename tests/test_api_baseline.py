@@ -122,17 +122,47 @@ class BaselineApiTest(unittest.TestCase):
             self.assertEqual(status.json()["raw_objects"], 1)
             self.assertEqual(status.json()["active_documents"], 1)
             self.assertGreater(status.json()["archive_size_bytes"], len("Qsou 基线原始证据".encode("utf-8")))
-            self.assertEqual(status.json()["registered_sources"], 9)
-            self.assertEqual(status.json()["active_sources"], 9)
+            self.assertEqual(status.json()["registered_sources"], 18)
+            self.assertEqual(status.json()["active_sources"], 8)
 
-            trigger = client.post("/api/v1/data/adapter-runs/yicai/trigger", headers=headers)
+            authorization = client.post(
+                "/api/v1/data/sources/safe/authorization",
+                json={
+                    "decision": "allowed",
+                    "basis": "direct_permission",
+                    "reference_url": "https://example.org/permissions/safe-api-test",
+                    "scope": "公开统计发布正文与随附数据文件的自动采集",
+                    "enable": True,
+                },
+                headers=headers,
+            )
+            self.assertEqual(authorization.status_code, 200)
+            self.assertTrue(authorization.json()["source"]["enabled"])
+            self.assertEqual(
+                authorization.json()["source"]["authorization"]["decided_by"],
+                "owner",
+            )
+
+            trigger = client.post("/api/v1/data/adapter-runs/safe/trigger", headers=headers)
             self.assertEqual(trigger.status_code, 202)
-            duplicate_trigger = client.post("/api/v1/data/adapter-runs/yicai/trigger", headers=headers)
+            duplicate_trigger = client.post("/api/v1/data/adapter-runs/safe/trigger", headers=headers)
             self.assertEqual(duplicate_trigger.status_code, 202)
             self.assertEqual(
                 trigger.json()["request"]["request_id"],
                 duplicate_trigger.json()["request"]["request_id"],
             )
+            revoked = client.post(
+                "/api/v1/data/sources/safe/authorization",
+                json={"decision": "revoked", "notes": "接口验收撤销"},
+                headers=headers,
+            )
+            self.assertEqual(revoked.status_code, 200)
+            self.assertFalse(revoked.json()["source"]["enabled"])
+            rejected_trigger = client.post(
+                "/api/v1/data/adapter-runs/safe/trigger",
+                headers=headers,
+            )
+            self.assertEqual(rejected_trigger.status_code, 400)
 
             search = client.post(
                 "/api/v1/search",

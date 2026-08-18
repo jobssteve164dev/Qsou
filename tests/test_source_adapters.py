@@ -20,8 +20,8 @@ class SourceAdapterContractTest(unittest.TestCase):
 
     def test_every_registered_source_has_exactly_one_versioned_adapter(self):
         catalog = self.registry.catalog()
-        self.assertEqual(len(catalog), 12)
-        self.assertEqual(len({item["source_id"] for item in catalog}), 12)
+        self.assertEqual(len(catalog), 18)
+        self.assertEqual(len({item["source_id"] for item in catalog}), 18)
         self.assertTrue(all(item["adapter_id"] for item in catalog))
         versions = {item["source_id"]: item["adapter_version"] for item in catalog}
         self.assertEqual(
@@ -39,12 +39,21 @@ class SourceAdapterContractTest(unittest.TestCase):
                 "nbs": "1.0.0",
                 "mof": "1.0.0",
                 "safe": "1.0.0",
+                "world-bank": "1.0.0",
+                "ecb": "1.0.0",
+                "eurostat": "1.0.0",
+                "oecd": "1.0.0",
+                "bis": "1.0.0",
+                "us-treasury": "1.0.0",
             },
         )
 
     def test_only_sources_with_recorded_automated_access_enter_scheduling(self):
         enabled = {item.source_id for item in self.registry.all()}
-        self.assertEqual(enabled, {"nbs", "sec-edgar"})
+        self.assertEqual(
+            enabled,
+            {"nbs", "sec-edgar", "world-bank", "ecb", "eurostat", "oecd", "bis", "us-treasury"},
+        )
         for source_id in enabled:
             assert_automated_access(self.registry.sources.get(source_id))
         with self.assertRaisesRegex(ValueError, "不能自动采集"):
@@ -68,14 +77,79 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertEqual(effective["schedule"], "1h")
         self.assertEqual(effective["max_details_per_run"], 275)
 
-        with self.assertRaisesRegex(DataAssetError, "1 到 500"):
-            store.update_source_settings(
-                "nbs", enabled=True, schedule="1h", max_details_per_run=501
-            )
-        with self.assertRaisesRegex(DataAssetError, "没有允许自动访问"):
-            store.update_source_settings(
-                "safe", enabled=True, schedule="12h", max_details_per_run=150
-            )
+        authorized = store._merge_runtime_settings(
+            store.registry.get("safe"),
+            {"enabled": True, "schedule": "12h", "max_details_per_run": 150},
+            {
+                "decision": "allowed",
+                "basis": "direct_permission",
+                "reference_url": "https://example.org/permission/1",
+                "scope": "公开统计发布及其附件",
+            },
+        )
+        self.assertTrue(authorized["enabled"])
+        self.assertTrue(authorized["can_enable"])
+
+        denied = store._merge_runtime_settings(
+            store.registry.get("safe"),
+            {"enabled": True, "schedule": "12h", "max_details_per_run": 150},
+        )
+        self.assertFalse(denied["enabled"])
+        self.assertFalse(denied["can_enable"])
+
+        runtime_adapter = self.registry.create("safe", authorized)
+        self.assertTrue(runtime_adapter.source["enabled"])
+        self.assertEqual(runtime_adapter.source["rights_status"], "automated_access_allowed")
+
+    def test_official_economic_apis_produce_searchable_dataset_documents(self):
+        samples = {
+            "world-bank": (
+                "application/json",
+                json.dumps([
+                    {"lastupdated": "2026-07-13"},
+                    [{"country": {"value": "China"}, "indicator": {"value": "GDP (current US$)"}, "date": "2025", "value": 19498039388042.6}],
+                ]).encode(),
+            ),
+            "ecb": (
+                "text/csv",
+                b"TIME_PERIOD,CURRENCY,CURRENCY_DENOM,OBS_VALUE,OBS_STATUS\n2026-08-17,USD,EUR,1.17,A\n",
+            ),
+            "eurostat": (
+                "application/json",
+                json.dumps({
+                    "updated": "2026-08-17T23:00:00+0100",
+                    "value": {"0": 2.1, "1": 2.3},
+                    "dimension": {"time": {"category": {"index": {"2026-06": 0, "2026-07": 1}}}},
+                }).encode(),
+            ),
+            "oecd": (
+                "text/csv",
+                "Reference area,TIME_PERIOD,Measure,OBS_VALUE,Unit of measure\nChina,2026-06,Composite leading indicator,101.2,Index\n".encode(),
+            ),
+            "bis": (
+                "text/csv",
+                b"FREQ,REF_AREA,TITLE,TIME_PERIOD,OBS_VALUE,OBS_STATUS\nD,US,Central bank policy rates - United States,2026-08-17,3.625,A\n",
+            ),
+            "us-treasury": (
+                "application/json",
+                json.dumps({"data": [{"record_date": "2026-08-14", "debt_held_public_amt": "32200393497585.51", "intragov_hold_amt": "7733240968527.27", "tot_pub_debt_out_amt": "39933634466112.78"}]}).encode(),
+            ),
+        }
+        for source_id, (content_type, body) in samples.items():
+            with self.subTest(source_id=source_id):
+                adapter = self.registry.create(source_id)
+                response = ResponsePayload(
+                    url=adapter.source["entrypoints"][0],
+                    body=body,
+                    content_type=content_type,
+                )
+                references = adapter.discover(response)
+                self.assertEqual(len(references), 1)
+                self.assertTrue(references[0].metadata["inline_document"])
+                document = adapter.parse_document(response, references[0])
+                self.assertIsNotNone(document)
+                self.assertGreater(len(document["content"]), 50)
+                self.assertEqual(document["metadata"]["extraction"], "official_machine_api")
 
     def test_production_crawler_exposes_only_the_versioned_adapter_path(self):
         self.assertEqual(
@@ -208,6 +282,7 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertIn('"LOG_FILE="', scheduler)
         self.assertIn('latest.get("adapter_version") != adapter.version', scheduler)
         self.assertIn("max_details_per_run=", scheduler)
+        self.assertIn("inline_document", spider)
         self.assertGreaterEqual(scheduler.count("run_requested_sources()"), 3)
         self.assertNotIn('("last_started_at", "last_finished_at", "next_run_at")', scheduler)
 

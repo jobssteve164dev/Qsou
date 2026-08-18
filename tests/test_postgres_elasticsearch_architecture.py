@@ -60,6 +60,7 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
             "adapter_runs",
             "source_cursors",
             "source_runtime_settings",
+            "source_authorizations",
             "adapter_run_requests",
         ):
             self.assertIn(f"create table {table}", rendered)
@@ -77,6 +78,7 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
         self.assertIn("create table raw_objects", rendered)
         self.assertIn("create table standard_documents", rendered)
         self.assertEqual(rendered.count("create table source_runtime_settings"), 1)
+        self.assertEqual(rendered.count("create table source_authorizations"), 1)
         self.assertIn("insert into alembic_version", rendered)
 
     def test_generic_snapshot_quarantine_parameterizes_like_pattern(self):

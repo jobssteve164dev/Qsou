@@ -143,6 +143,25 @@ source_runtime_settings = sa.Table(
     sa.Column("updated_by", sa.Text, nullable=False),
 )
 
+source_authorizations = sa.Table(
+    "source_authorizations",
+    metadata,
+    sa.Column("authorization_id", sa.Text, primary_key=True),
+    sa.Column("source_id", sa.Text, nullable=False),
+    sa.Column("decision", sa.Text, nullable=False),
+    sa.Column("basis", sa.Text),
+    sa.Column("reference_url", sa.Text),
+    sa.Column("scope", sa.Text),
+    sa.Column("notes", sa.Text),
+    sa.Column("decided_at", sa.Text, nullable=False),
+    sa.Column("decided_by", sa.Text, nullable=False),
+)
+sa.Index(
+    "idx_source_authorizations_source_time",
+    source_authorizations.c.source_id,
+    source_authorizations.c.decided_at.desc(),
+)
+
 adapter_run_requests = sa.Table(
     "adapter_run_requests",
     metadata,

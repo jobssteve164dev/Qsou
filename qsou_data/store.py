@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 
 from .catalog import Catalog, normalize_catalog_value
 from .objects import ObjectStorageError, configured_object_store
@@ -19,6 +19,12 @@ from .registry import SourceRegistry, assert_automated_access, project_root
 
 PROCESSING_VERSION = "qsou-data-baseline/1"
 ALLOWED_SOURCE_SCHEDULES = {"15m", "30m", "1h", "6h", "12h", "24h"}
+ALLOWED_AUTHORIZATION_BASES = {
+    "official_terms",
+    "open_data_policy",
+    "direct_permission",
+    "licensed_feed",
+}
 SAFE_RESPONSE_HEADERS = {
     "content-type",
     "content-language",
@@ -558,13 +564,24 @@ class DataAssetStore:
                 "SELECT source_id, enabled, schedule, max_details_per_run, updated_at, updated_by "
                 "FROM source_runtime_settings"
             ).fetchall()
+            authorization_rows = connection.execute(
+                """
+                SELECT DISTINCT ON (source_id) * FROM source_authorizations
+                ORDER BY source_id, decided_at DESC, authorization_id DESC
+                """
+            ).fetchall()
         observed = {row["source_id"]: dict(row) for row in rows}
         documents = {row["source_id"]: dict(row) for row in document_rows}
         settings = {row["source_id"]: dict(row) for row in setting_rows}
+        authorizations = {row["source_id"]: dict(row) for row in authorization_rows}
 
         result = []
         for source in self.registry.all():
-            source = self._merge_runtime_settings(source, settings.get(source["source_id"]))
+            source = self._merge_runtime_settings(
+                source,
+                settings.get(source["source_id"]),
+                authorizations.get(source["source_id"]),
+            )
             metrics = observed.get(source["source_id"], {})
             document_metrics = documents.get(source["source_id"], {})
             latest_run = self.latest_adapter_run(source["source_id"])
@@ -603,9 +620,20 @@ class DataAssetStore:
                 "SELECT source_id, enabled, schedule, max_details_per_run, updated_at, updated_by "
                 "FROM source_runtime_settings"
             ).fetchall()
+            authorization_rows = connection.execute(
+                """
+                SELECT DISTINCT ON (source_id) * FROM source_authorizations
+                ORDER BY source_id, decided_at DESC, authorization_id DESC
+                """
+            ).fetchall()
         settings = {row["source_id"]: dict(row) for row in rows}
+        authorizations = {row["source_id"]: dict(row) for row in authorization_rows}
         return [
-            self._merge_runtime_settings(source, settings.get(source["source_id"]))
+            self._merge_runtime_settings(
+                source,
+                settings.get(source["source_id"]),
+                authorizations.get(source["source_id"]),
+            )
             for source in self.registry.all()
         ]
 
@@ -617,7 +645,18 @@ class DataAssetStore:
                 "FROM source_runtime_settings WHERE source_id = %s",
                 (source_id,),
             ).fetchone()
-        return self._merge_runtime_settings(source, dict(row) if row else None)
+            authorization = connection.execute(
+                """
+                SELECT * FROM source_authorizations WHERE source_id = %s
+                ORDER BY decided_at DESC, authorization_id DESC LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+        return self._merge_runtime_settings(
+            source,
+            dict(row) if row else None,
+            dict(authorization) if authorization else None,
+        )
 
     def update_source_settings(
         self,
@@ -628,7 +667,7 @@ class DataAssetStore:
         max_details_per_run: int,
         updated_by: str = "operator",
     ) -> Dict[str, Any]:
-        source = self.registry.get(source_id)
+        source = self.effective_source(source_id)
         normalized_schedule = str(schedule).strip().lower()
         if normalized_schedule not in ALLOWED_SOURCE_SCHEDULES:
             raise DataAssetError(
@@ -670,10 +709,31 @@ class DataAssetStore:
     def _merge_runtime_settings(
         source: Mapping[str, Any],
         settings: Optional[Mapping[str, Any]],
+        authorization: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         entry = dict(source)
-        entry["can_enable"] = source.get("rights_status") == "automated_access_allowed"
+        entry["registered_rights_status"] = source.get("rights_status")
+        if authorization:
+            entry["authorization"] = dict(authorization)
+            if authorization.get("decision") == "allowed":
+                entry["rights_status"] = "automated_access_allowed"
+                entry["rights_reference"] = authorization.get("reference_url")
+                entry["rights_scope"] = authorization.get("scope")
+            else:
+                entry["rights_status"] = "authorization_revoked"
+        elif source.get("rights_status") == "automated_access_allowed":
+            entry["authorization"] = {
+                "decision": "allowed",
+                "basis": "official_terms",
+                "reference_url": source.get("rights_reference"),
+                "scope": "登记来源的公开机器接口与公开发布数据",
+                "decided_by": "source_registry",
+            }
+        else:
+            entry["authorization"] = None
+        entry["can_enable"] = entry.get("rights_status") == "automated_access_allowed"
         entry["max_details_per_run"] = int(source.get("max_details_per_run", 100))
+        entry["enabled"] = bool(source.get("enabled")) and bool(entry["can_enable"])
         if settings:
             entry["schedule"] = str(settings["schedule"])
             entry["max_details_per_run"] = int(settings["max_details_per_run"])
@@ -686,6 +746,89 @@ class DataAssetStore:
                 "disabled" if entry["can_enable"] else "authorization_required"
             )
         return entry
+
+    def record_source_authorization(
+        self,
+        source_id: str,
+        *,
+        decision: str,
+        basis: Optional[str] = None,
+        reference_url: Optional[str] = None,
+        scope: Optional[str] = None,
+        notes: Optional[str] = None,
+        enable: bool = False,
+        decided_by: str = "operator",
+    ) -> Dict[str, Any]:
+        """Append an authorization decision and make revocation fail closed."""
+        source = self.registry.get(source_id)
+        normalized_decision = str(decision).strip().lower()
+        if normalized_decision not in {"allowed", "revoked"}:
+            raise DataAssetError("授权决定仅支持 allowed 或 revoked")
+        normalized_basis = str(basis or "").strip().lower()
+        normalized_reference = str(reference_url or "").strip()
+        normalized_scope = str(scope or "").strip()
+        normalized_notes = str(notes or "").strip()
+        if normalized_decision == "allowed":
+            if normalized_basis not in ALLOWED_AUTHORIZATION_BASES:
+                raise DataAssetError("请选择有效的授权依据类型")
+            parsed_reference = urlparse(normalized_reference)
+            if parsed_reference.scheme != "https" or not parsed_reference.hostname:
+                raise DataAssetError("授权依据必须是可核验的 HTTPS 地址")
+            if len(normalized_scope) < 8:
+                raise DataAssetError("请明确授权覆盖的数据和自动采集范围")
+        now = utc_now()
+        authorization_id = uuid.uuid4().hex
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO source_authorizations (
+                    authorization_id, source_id, decision, basis, reference_url,
+                    scope, notes, decided_at, decided_by
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    authorization_id,
+                    source_id,
+                    normalized_decision,
+                    normalized_basis or None,
+                    normalized_reference or None,
+                    normalized_scope or None,
+                    normalized_notes or None,
+                    now,
+                    decided_by[:100],
+                ),
+            )
+            desired_enabled = normalized_decision == "allowed" and bool(enable)
+            if desired_enabled or normalized_decision == "revoked":
+                connection.execute(
+                    """
+                    INSERT INTO source_runtime_settings (
+                        source_id, enabled, schedule, max_details_per_run, updated_at, updated_by
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(source_id) DO UPDATE SET
+                        enabled = excluded.enabled,
+                        updated_at = excluded.updated_at,
+                        updated_by = excluded.updated_by
+                    """,
+                    (
+                        source_id,
+                        desired_enabled,
+                        str(source.get("schedule", "30m")),
+                        int(source.get("max_details_per_run", 100)),
+                        now,
+                        decided_by[:100],
+                    ),
+                )
+            if normalized_decision == "revoked":
+                connection.execute(
+                    """
+                    UPDATE adapter_run_requests
+                    SET state = 'cancelled', finished_at = %s, error = %s
+                    WHERE source_id = %s AND state = 'queued'
+                    """,
+                    (now, "自动采集授权已撤销", source_id),
+                )
+        return self.effective_source(source_id)
 
     def source_counts(self, source_id: str) -> Dict[str, int]:
         """Return monotonic source totals used to close one adapter run."""

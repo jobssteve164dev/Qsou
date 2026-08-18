@@ -88,8 +88,7 @@ def selected_adapters():
             continue
         if not source.get("enabled"):
             continue
-        adapter = ADAPTERS.create(source["source_id"])
-        adapter.source.update(source)
+        adapter = ADAPTERS.create(source["source_id"], source)
         adapters.append(adapter)
     return adapters
 
@@ -254,8 +253,7 @@ def run_requested_sources() -> int:
         error = None
         try:
             source = STORE.effective_source(source_id)
-            adapter = ADAPTERS.create(source_id)
-            adapter.source.update(source)
+            adapter = ADAPTERS.create(source_id, source)
             result = run_adapter(adapter, trigger="manual")
             run_id = str(result["run_id"])
             result_state = str(result["state"])
