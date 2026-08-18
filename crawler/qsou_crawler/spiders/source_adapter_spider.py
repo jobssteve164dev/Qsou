@@ -26,13 +26,25 @@ class SourceAdapterSpider(scrapy.Spider):
         "ROBOTSTXT_OBEY": True,
     }
 
-    def __init__(self, source_id: str, report_path: str = "", *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        source_id: str,
+        report_path: str = "",
+        max_details_per_run: str = "",
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.adapter = AdapterRegistry().create(source_id)
         self.source_id = source_id
         self.report_path = Path(report_path) if report_path else None
         self.allowed_domains = list(self.adapter.source.get("domains", []))
-        self.max_details = max(1, min(int(os.getenv("QSOU_ADAPTER_MAX_DETAILS", "12")), 100))
+        configured_max = (
+            max_details_per_run
+            or self.adapter.source.get("max_details_per_run")
+            or os.getenv("QSOU_ADAPTER_MAX_DETAILS", "100")
+        )
+        self.max_details = max(1, min(int(configured_max), 500))
         self.asset_store = DataAssetStore()
         self._seen_details: set[str] = set()
         self._documents: list[dict[str, Any]] = []
@@ -61,9 +73,15 @@ class SourceAdapterSpider(scrapy.Spider):
             self.crawler.stats.inc_value("adapter/entrypoints_total", len(listing_requests))
             for specification in listing_requests:
                 yield self._request(specification, self.parse_listing)
-        for reference in references:
-            if reference.url in self._seen_details or len(self._seen_details) >= self.max_details:
-                continue
+        unseen = [reference for reference in references if reference.url not in self._seen_details]
+        remaining = max(0, self.max_details - len(self._seen_details))
+        if len(unseen) > remaining:
+            self.crawler.stats.inc_value("adapter/discovery_truncated", len(unseen) - remaining)
+            self._record_error(
+                f"详情发现超过来源完整性上限: discovered={len(unseen)} remaining={remaining} "
+                f"limit={self.max_details} entrypoint={response.url}"
+            )
+        for reference in unseen[:remaining]:
             self._seen_details.add(reference.url)
             self.crawler.stats.inc_value("adapter/detail_discovered")
             specification = self.adapter.detail_request(reference)
@@ -119,6 +137,12 @@ class SourceAdapterSpider(scrapy.Spider):
     def handle_request_error(self, failure) -> None:
         request = failure.request
         request_kind = request.meta.get("qsou_request_kind", "request")
+        response = getattr(failure.value, "response", None)
+        status = getattr(response, "status", None)
+        if status in {403, 429}:
+            self._record_error(f"来源拒绝自动访问，立即停止本轮: {status} {request.url}")
+            self.crawler.engine.close_spider(self, reason=f"access_denied_{status}")
+            return
         message = failure.getErrorMessage()
         self._record_error(f"{request_kind} 请求失败: {request.url}: {message}")
 
@@ -133,6 +157,7 @@ class SourceAdapterSpider(scrapy.Spider):
             "entrypoints_total": self.crawler.stats.get_value("adapter/entrypoints_total", 0),
             "entrypoints_succeeded": self.crawler.stats.get_value("adapter/entrypoints_succeeded", 0),
             "detail_discovered": self.crawler.stats.get_value("adapter/detail_discovered", 0),
+            "discovery_truncated": self.crawler.stats.get_value("adapter/discovery_truncated", 0),
             "detail_fetched": self.crawler.stats.get_value("adapter/detail_fetched", 0),
             "documents_emitted": self.crawler.stats.get_value("adapter/documents_emitted", 0),
             "documents_indexed": self.crawler.stats.get_value("adapter/documents_indexed", 0),

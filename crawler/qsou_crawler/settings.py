@@ -90,7 +90,8 @@ DOWNLOAD_TIMEOUT = int(os.getenv('QSOU_DOWNLOAD_TIMEOUT_SECONDS', '900'))
 # 重试次数
 RETRY_TIMES = 3
 # 重试HTTP状态码
-RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
+# 403/429 表示来源拒绝或限流；不得自动重试放大访问。
+RETRY_HTTP_CODES = [500, 502, 503, 504, 408]
 
 # Cookies设置
 COOKIES_ENABLED = True

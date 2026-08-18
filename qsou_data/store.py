@@ -14,10 +14,11 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .catalog import Catalog, normalize_catalog_value
 from .objects import ObjectStorageError, configured_object_store
-from .registry import SourceRegistry, project_root
+from .registry import SourceRegistry, assert_automated_access, project_root
 
 
 PROCESSING_VERSION = "qsou-data-baseline/1"
+ALLOWED_SOURCE_SCHEDULES = {"15m", "30m", "1h", "6h", "12h", "24h"}
 SAFE_RESPONSE_HEADERS = {
     "content-type",
     "content-language",
@@ -249,7 +250,11 @@ class DataAssetStore:
             or stable_hash(url)
         )
         canonical_document_id = stable_hash(source_id, source_document_id)
-        content_hash = hashlib.sha256(f"{title}\n{content}".encode("utf-8")).hexdigest()
+        structured_data = document.get("structured_data")
+        version_payload = f"{title}\n{content}"
+        if structured_data is not None:
+            version_payload += f"\n{_json(structured_data)}"
+        content_hash = hashlib.sha256(version_payload.encode("utf-8")).hexdigest()
         content_version_id = stable_hash(canonical_document_id, content_hash)
         existing_state = self._document_state(content_version_id)
         fetched_at = str(document.get("fetched_at") or metadata.get("fetched_at") or utc_now())
@@ -521,7 +526,7 @@ class DataAssetStore:
         return {
             "status": "healthy",
             "registered_sources": len(self.registry.all()),
-            "active_sources": len(self.registry.all(enabled_only=True)),
+            "active_sources": sum(1 for source in sources if source.get("enabled")),
             "raw_objects": raw_count,
             "document_versions": document_count,
             "active_documents": active_count,
@@ -549,11 +554,17 @@ class DataAssetStore:
                 FROM standard_documents GROUP BY source_id
                 """
             ).fetchall()
+            setting_rows = connection.execute(
+                "SELECT source_id, enabled, schedule, max_details_per_run, updated_at, updated_by "
+                "FROM source_runtime_settings"
+            ).fetchall()
         observed = {row["source_id"]: dict(row) for row in rows}
         documents = {row["source_id"]: dict(row) for row in document_rows}
+        settings = {row["source_id"]: dict(row) for row in setting_rows}
 
         result = []
         for source in self.registry.all():
+            source = self._merge_runtime_settings(source, settings.get(source["source_id"]))
             metrics = observed.get(source["source_id"], {})
             document_metrics = documents.get(source["source_id"], {})
             latest_run = self.latest_adapter_run(source["source_id"])
@@ -586,6 +597,96 @@ class DataAssetStore:
             result.append(entry)
         return result
 
+    def effective_sources(self) -> List[Dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT source_id, enabled, schedule, max_details_per_run, updated_at, updated_by "
+                "FROM source_runtime_settings"
+            ).fetchall()
+        settings = {row["source_id"]: dict(row) for row in rows}
+        return [
+            self._merge_runtime_settings(source, settings.get(source["source_id"]))
+            for source in self.registry.all()
+        ]
+
+    def effective_source(self, source_id: str) -> Dict[str, Any]:
+        source = self.registry.get(source_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT source_id, enabled, schedule, max_details_per_run, updated_at, updated_by "
+                "FROM source_runtime_settings WHERE source_id = %s",
+                (source_id,),
+            ).fetchone()
+        return self._merge_runtime_settings(source, dict(row) if row else None)
+
+    def update_source_settings(
+        self,
+        source_id: str,
+        *,
+        enabled: bool,
+        schedule: str,
+        max_details_per_run: int,
+        updated_by: str = "operator",
+    ) -> Dict[str, Any]:
+        source = self.registry.get(source_id)
+        normalized_schedule = str(schedule).strip().lower()
+        if normalized_schedule not in ALLOWED_SOURCE_SCHEDULES:
+            raise DataAssetError(
+                "采集频率仅支持: " + ", ".join(sorted(ALLOWED_SOURCE_SCHEDULES))
+            )
+        normalized_batch_size = int(max_details_per_run)
+        if not 1 <= normalized_batch_size <= 500:
+            raise DataAssetError("单次采集上限必须在 1 到 500 之间")
+        if enabled:
+            try:
+                assert_automated_access({**source, "enabled": True})
+            except ValueError as exc:
+                raise DataAssetError(str(exc)) from exc
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO source_runtime_settings (
+                    source_id, enabled, schedule, max_details_per_run, updated_at, updated_by
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT(source_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    schedule = excluded.schedule,
+                    max_details_per_run = excluded.max_details_per_run,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by
+                """,
+                (
+                    source_id,
+                    bool(enabled),
+                    normalized_schedule,
+                    normalized_batch_size,
+                    utc_now(),
+                    updated_by[:100],
+                ),
+            )
+        return self.effective_source(source_id)
+
+    @staticmethod
+    def _merge_runtime_settings(
+        source: Mapping[str, Any],
+        settings: Optional[Mapping[str, Any]],
+    ) -> Dict[str, Any]:
+        entry = dict(source)
+        entry["can_enable"] = source.get("rights_status") == "automated_access_allowed"
+        entry["max_details_per_run"] = int(source.get("max_details_per_run", 100))
+        if settings:
+            entry["schedule"] = str(settings["schedule"])
+            entry["max_details_per_run"] = int(settings["max_details_per_run"])
+            entry["settings_updated_at"] = settings.get("updated_at")
+            entry["settings_updated_by"] = settings.get("updated_by")
+            requested_enabled = bool(settings.get("enabled"))
+            entry["enabled"] = requested_enabled and bool(entry["can_enable"])
+        if not entry.get("enabled"):
+            entry["health_state"] = (
+                "disabled" if entry["can_enable"] else "authorization_required"
+            )
+        return entry
+
     def source_counts(self, source_id: str) -> Dict[str, int]:
         """Return monotonic source totals used to close one adapter run."""
         self.registry.get(source_id)
@@ -609,7 +710,11 @@ class DataAssetStore:
         trigger: str = "schedule",
     ) -> Dict[str, Any]:
         """Open one source-scoped run before any network request is made."""
-        source = self.registry.get(source_id)
+        source = self.effective_source(source_id)
+        try:
+            assert_automated_access(source)
+        except ValueError as exc:
+            raise DataAssetError(str(exc)) from exc
         if source.get("adapter_id") != adapter_id:
             raise DataAssetError(f"适配器与来源契约不一致: {source_id}/{adapter_id}")
         if source.get("adapter_version") != adapter_version:
@@ -805,9 +910,11 @@ class DataAssetStore:
         requested_by: str = "operator",
     ) -> Dict[str, Any]:
         """Queue one source-scoped run, deduplicating active requests."""
-        source = self.registry.get(source_id)
-        if not source.get("enabled"):
-            raise DataAssetError(f"来源未启用: {source_id}")
+        source = self.effective_source(source_id)
+        try:
+            assert_automated_access(source)
+        except ValueError as exc:
+            raise DataAssetError(str(exc)) from exc
         with self._connection() as connection:
             existing = connection.execute(
                 """

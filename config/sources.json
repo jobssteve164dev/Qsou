@@ -20,8 +20,8 @@
       "adapter_id": "sse-announcements",
       "adapter_version": "1.1.0",
       "adapter_kind": "announcement_api",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "szse",
@@ -42,8 +42,8 @@
       "adapter_id": "szse-announcements",
       "adapter_version": "1.0.0",
       "adapter_kind": "announcement_api",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "cninfo",
@@ -64,8 +64,8 @@
       "adapter_id": "cninfo-announcements",
       "adapter_version": "1.0.0",
       "adapter_kind": "announcement_api",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "eastmoney",
@@ -86,8 +86,8 @@
       "adapter_id": "eastmoney-news",
       "adapter_version": "1.1.0",
       "adapter_kind": "news_listing",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "sina-finance",
@@ -108,8 +108,8 @@
       "adapter_id": "sina-finance-news",
       "adapter_version": "1.1.0",
       "adapter_kind": "news_listing",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "netease-finance",
@@ -130,8 +130,8 @@
       "adapter_id": "netease-finance-news",
       "adapter_version": "1.1.0",
       "adapter_kind": "news_listing",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "sec-edgar",
@@ -149,6 +149,8 @@
       "rights_reference": "https://www.sec.gov/about/webmaster-frequently-asked-questions#developers",
       "robots_reference": "https://www.sec.gov/robots.txt",
       "rate_limit_per_second": 10,
+      "request_interval_seconds": 1.5,
+      "max_details_per_run": 100,
       "retention_policy": "retain_public_evidence",
       "owner": "project_owner",
       "parser_version": "qsou-crawler/1",
@@ -177,8 +179,8 @@
       "adapter_id": "caijing-news",
       "adapter_version": "1.0.0",
       "adapter_kind": "news_api",
-      "health_state": "configured",
-      "enabled": true
+      "health_state": "authorization_required",
+      "enabled": false
     },
     {
       "source_id": "yicai",
@@ -199,8 +201,88 @@
       "adapter_id": "yicai-news",
       "adapter_version": "1.2.0",
       "adapter_kind": "news_listing",
+      "health_state": "authorization_required",
+      "enabled": false
+    },
+    {
+      "source_id": "nbs",
+      "source_name": "国家统计局",
+      "publisher": "国家统计局",
+      "authority_tier": "primary",
+      "domains": ["stats.gov.cn"],
+      "entrypoints": ["https://www.stats.gov.cn/sj/zxfb/"],
+      "document_types": ["statistical_release"],
+      "coverage_start": null,
+      "collection_method": "official_public_data",
+      "schedule": "6h",
+      "cursor_strategy": "latest_release_with_overlap",
+      "rights_status": "automated_access_allowed",
+      "rights_reference": "https://www.stats.gov.cn/wzgl/202302/t20230217_1912857.html",
+      "robots_reference": "https://www.stats.gov.cn/robots.txt",
+      "request_interval_seconds": 5,
+      "max_details_per_run": 100,
+      "retention_policy": "retain_public_evidence",
+      "attribution": "数据来源：国家统计局网站",
+      "owner": "project_owner",
+      "parser_version": "qsou-crawler/1",
+      "adapter_id": "nbs-statistical-releases",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "official_statistical_releases",
       "health_state": "configured",
       "enabled": true
+    },
+    {
+      "source_id": "mof",
+      "source_name": "中华人民共和国财政部",
+      "publisher": "中华人民共和国财政部",
+      "authority_tier": "primary",
+      "domains": ["mof.gov.cn"],
+      "entrypoints": ["https://gks.mof.gov.cn/tongjishuju/"],
+      "document_types": ["statistical_release"],
+      "coverage_start": null,
+      "collection_method": "official_public_data",
+      "schedule": "12h",
+      "cursor_strategy": "latest_release_with_overlap",
+      "rights_status": "authorization_required",
+      "rights_reference": "https://www.mof.gov.cn/",
+      "robots_reference": "https://www.mof.gov.cn/robots.txt",
+      "request_interval_seconds": 5,
+      "max_details_per_run": 100,
+      "retention_policy": "metadata_only_until_authorized",
+      "owner": "project_owner",
+      "parser_version": "qsou-crawler/1",
+      "adapter_id": "mof-statistical-releases",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "official_statistical_releases",
+      "health_state": "authorization_required",
+      "enabled": false
+    },
+    {
+      "source_id": "safe",
+      "source_name": "国家外汇管理局",
+      "publisher": "国家外汇管理局",
+      "authority_tier": "primary",
+      "domains": ["safe.gov.cn"],
+      "entrypoints": ["https://www.safe.gov.cn/safe/tjsj1/index.html"],
+      "document_types": ["statistical_release"],
+      "coverage_start": null,
+      "collection_method": "official_public_data",
+      "schedule": "12h",
+      "cursor_strategy": "latest_release_with_overlap",
+      "rights_status": "authorization_required",
+      "rights_reference": "https://www.safe.gov.cn/safe/flsm/index.html",
+      "robots_reference": "https://www.safe.gov.cn/robots.txt",
+      "request_interval_seconds": 5,
+      "max_details_per_run": 150,
+      "retention_policy": "metadata_only_until_authorized",
+      "attribution": "信息来源：国家外汇管理局网站",
+      "owner": "project_owner",
+      "parser_version": "qsou-crawler/1",
+      "adapter_id": "safe-statistical-releases",
+      "adapter_version": "1.0.0",
+      "adapter_kind": "official_statistical_files",
+      "health_state": "authorization_required",
+      "enabled": false
     }
   ]
 }

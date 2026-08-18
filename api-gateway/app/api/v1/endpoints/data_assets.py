@@ -19,6 +19,12 @@ class ReplayRequest(BaseModel):
     limit: int = Field(default=1000, ge=1, le=10000, description="本次最多回放的文档数")
 
 
+class SourceSettingsRequest(BaseModel):
+    enabled: bool
+    schedule: str = Field(description="采集频率：15m、30m、1h、6h、12h 或 24h")
+    max_details_per_run: int = Field(ge=1, le=500, description="单次最多处理的详情数")
+
+
 @router.get("/status")
 async def data_asset_status():
     """查看已经掌握的数据规模与处理状态。"""
@@ -29,6 +35,22 @@ async def data_asset_status():
 async def list_sources():
     """查看正式登记来源及实际采集状态。"""
     return {"sources": store.list_sources()}
+
+
+@router.put("/sources/{source_id}/settings")
+async def update_source_settings(source_id: str, request: SourceSettingsRequest):
+    """更新来源的采集开关、频率和单次上限；权利闸门始终优先。"""
+    try:
+        return {
+            "source": store.update_source_settings(
+                source_id,
+                enabled=request.enabled,
+                schedule=request.schedule,
+                max_details_per_run=request.max_details_per_run,
+            )
+        }
+    except (ValueError, DataAssetError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/adapter-runs")

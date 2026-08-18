@@ -165,6 +165,8 @@ export interface DataSourceStatus {
   adapter_version: string;
   adapter_kind: string;
   enabled: boolean;
+  can_enable: boolean;
+  max_details_per_run: number;
   collection_state: 'not_started' | 'queued' | 'running' | 'healthy' | 'degraded' | 'failed' | 'cancelled' | 'stale' | 'authorization_required' | 'disabled';
   raw_count: number;
   document_versions: number;

@@ -81,7 +81,17 @@ def wait_until(deadline: datetime) -> None:
 
 
 def selected_adapters():
-    return ADAPTERS.all(SOURCE_IDS or None)
+    selected = set(SOURCE_IDS)
+    adapters = []
+    for source in STORE.effective_sources():
+        if selected and source["source_id"] not in selected:
+            continue
+        if not source.get("enabled"):
+            continue
+        adapter = ADAPTERS.create(source["source_id"])
+        adapter.source.update(source)
+        adapters.append(adapter)
+    return adapters
 
 
 def schedule_seconds(value: object) -> int:
@@ -132,6 +142,10 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
     report: dict[str, object] = {}
     errors: list[str] = []
     try:
+        request_interval = max(
+            0.1,
+            float(adapter.source.get("request_interval_seconds", 1.5)),
+        )
         completed = subprocess.run(
             [
                 sys.executable,
@@ -143,10 +157,18 @@ def run_adapter(adapter, *, trigger: str = "schedule") -> dict[str, object]:
                 f"source_id={adapter.source_id}",
                 "-a",
                 f"report_path={report_path}",
+                "-a",
+                f"max_details_per_run={int(adapter.source.get('max_details_per_run', 100))}",
                 "-L",
                 "INFO",
                 "-s",
                 "LOG_FILE=",
+                "-s",
+                f"DOWNLOAD_DELAY={request_interval}",
+                "-s",
+                f"AUTOTHROTTLE_START_DELAY={request_interval}",
+                "-s",
+                "CONCURRENT_REQUESTS_PER_DOMAIN=1",
             ],
             cwd=CRAWLER_ROOT,
             check=False,
@@ -231,7 +253,10 @@ def run_requested_sources() -> int:
         result_state = "failed"
         error = None
         try:
-            result = run_adapter(ADAPTERS.create(source_id), trigger="manual")
+            source = STORE.effective_source(source_id)
+            adapter = ADAPTERS.create(source_id)
+            adapter.source.update(source)
+            result = run_adapter(adapter, trigger="manual")
             run_id = str(result["run_id"])
             result_state = str(result["state"])
         except Exception as exc:

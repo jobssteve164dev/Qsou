@@ -132,6 +132,17 @@ source_cursors = sa.Table(
     sa.Column("updated_at", sa.Text, nullable=False),
 )
 
+source_runtime_settings = sa.Table(
+    "source_runtime_settings",
+    metadata,
+    sa.Column("source_id", sa.Text, primary_key=True),
+    sa.Column("enabled", sa.Boolean, nullable=False),
+    sa.Column("schedule", sa.Text, nullable=False),
+    sa.Column("max_details_per_run", sa.Integer, nullable=False),
+    sa.Column("updated_at", sa.Text, nullable=False),
+    sa.Column("updated_by", sa.Text, nullable=False),
+)
+
 adapter_run_requests = sa.Table(
     "adapter_run_requests",
     metadata,

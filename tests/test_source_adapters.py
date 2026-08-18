@@ -1,4 +1,5 @@
 import json
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -9,6 +10,7 @@ sys.path.insert(0, str(CRAWLER_ROOT))
 
 from qsou_crawler.adapters import AdapterRegistry, DocumentReference, ResponsePayload
 from qsou_crawler import settings as crawler_settings
+from qsou_data import DataAssetError, DataAssetStore, assert_automated_access
 
 
 class SourceAdapterContractTest(unittest.TestCase):
@@ -16,10 +18,10 @@ class SourceAdapterContractTest(unittest.TestCase):
     def setUpClass(cls):
         cls.registry = AdapterRegistry()
 
-    def test_every_enabled_source_has_exactly_one_versioned_adapter(self):
+    def test_every_registered_source_has_exactly_one_versioned_adapter(self):
         catalog = self.registry.catalog()
-        self.assertEqual(len(catalog), 9)
-        self.assertEqual(len({item["source_id"] for item in catalog}), 9)
+        self.assertEqual(len(catalog), 12)
+        self.assertEqual(len({item["source_id"] for item in catalog}), 12)
         self.assertTrue(all(item["adapter_id"] for item in catalog))
         versions = {item["source_id"]: item["adapter_version"] for item in catalog}
         self.assertEqual(
@@ -34,8 +36,46 @@ class SourceAdapterContractTest(unittest.TestCase):
                 "sec-edgar": "1.0.0",
                 "caijing": "1.0.0",
                 "yicai": "1.2.0",
+                "nbs": "1.0.0",
+                "mof": "1.0.0",
+                "safe": "1.0.0",
             },
         )
+
+    def test_only_sources_with_recorded_automated_access_enter_scheduling(self):
+        enabled = {item.source_id for item in self.registry.all()}
+        self.assertEqual(enabled, {"nbs", "sec-edgar"})
+        for source_id in enabled:
+            assert_automated_access(self.registry.sources.get(source_id))
+        with self.assertRaisesRegex(ValueError, "不能自动采集"):
+            assert_automated_access(self.registry.sources.get("safe"))
+
+    def test_runtime_settings_keep_batch_size_per_source_and_fail_closed(self):
+        store = DataAssetStore.__new__(DataAssetStore)
+        store.registry = self.registry.sources
+        effective = store._merge_runtime_settings(
+            store.registry.get("nbs"),
+            {
+                "enabled": False,
+                "schedule": "1h",
+                "max_details_per_run": 275,
+                "updated_at": "2026-08-18T00:00:00Z",
+                "updated_by": "operator",
+            },
+        )
+        self.assertFalse(effective["enabled"])
+        self.assertEqual(effective["health_state"], "disabled")
+        self.assertEqual(effective["schedule"], "1h")
+        self.assertEqual(effective["max_details_per_run"], 275)
+
+        with self.assertRaisesRegex(DataAssetError, "1 到 500"):
+            store.update_source_settings(
+                "nbs", enabled=True, schedule="1h", max_details_per_run=501
+            )
+        with self.assertRaisesRegex(DataAssetError, "没有允许自动访问"):
+            store.update_source_settings(
+                "safe", enabled=True, schedule="12h", max_details_per_run=150
+            )
 
     def test_production_crawler_exposes_only_the_versioned_adapter_path(self):
         self.assertEqual(
@@ -63,6 +103,93 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertEqual(crawler_settings.REQUEST_FINGERPRINTER_IMPLEMENTATION, "2.7")
         self.assertGreaterEqual(crawler_settings.DOWNLOAD_TIMEOUT, 900)
         self.assertEqual(crawler_settings.MEMUSAGE_LIMIT_MB, 3584)
+        self.assertNotIn(429, crawler_settings.RETRY_HTTP_CODES)
+
+    def test_nbs_release_preserves_html_tables_as_versioned_structured_data(self):
+        adapter = self.registry.create("nbs")
+        listing = ResponsePayload(
+            url="https://www.stats.gov.cn/sj/zxfb/",
+            body=(
+                '<a href="./202608/t20260817_1965055.html">'
+                "2026年7月份规模以上工业增加值增长4.5%</a>"
+            ).encode(),
+        )
+        references = adapter.discover(listing)
+        self.assertEqual(len(references), 1)
+        detail = ResponsePayload(
+            url=references[0].url,
+            body=(
+                "<html><head><title>2026年7月份规模以上工业增加值</title></head><body>"
+                '<div class="TRS_Editor"><p>7月份，规模以上工业增加值同比实际增长4.5%。</p>'
+                "<table><tr><th>指标</th><th>同比增长（%）</th></tr>"
+                "<tr><td>规模以上工业增加值</td><td>4.5</td></tr></table>"
+                "<p>数据来源为国家统计局发布的官方统计数据。</p></div></body></html>"
+            ).encode(),
+        )
+        document = adapter.parse_document(detail, references[0])
+        self.assertIsNotNone(document)
+        self.assertEqual(document["structured_data"]["table_count"], 1)
+        self.assertEqual(
+            document["structured_data"]["tables"][0]["rows"][1],
+            ["规模以上工业增加值", "4.5"],
+        )
+        self.assertIn("数据来源：国家统计局网站", document["content"])
+
+    def test_mof_adapter_discovers_only_official_statistical_release_details(self):
+        adapter = self.registry.create("mof")
+        response = ResponsePayload(
+            url="https://gks.mof.gov.cn/tongjishuju/",
+            body=(
+                '<a href="./202608/t20260810_4000000.htm">2026年7月财政收支情况</a>'
+                '<a href="https://example.com/not-official.pdf">外部文件</a>'
+            ).encode(),
+        )
+        references = adapter.discover(response)
+        self.assertEqual(
+            [item.url for item in references],
+            ["https://gks.mof.gov.cn/tongjishuju/202608/t20260810_4000000.htm"],
+        )
+
+    def test_safe_adapter_follows_release_pages_and_parses_official_xlsx(self):
+        adapter = self.registry.create("safe")
+        root = ResponsePayload(
+            url="https://www.safe.gov.cn/safe/tjsj1/index.html",
+            body='<a href="/safe/2026/0205/27113.html">官方储备资产（2026年）</a>'.encode(),
+        )
+        followups = adapter.listing_requests(root)
+        self.assertEqual(len(followups), 1)
+        release = ResponsePayload(
+            url=followups[0].url,
+            body=(
+                '<a href="/safe/file/file/20260807/a93297db52ad4910b9d6bd5ecc6b00a1.xlsx">'
+                "官方储备资产月度数据</a>"
+            ).encode(),
+            metadata=followups[0].metadata,
+        )
+        references = adapter.discover(release)
+        self.assertEqual(len(references), 1)
+
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "官方储备资产"
+        sheet.append(["项目", "2026-07"])
+        sheet.append(["外汇储备（亿美元）", 36000])
+        payload = io.BytesIO()
+        workbook.save(payload)
+        workbook.close()
+        document = adapter.parse_document(
+            ResponsePayload(
+                url=references[0].url,
+                body=payload.getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            references[0],
+        )
+        self.assertIsNotNone(document)
+        self.assertIn("外汇储备（亿美元） 36000", document["content"])
+        self.assertEqual(document["structured_data"]["table_count"], 1)
 
     def test_downloader_evidence_identity_stays_on_request_until_spider_stage(self):
         project_root = Path(__file__).resolve().parents[1]
@@ -80,6 +207,7 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertNotIn('metadata["handle_httpstatus_all"]', spider)
         self.assertIn('"LOG_FILE="', scheduler)
         self.assertIn('latest.get("adapter_version") != adapter.version', scheduler)
+        self.assertIn("max_details_per_run=", scheduler)
         self.assertGreaterEqual(scheduler.count("run_requested_sources()"), 3)
         self.assertNotIn('("last_started_at", "last_finished_at", "next_run_at")', scheduler)
 

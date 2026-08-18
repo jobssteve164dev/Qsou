@@ -11,6 +11,9 @@ from .caijing import CaijingAdapter
 from .cninfo import CninfoAdapter
 from .eastmoney import EastmoneyAdapter
 from .netease import NeteaseFinanceAdapter
+from .nbs import NbsAdapter
+from .mof import MofAdapter
+from .safe import SafeAdapter
 from .sec_edgar import SecEdgarAdapter
 from .sina import SinaFinanceAdapter
 from .sse import SseAdapter
@@ -28,6 +31,9 @@ ADAPTER_TYPES: tuple[type[SourceAdapter], ...] = (
     SecEdgarAdapter,
     CaijingAdapter,
     YicaiAdapter,
+    NbsAdapter,
+    MofAdapter,
+    SafeAdapter,
 )
 
 

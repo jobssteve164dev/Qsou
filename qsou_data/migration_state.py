@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-ALEMBIC_REVISION = "20260809_01"
+ALEMBIC_REVISION = "20260818_02"
 OBJECT_IMPORT_VERSION = "one-time-file-objects-to-s3-20260809"
 
 

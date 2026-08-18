@@ -180,6 +180,16 @@ export const dataAssetApi = {
   sources: async (): Promise<ApiResponse<{ sources: DataSourceStatus[] }>> => {
     return apiRequest<{ sources: DataSourceStatus[] }>('get', '/data/sources');
   },
+  updateSourceSettings: async (
+    sourceId: string,
+    settings: { enabled: boolean; schedule: string; max_details_per_run: number },
+  ): Promise<ApiResponse<{ source: DataSourceStatus }>> => {
+    return apiRequest<{ source: DataSourceStatus }>(
+      'put',
+      `/data/sources/${encodeURIComponent(sourceId)}/settings`,
+      settings,
+    );
+  },
   triggerSource: async (sourceId: string): Promise<ApiResponse<{ request: { request_id: string; state: string } }>> => {
     return apiRequest<{ request: { request_id: string; state: string } }>(
       'post',

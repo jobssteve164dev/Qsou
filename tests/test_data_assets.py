@@ -207,9 +207,9 @@ class DataAssetStoreTest(unittest.TestCase):
 
     def test_adapter_run_records_real_stage_metrics_and_advances_cursor_only_when_healthy(self):
         run = self.store.begin_adapter_run(
-            source_id="yicai",
-            adapter_id="yicai-news",
-            adapter_version="1.2.0",
+            source_id="sec-edgar",
+            adapter_id="sec-edgar-filings",
+            adapter_version="1.0.0",
         )
         finished = self.store.finish_adapter_run(
             run["run_id"],
@@ -230,21 +230,21 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertEqual(finished["state"], "healthy")
         self.assertEqual(finished["detail_discovered"], 5)
         self.assertEqual(
-            self.store.get_source_cursor("yicai")["latest_published_at"],
+            self.store.get_source_cursor("sec-edgar")["latest_published_at"],
             "2026-08-08T09:00:00+08:00",
         )
-        source = next(item for item in self.store.list_sources() if item["source_id"] == "yicai")
+        source = next(item for item in self.store.list_sources() if item["source_id"] == "sec-edgar")
         self.assertEqual(source["collection_state"], "healthy")
         self.assertEqual(source["last_run"]["documents_emitted"], 3)
         self.assertEqual(source["last_run"]["metrics"]["documents_indexed"], 3)
 
     def test_manual_adapter_requests_are_deduplicated_claimed_and_closed(self):
-        first = self.store.request_adapter_run("sse", requested_by="admin")
-        duplicate = self.store.request_adapter_run("sse", requested_by="admin")
+        first = self.store.request_adapter_run("sec-edgar", requested_by="admin")
+        duplicate = self.store.request_adapter_run("sec-edgar", requested_by="admin")
 
         self.assertEqual(first["request_id"], duplicate["request_id"])
         self.assertEqual(first["state"], "queued")
-        source = next(item for item in self.store.list_sources() if item["source_id"] == "sse")
+        source = next(item for item in self.store.list_sources() if item["source_id"] == "sec-edgar")
         self.assertEqual(source["collection_state"], "queued")
 
         claimed = self.store.claim_adapter_run_request()
@@ -258,7 +258,42 @@ class DataAssetStoreTest(unittest.TestCase):
         )
         self.assertEqual(closed["state"], "completed")
         self.assertEqual(closed["result_state"], "healthy")
-        self.assertIsNone(self.store.active_adapter_run_request("sse"))
+        self.assertIsNone(self.store.active_adapter_run_request("sec-edgar"))
+
+    def test_source_runtime_settings_respect_rights_and_persist_batch_size(self):
+        disabled = self.store.update_source_settings(
+            "sec-edgar",
+            enabled=False,
+            schedule="6h",
+            max_details_per_run=42,
+            updated_by="admin",
+        )
+        self.assertFalse(disabled["enabled"])
+        self.assertEqual(disabled["schedule"], "6h")
+        self.assertEqual(disabled["max_details_per_run"], 42)
+
+        enabled = self.store.update_source_settings(
+            "sec-edgar",
+            enabled=True,
+            schedule="30m",
+            max_details_per_run=100,
+            updated_by="admin",
+        )
+        self.assertTrue(enabled["enabled"])
+        with self.assertRaisesRegex(DataAssetError, "没有允许自动访问"):
+            self.store.update_source_settings(
+                "safe",
+                enabled=True,
+                schedule="12h",
+                max_details_per_run=100,
+            )
+        with self.assertRaisesRegex(DataAssetError, "1 到 500"):
+            self.store.update_source_settings(
+                "sec-edgar",
+                enabled=True,
+                schedule="30m",
+                max_details_per_run=501,
+            )
 
     def test_generic_snapshots_are_preserved_but_removed_from_formal_search(self):
         evidence = self._archive("通用快照原始页面")

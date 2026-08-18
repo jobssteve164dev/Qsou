@@ -12,8 +12,14 @@ depends_on = None
 
 
 def upgrade() -> None:
+    baseline_tables = [
+        table
+        for name, table in metadata.tables.items()
+        if name != "source_runtime_settings"
+    ]
     metadata.create_all(
         op.get_bind(),
+        tables=baseline_tables,
         checkfirst=not context.is_offline_mode(),
     )
 

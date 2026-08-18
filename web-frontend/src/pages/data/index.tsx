@@ -68,6 +68,8 @@ const DataAssetsPage: React.FC = () => {
   const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [savingSettings, setSavingSettings] = useState<string | null>(null);
+  const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -105,6 +107,26 @@ const DataAssetsPage: React.FC = () => {
     setTriggering(null);
   }, [load]);
 
+  const updateSourceSettings = useCallback(async (
+    source: DataSourceStatus,
+    next: Partial<Pick<DataSourceStatus, 'enabled' | 'schedule' | 'max_details_per_run'>>,
+  ) => {
+    setSavingSettings(source.source_id);
+    setError(null);
+    const result = await dataAssetApi.updateSourceSettings(source.source_id, {
+      enabled: next.enabled ?? source.enabled,
+      schedule: next.schedule ?? source.schedule ?? '30m',
+      max_details_per_run: next.max_details_per_run ?? source.max_details_per_run ?? 100,
+    });
+    if (!result.success) {
+      setError(result.error || '暂时无法保存采集设置');
+      setSavingSettings(null);
+      return;
+    }
+    await load();
+    setSavingSettings(null);
+  }, [load]);
+
   const sourceNames = useMemo(
     () => new Map(sources.map((source) => [source.source_id, source.source_name])),
     [sources],
@@ -139,7 +161,7 @@ const DataAssetsPage: React.FC = () => {
       <section className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         {error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 text-rose-800" role="alert">
-            <p className="font-medium">无法读取数据资产</p><p className="mt-1 text-sm">{error}</p>
+            <p className="font-medium">操作没有完成</p><p className="mt-1 text-sm">{error}</p>
           </div>
         ) : loading && !status ? (
           <div className="py-20 text-center" role="status"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" /><p className="text-slate-600">正在读取数据资产</p></div>
@@ -185,6 +207,75 @@ const DataAssetsPage: React.FC = () => {
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${state.tone}`}>{state.label}</span>
                     </div>
                     <p className="mt-3 min-h-10 text-sm leading-5 text-slate-600">{state.description}</p>
+                    <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3">
+                      <div className="col-span-2 flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium text-slate-700">
+                          自动采集 · {source.enabled ? '已开启' : '已关闭'}
+                          {savingSettings === source.source_id ? <span className="ml-2 font-normal text-cyan-700" role="status">正在保存…</span> : null}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={source.enabled}
+                          aria-label={`${source.source_name}自动采集`}
+                          disabled={!source.can_enable || savingSettings === source.source_id}
+                          onClick={() => updateSourceSettings(source, { enabled: !source.enabled })}
+                          className="relative min-h-11 w-14 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className={`absolute left-1 top-2 h-7 w-12 rounded-full transition ${source.enabled ? 'bg-cyan-600' : 'bg-slate-300'}`} aria-hidden="true">
+                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${source.enabled ? 'left-6' : 'left-1'}`} />
+                          </span>
+                        </button>
+                      </div>
+                      <label className="text-xs text-slate-500">
+                        采集频率
+                        <select
+                          value={source.schedule || '30m'}
+                          disabled={savingSettings === source.source_id}
+                          onChange={(event) => updateSourceSettings(source, { schedule: event.target.value })}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:opacity-50"
+                        >
+                          <option value="15m">每 15 分钟</option>
+                          <option value="30m">每 30 分钟</option>
+                          <option value="1h">每小时</option>
+                          <option value="6h">每 6 小时</option>
+                          <option value="12h">每 12 小时</option>
+                          <option value="24h">每天</option>
+                        </select>
+                      </label>
+                      <label className="text-xs text-slate-500">
+                        单次采集上限
+                        <input
+                          key={`${source.source_id}-${source.max_details_per_run}`}
+                          type="number"
+                          min={1}
+                          max={500}
+                          aria-invalid={Boolean(batchErrors[source.source_id])}
+                          aria-describedby={`batch-help-${source.source_id}`}
+                          defaultValue={source.max_details_per_run || 100}
+                          disabled={savingSettings === source.source_id}
+                          onBlur={(event) => {
+                            const value = Number(event.target.value);
+                            if (!Number.isInteger(value) || value < 1 || value > 500) {
+                              setBatchErrors((current) => ({ ...current, [source.source_id]: '请输入 1 到 500 之间的整数' }));
+                              return;
+                            }
+                            setBatchErrors((current) => {
+                              const next = { ...current };
+                              delete next[source.source_id];
+                              return next;
+                            });
+                            if (value !== source.max_details_per_run) {
+                              updateSourceSettings(source, { max_details_per_run: value });
+                            }
+                          }}
+                          className={`mt-1 min-h-11 w-full rounded-lg border bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 disabled:opacity-50 ${batchErrors[source.source_id] ? 'border-rose-500 focus:ring-rose-100' : 'border-slate-300 focus:border-cyan-600 focus:ring-cyan-100'}`}
+                        />
+                        <span id={`batch-help-${source.source_id}`} className={`mt-1 block leading-4 ${batchErrors[source.source_id] ? 'text-rose-700' : 'text-slate-500'}`}>
+                          {batchErrors[source.source_id] || '1–500 条'}
+                        </span>
+                      </label>
+                    </div>
                     <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4 text-sm">
                       <div><dt className="text-xs text-slate-500">原始证据</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.raw_count}</dd></div>
                       <div><dt className="text-xs text-slate-500">发现详情</dt><dd className="mt-1 font-semibold tabular-nums text-slate-950">{source.last_run?.detail_discovered ?? 0}</dd></div>
@@ -201,7 +292,7 @@ const DataAssetsPage: React.FC = () => {
                       className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <RefreshCw className={`h-4 w-4 ${triggering === source.source_id ? 'animate-spin' : ''}`} aria-hidden="true" />
-                      {!source.enabled ? '需要授权通道' : source.collection_state === 'queued' ? '等待采集' : source.collection_state === 'running' ? '正在采集' : '立即采集'}
+                      {!source.can_enable ? '需要授权通道' : !source.enabled ? '采集已关闭' : source.collection_state === 'queued' ? '等待采集' : source.collection_state === 'running' ? '正在采集' : '立即采集'}
                     </button>
                     </article>
                   );

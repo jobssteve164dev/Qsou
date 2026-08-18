@@ -20,6 +20,7 @@ VERIFICATION_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("processing_outbox", ("content_version_id",)),
     ("adapter_runs", ("run_id",)),
     ("source_cursors", ("source_id",)),
+    ("source_runtime_settings", ("source_id",)),
     ("adapter_run_requests", ("request_id",)),
 )
 

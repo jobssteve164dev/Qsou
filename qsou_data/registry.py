@@ -13,6 +13,24 @@ class UnknownSourceError(ValueError):
     """URL 不属于任何已登记的正式来源。"""
 
 
+AUTOMATED_ACCESS_RIGHTS = {"automated_access_allowed"}
+
+
+def automated_access_allowed(source: Dict[str, Any]) -> bool:
+    """Return whether a source may enter any network-driven collection path."""
+    return bool(source.get("enabled")) and source.get("rights_status") in AUTOMATED_ACCESS_RIGHTS
+
+
+def assert_automated_access(source: Dict[str, Any]) -> None:
+    if not source.get("enabled"):
+        raise ValueError(f"来源未启用，不能自动采集: {source.get('source_id', 'unknown')}")
+    if source.get("rights_status") not in AUTOMATED_ACCESS_RIGHTS:
+        raise ValueError(
+            "来源没有允许自动访问的有效权利状态: "
+            f"{source.get('source_id', 'unknown')}/{source.get('rights_status', 'missing')}"
+        )
+
+
 def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -52,11 +70,23 @@ class SourceRegistry:
             adapter_kind = str(source.get("adapter_kind", "")).strip()
             if not adapter_id or not adapter_version or not adapter_kind:
                 raise ValueError(f"来源缺少适配器契约: {source_id}")
+            rights_status = str(source.get("rights_status", "")).strip()
+            rights_reference = str(source.get("rights_reference", "")).strip()
+            enabled = bool(source.get("enabled", True))
+            if not rights_status:
+                raise ValueError(f"来源缺少权利状态: {source_id}")
+            if rights_status in AUTOMATED_ACCESS_RIGHTS and not rights_reference:
+                raise ValueError(f"允许自动访问的来源必须登记权利依据: {source_id}")
+            if enabled and rights_status not in AUTOMATED_ACCESS_RIGHTS:
+                raise ValueError(
+                    f"未取得自动访问授权的来源不能启用: {source_id}/{rights_status}"
+                )
 
             normalized = dict(source)
             normalized["source_id"] = source_id
             normalized["domains"] = domains
-            normalized.setdefault("enabled", True)
+            normalized["rights_status"] = rights_status
+            normalized["enabled"] = enabled
             normalized.setdefault("health_state", "configured")
             sources[source_id] = normalized
 
