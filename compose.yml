@@ -1,6 +1,17 @@
 name: qsou
 
 x-gitops:
+  public_entry:
+    service: web
+    container_port: 3000
+    healthcheck:
+      path: /
+      expected_json: {}
+  services:
+    api: {exposure: internal}
+    collector: {exposure: internal}
+    elasticsearch: {exposure: internal}
+    indexer: {exposure: internal}
   database_migration:
     service: api
     command:
