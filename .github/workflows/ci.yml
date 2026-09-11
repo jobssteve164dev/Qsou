@@ -28,6 +28,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://qsou:qsou-test-password@127.0.0.1:5432/qsou_test
       QSOU_TEST_DATABASE_URL: postgresql://qsou:qsou-test-password@127.0.0.1:5432/qsou_test
+      QSOU_TEST_DATABASE_RESET: confirmed
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
