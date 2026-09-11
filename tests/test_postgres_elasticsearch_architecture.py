@@ -162,7 +162,7 @@ class ProductionComposeContractTest(unittest.TestCase):
         services = compose["services"]
         self.assertEqual(
             compose["x-gitops"]["public_entry"]["healthcheck"],
-            {"path": "/"},
+            {"path": "/api/health", "expected_json": {"service": "qsou-web"}},
         )
         self.assertEqual(
             compose["x-gitops"]["database_migration"],

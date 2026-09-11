@@ -5,7 +5,9 @@ x-gitops:
     service: web
     container_port: 3000
     healthcheck:
-      path: /
+      path: /api/health
+      expected_json:
+        service: qsou-web
   services:
     api: {exposure: internal}
     collector: {exposure: internal}
