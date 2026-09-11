@@ -328,7 +328,7 @@ class DataAssetStoreTest(unittest.TestCase):
                 ).fetchone()
             )
         self.assertEqual(closed["state"], "cancelled")
-        with self.assertRaisesRegex(DataAssetError, "没有允许自动访问"):
+        with self.assertRaisesRegex(DataAssetError, "来源未启用"):
             self.store.request_adapter_run("safe", requested_by="admin")
 
     def test_generic_snapshots_are_preserved_but_removed_from_formal_search(self):
