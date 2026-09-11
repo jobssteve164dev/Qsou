@@ -173,6 +173,10 @@ class ProductionComposeContractTest(unittest.TestCase):
         )
         for service in services.values():
             self.assertEqual(service.get("platform"), "linux/amd64")
+        self.assertEqual(
+            services["elasticsearch"]["image"],
+            "docker.elastic.co/elasticsearch/elasticsearch:8.11.0@sha256:b0effe89b1ac5a73e116ccdc897e807d3546ea06afb93d8873a7c707d3016186",
+        )
         for name in ("api", "collector", "indexer"):
             environment = services[name]["environment"]
             self.assertEqual(environment["DATABASE_URL"], "${DATABASE_URL:?DATABASE_URL is required}")
@@ -200,10 +204,6 @@ class ProductionComposeContractTest(unittest.TestCase):
         self.assertNotIn("image", services["indexer"])
         self.assertNotIn("healthcheck", services["indexer"])
         self.assertIn("qsou-elasticsearch-data", compose["volumes"])
-        self.assertEqual(
-            services["elasticsearch"]["image"],
-            "docker.elastic.co/elasticsearch/elasticsearch:8.11.0",
-        )
         self.assertNotIn("build", services["elasticsearch"])
         self.assertEqual(services["elasticsearch"]["restart"], "unless-stopped")
         self.assertNotIn("ports", services["elasticsearch"])
