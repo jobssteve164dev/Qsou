@@ -221,6 +221,29 @@ class ProductionComposeContractTest(unittest.TestCase):
             services["api"]["healthcheck"]["test"][-1],
         )
 
+    def test_web_build_runs_on_builder_architecture(self):
+        dockerfile = (PROJECT_ROOT / "deploy" / "web.Dockerfile").read_text()
+
+        self.assertIn("ARG BUILDPLATFORM", dockerfile)
+        self.assertIn(
+            "FROM --platform=${BUILDPLATFORM} node:20-bookworm-slim AS build",
+            dockerfile,
+        )
+        self.assertIn("AS runtime-dependencies", dockerfile)
+        self.assertIn(
+            "npm ci --omit=dev --ignore-scripts --cpu=x64 --os=linux --libc=glibc",
+            dockerfile,
+        )
+        self.assertIn(
+            "COPY --from=runtime-dependencies /app/node_modules ./node_modules",
+            dockerfile,
+        )
+        self.assertNotIn(
+            "COPY --from=build /app/.next/standalone ./",
+            dockerfile,
+        )
+        self.assertIn("FROM node:20-bookworm-slim AS runtime", dockerfile)
+
     def test_release_context_excludes_runtime_and_removes_retired_entrypoints(self):
         ignored = set((PROJECT_ROOT / ".dockerignore").read_text().splitlines())
         self.assertIn(".solopreneur", ignored)

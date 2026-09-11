@@ -70,3 +70,31 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  web-image-cross-architecture:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: amd64
+      - name: Build and exercise the final amd64 web image
+        run: |
+          docker build --platform linux/amd64 -f deploy/web.Dockerfile -t qsou-web-cross-architecture .
+          test "$(docker image inspect qsou-web-cross-architecture --format '{{.Architecture}}')" = "amd64"
+          docker run --name qsou-web-sharp-check --entrypoint node qsou-web-cross-architecture \
+            -e "require('sharp'); console.log(process.arch)"
+          docker run -d --name qsou-web-http-check -p 3000:3000 qsou-web-cross-architecture
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            test "$attempt" -lt 30
+            sleep 2
+          done
+          docker exec qsou-web-http-check sh -eu -c '
+            test -d /app/node_modules/@img/sharp-linux-x64
+            test -d /app/node_modules/@img/sharp-libvips-linux-x64
+            test ! -d /app/node_modules/@img/sharp-linux-arm64
+            test ! -d /app/node_modules/@img/sharp-libvips-linux-arm64
+          '
