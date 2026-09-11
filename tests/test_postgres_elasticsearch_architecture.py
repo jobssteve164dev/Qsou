@@ -161,6 +161,10 @@ class ProductionComposeContractTest(unittest.TestCase):
         compose = yaml.safe_load((PROJECT_ROOT / "compose.yml").read_text())
         services = compose["services"]
         self.assertEqual(
+            compose["x-gitops"]["public_entry"]["healthcheck"],
+            {"path": "/"},
+        )
+        self.assertEqual(
             compose["x-gitops"]["database_migration"],
             {
                 "service": "api",
