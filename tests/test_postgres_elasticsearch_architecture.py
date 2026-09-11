@@ -198,6 +198,10 @@ class ProductionComposeContractTest(unittest.TestCase):
             {"context": ".", "dockerfile": "deploy/api.Dockerfile"},
         )
         self.assertEqual(
+            services["web"]["build"]["args"]["NEXT_TELEMETRY_DISABLED"],
+            "1",
+        )
+        self.assertEqual(
             services["indexer"]["command"],
             ["python", "-m", "qsou_data.indexer"],
         )
