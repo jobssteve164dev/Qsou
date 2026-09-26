@@ -124,6 +124,22 @@ class BaselineApiTest(unittest.TestCase):
             self.assertGreater(status.json()["archive_size_bytes"], len("Qsou 基线原始证据".encode("utf-8")))
             self.assertEqual(status.json()["registered_sources"], 18)
             self.assertEqual(status.json()["active_sources"], 8)
+            evidence_processing = client.get(
+                "/api/v1/data/evidence-processing",
+                headers=headers,
+            )
+            self.assertEqual(evidence_processing.status_code, 200)
+            self.assertEqual(
+                evidence_processing.json()["counts"],
+                status.json()["evidence_replay"],
+            )
+            self.assertEqual(evidence_processing.json()["current"], [])
+            current_only = client.get(
+                "/api/v1/data/evidence-processing?include_counts=false",
+                headers=headers,
+            )
+            self.assertEqual(current_only.status_code, 200)
+            self.assertNotIn("counts", current_only.json())
 
             authorization = client.post(
                 "/api/v1/data/sources/safe/authorization",

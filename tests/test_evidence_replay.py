@@ -25,12 +25,16 @@ class RecordingStore:
         self._evidence = list(evidence)
         self.documents = []
         self.completed = []
+        self.started = []
 
     def claim_evidence_replay(self, limit):
         return self._evidence[:limit]
 
     def evidence_body_path(self, raw_object_id):
         return self.root / f"{raw_object_id}.body"
+
+    def start_evidence_replay(self, raw_object_id):
+        self.started.append(raw_object_id)
 
     def evidence_has_document(self, _raw_object_id):
         return False
@@ -133,6 +137,7 @@ class EvidenceReplayTest(unittest.TestCase):
         self.assertEqual(store.documents[0]["source_document_id"], "source-article-42")
         self.assertEqual(store.documents[0]["raw_object_id"], "detail")
         self.assertEqual(store.documents[0]["metadata"]["company_code"], "600000")
+        self.assertEqual(store.started, ["detail"])
         self.assertEqual(store.completed, [("detail", "parsed", None)])
 
     def test_one_malformed_evidence_does_not_block_the_next_document(self):
@@ -155,6 +160,7 @@ class EvidenceReplayTest(unittest.TestCase):
         self.assertEqual(store.completed[0][0:2], ("broken", "failed"))
         self.assertIn("broken fixture", store.completed[0][2])
         self.assertEqual(store.completed[1], ("healthy", "parsed", None))
+        self.assertEqual(store.started, ["broken", "healthy"])
 
     def test_historical_detail_without_request_context_uses_its_detail_adapter(self):
         evidence = self._evidence("legacy-detail", body=b"article")

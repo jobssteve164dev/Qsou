@@ -11,6 +11,7 @@ import {
   LoginResponse,
   SystemStats,
   DataAssetStatus,
+  EvidenceProcessingStatus,
   DataSourceStatus,
   EvidenceRecord
 } from '@/types';
@@ -176,6 +177,9 @@ export const searchApi = {
 export const dataAssetApi = {
   status: async (): Promise<ApiResponse<DataAssetStatus>> => {
     return apiRequest<DataAssetStatus>('get', '/data/status');
+  },
+  evidenceProcessing: async (includeCounts = true): Promise<ApiResponse<EvidenceProcessingStatus>> => {
+    return apiRequest<EvidenceProcessingStatus>('get', `/data/evidence-processing?include_counts=${includeCounts}`);
   },
   sources: async (): Promise<ApiResponse<{ sources: DataSourceStatus[] }>> => {
     return apiRequest<{ sources: DataSourceStatus[] }>('get', '/data/sources');

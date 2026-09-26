@@ -140,6 +140,14 @@ export interface DataAssetStatus {
   active_documents: number;
   archive_size_bytes: number;
   processing: Record<string, number>;
+  evidence_replay?: Record<string, number>;
+  evidence_replay_current?: Array<{
+    raw_object_id: string;
+    source_id: string;
+    url: string;
+    attempts: number;
+    started_at: string;
+  }>;
   network?: Record<string, number>;
   collector: {
     state: 'starting' | 'not_started' | 'running' | 'idle' | 'degraded' | 'stopping' | 'disabled' | 'unknown';
@@ -151,6 +159,11 @@ export interface DataAssetStatus {
     next_run_at?: string;
     results?: Record<string, number>;
   };
+}
+
+export interface EvidenceProcessingStatus {
+  counts?: Record<string, number>;
+  current: NonNullable<DataAssetStatus['evidence_replay_current']>;
 }
 
 export interface DataSourceStatus {

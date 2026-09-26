@@ -41,6 +41,14 @@ async def data_asset_status():
     return store.status()
 
 
+@router.get("/evidence-processing")
+async def evidence_processing_status(
+    include_counts: bool = Query(default=True),
+):
+    """查看原始证据处理进度与当前条目。"""
+    return store.evidence_replay_status(include_counts=include_counts)
+
+
 @router.get("/sources")
 async def list_sources():
     """查看正式登记来源及实际采集状态。"""

@@ -84,6 +84,7 @@ def replay_evidence_batch(store, adapters=None, *, batch_size: int = 50) -> dict
     for evidence in evidence_batch:
         raw_object_id = str(evidence["raw_object_id"])
         try:
+            store.start_evidence_replay(raw_object_id)
             if store.evidence_has_document(raw_object_id):
                 store.complete_evidence_replay(raw_object_id, "parsed")
                 result["parsed"] += 1

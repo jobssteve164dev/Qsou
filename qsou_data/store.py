@@ -700,9 +700,8 @@ class DataAssetStore:
             outbox_rows = connection.execute(
                 "SELECT state, COUNT(*) AS count FROM processing_outbox GROUP BY state"
             ).fetchall()
-            replay_rows = connection.execute(
-                "SELECT state, COUNT(*) AS count FROM evidence_replay_outbox GROUP BY state"
-            ).fetchall()
+
+        replay_status = self.evidence_replay_status()
 
         collector = {"state": "not_started"}
         collector_status_path = self.root / "collector-status.json"
@@ -729,10 +728,37 @@ class DataAssetStore:
             "active_documents": active_count,
             "archive_size_bytes": self.object_store.size_bytes("objects/"),
             "processing": {row["state"]: row["count"] for row in outbox_rows},
-            "evidence_replay": {row["state"]: row["count"] for row in replay_rows},
+            "evidence_replay": replay_status["counts"],
+            "evidence_replay_current": replay_status["current"],
             "collector": collector,
             "network": network_states,
         }
+
+    def evidence_replay_status(self, *, include_counts: bool = True) -> Dict[str, Any]:
+        """Return the lightweight live view used by the governance page."""
+        with self._connection() as connection:
+            current_rows = connection.execute(
+                """
+                SELECT r.raw_object_id, r.source_id, r.url,
+                       o.attempts, o.updated_at AS started_at
+                FROM evidence_replay_outbox o
+                JOIN raw_objects r ON r.raw_object_id = o.raw_object_id
+                WHERE o.state = 'active'
+                ORDER BY o.updated_at DESC, o.raw_object_id ASC
+                LIMIT 20
+                """
+            ).fetchall()
+            replay_rows = (
+                connection.execute(
+                    "SELECT state, COUNT(*) AS count FROM evidence_replay_outbox GROUP BY state"
+                ).fetchall()
+                if include_counts
+                else None
+            )
+        result = {"current": [dict(row) for row in current_rows]}
+        if replay_rows is not None:
+            result["counts"] = {row["state"]: row["count"] for row in replay_rows}
+        return result
 
     def list_sources(self) -> List[Dict[str, Any]]:
         with self._connection() as connection:
@@ -1475,7 +1501,7 @@ class DataAssetStore:
                     SELECT raw_object_id
                     FROM evidence_replay_outbox
                     WHERE state = 'pending'
-                       OR (state = 'processing' AND updated_at < %s)
+                       OR (state IN ('processing', 'active') AND updated_at < %s)
                        OR (state = 'failed' AND attempts < %s AND updated_at < %s)
                     ORDER BY updated_at ASC, raw_object_id ASC
                     LIMIT %s
@@ -1500,6 +1526,20 @@ class DataAssetStore:
                     evidence.append(self._evidence_row(raw))
         return evidence
 
+    def start_evidence_replay(self, raw_object_id: str) -> None:
+        """Mark the single evidence item whose adapter is running now."""
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE evidence_replay_outbox
+                SET state = 'active', updated_at = %s
+                WHERE raw_object_id = %s AND state = 'processing'
+                """,
+                (utc_now(), raw_object_id),
+            )
+            if updated.rowcount != 1:
+                raise DataAssetError(f"原始证据未处于已领取状态: {raw_object_id}")
+
     def complete_evidence_replay(
         self,
         raw_object_id: str,
@@ -1514,7 +1554,7 @@ class DataAssetStore:
                 """
                 UPDATE evidence_replay_outbox
                 SET state = %s, last_error = %s, updated_at = %s
-                WHERE raw_object_id = %s AND state = 'processing'
+                WHERE raw_object_id = %s AND state IN ('processing', 'active')
                 """,
                 (state, error, utc_now(), raw_object_id),
             )

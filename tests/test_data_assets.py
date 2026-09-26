@@ -90,8 +90,19 @@ class DataAssetStoreTest(unittest.TestCase):
 
         self.assertEqual([item["raw_object_id"] for item in claimed], [evidence["raw_object_id"]])
         self.assertEqual(claimed[0]["request_context"]["source_document_id"], "replay-42")
+        self.assertEqual(self.store.status()["evidence_replay_current"], [])
+        self.store.start_evidence_replay(evidence["raw_object_id"])
+        processing_status = self.store.status()
+        self.assertEqual(len(processing_status["evidence_replay_current"]), 1)
+        current = processing_status["evidence_replay_current"][0]
+        self.assertEqual(current["raw_object_id"], evidence["raw_object_id"])
+        self.assertEqual(current["source_id"], "yicai")
+        self.assertEqual(current["url"], "https://www.yicai.com/news/replay-42")
+        self.assertEqual(current["attempts"], 1)
+        self.assertTrue(current["started_at"])
         self.store.complete_evidence_replay(evidence["raw_object_id"], "skipped", "fixture")
         self.assertEqual(self.store.status()["evidence_replay"], {"skipped": 1})
+        self.assertEqual(self.store.status()["evidence_replay_current"], [])
         verified = verify_storage(self.store)
         self.assertEqual(verified["table_counts"]["evidence_replay_outbox"], 1)
 

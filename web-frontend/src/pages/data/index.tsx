@@ -101,6 +101,31 @@ const DataAssetsPage: React.FC = () => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    let stopped = false;
+    let timer: number;
+    let refreshCount = 0;
+    const refresh = async () => {
+      if (!document.hidden) {
+        refreshCount += 1;
+        const result = await dataAssetApi.evidenceProcessing(refreshCount % 6 === 0);
+        if (!stopped && result.success && result.data) {
+          setStatus((current) => current ? {
+            ...current,
+            evidence_replay: result.data?.counts || current.evidence_replay,
+            evidence_replay_current: result.data?.current,
+          } : current);
+        }
+      }
+      if (!stopped) timer = window.setTimeout(refresh, 10000);
+    };
+    timer = window.setTimeout(refresh, 10000);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const saveAuthorization = useCallback(async (source: DataSourceStatus) => {
     setSavingSettings(source.source_id);
     setError(null);
@@ -170,6 +195,26 @@ const DataAssetsPage: React.FC = () => {
     [sources],
   );
   const collector = collectorMessage(status?.collector);
+  const replay = status?.evidence_replay || {};
+  const replayStates = [
+    { key: 'pending', label: '待处理', value: (replay.pending || 0) + (replay.processing || 0), tone: 'text-slate-700' },
+    { key: 'active', label: '正在处理', value: replay.active || 0, tone: 'text-cyan-700' },
+    { key: 'parsed', label: '已生成文档', value: replay.parsed || 0, tone: 'text-emerald-700' },
+    { key: 'skipped', label: '无需生成', value: replay.skipped || 0, tone: 'text-slate-700' },
+    { key: 'failed', label: '处理失败', value: replay.failed || 0, tone: 'text-rose-700' },
+  ];
+  const replayTotal = replayStates.reduce((sum, item) => sum + item.value, 0);
+  const replayCompleted = (replay.parsed || 0) + (replay.skipped || 0);
+  const replayProgress = replayTotal ? Math.round((replayCompleted / replayTotal) * 100) : 0;
+  const replayActive = replay.active || 0;
+  const replayWaiting = (replay.pending || 0) + (replay.processing || 0);
+  const replayBadge = replayActive > 0
+    ? { label: `正在处理 ${replayActive} 条`, tone: 'bg-cyan-50 text-cyan-800', dot: 'animate-pulse bg-cyan-500' }
+    : replayWaiting > 0
+      ? { label: '等待处理下一条', tone: 'bg-amber-50 text-amber-800', dot: 'bg-amber-500' }
+      : (replay.failed || 0) > 0
+        ? { label: `${replay.failed} 条处理失败`, tone: 'bg-rose-50 text-rose-800', dot: 'bg-rose-500' }
+        : { label: '全部处理完成', tone: 'bg-emerald-50 text-emerald-800', dot: 'bg-emerald-500' };
 
   return (
     <Layout>
@@ -230,6 +275,51 @@ const DataAssetsPage: React.FC = () => {
                   <div><dt className="text-slate-500">最近完成</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.last_finished_at)}</dd></div>
                   <div><dt className="text-slate-500">下次检查</dt><dd className="mt-1 font-medium text-slate-800">{formatTime(status.collector.next_run_at)}</dd></div>
                 </dl>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-950">原始证据处理</h2>
+                    <p className="mt-1 text-sm text-slate-500">系统逐条检查已保存的证据，符合条件的内容会生成可搜索文档。状态每 10 秒更新。</p>
+                  </div>
+                  <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${replayBadge.tone}`} aria-live="polite">
+                    <span className={`h-2 w-2 rounded-full ${replayBadge.dot}`} aria-hidden="true" />
+                    {replayBadge.label}
+                  </span>
+                </div>
+                <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="原始证据处理进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={replayProgress}>
+                  <div className="h-full rounded-full bg-cyan-600 transition-all" style={{ width: `${replayProgress}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">已完成 {replayCompleted.toLocaleString('zh-CN')} / {replayTotal.toLocaleString('zh-CN')} 条（{replayProgress}%）</p>
+              </div>
+              <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-5">
+                {replayStates.map((item) => (
+                  <div key={item.key} className="bg-white px-5 py-4">
+                    <dt className="text-xs text-slate-500">{item.label}</dt>
+                    <dd className={`mt-1 text-2xl font-semibold tabular-nums ${item.tone}`}>{item.value.toLocaleString('zh-CN')}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="border-t border-slate-100 px-5 py-5 sm:px-6">
+                <h3 className="text-sm font-semibold text-slate-950">当前正在处理</h3>
+                {(status.evidence_replay_current || []).length > 0 ? (
+                  <div className="mt-3 divide-y divide-slate-100">
+                    {(status.evidence_replay_current || []).map((item) => (
+                      <div key={item.raw_object_id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-900">{item.url}</p>
+                          <p className="mt-1 text-xs text-slate-500">{sourceNames.get(item.source_id) || item.source_id} · 开始于 {formatTime(item.started_at)} · 第 {item.attempts} 次处理</p>
+                        </div>
+                        <a href={dataAssetApi.evidenceContentUrl(item.raw_object_id)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 text-sm font-medium text-cyan-700 hover:text-cyan-900">查看原始证据 <ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">当前没有正在处理的证据；若仍有待处理数据，系统会自动继续。</p>
+                )}
               </div>
             </div>
 
