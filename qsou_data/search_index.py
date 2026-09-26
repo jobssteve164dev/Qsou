@@ -136,6 +136,8 @@ class ElasticsearchIndex:
             actions,
             raise_on_error=False,
             refresh=False,
+            chunk_size=20,
+            max_chunk_bytes=5 * 1024 * 1024,
             max_retries=2,
             initial_backoff=1,
             max_backoff=4,

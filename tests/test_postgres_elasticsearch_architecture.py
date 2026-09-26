@@ -414,6 +414,8 @@ class ElasticsearchProjectionTest(unittest.TestCase):
         self.assertEqual(raised.exception.failed_ids, [])
         self.assertEqual(raised.exception.retryable_ids, ["busy"])
         self.assertEqual(streaming.call_args.kwargs["max_retries"], 2)
+        self.assertEqual(streaming.call_args.kwargs["chunk_size"], 20)
+        self.assertEqual(streaming.call_args.kwargs["max_chunk_bytes"], 5 * 1024 * 1024)
 
     def test_cycle_reconciles_all_versions_without_rewriting_outbox_state(self):
         class Store:
