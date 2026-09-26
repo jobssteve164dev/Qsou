@@ -19,7 +19,7 @@ from .base import (
 
 
 _SUPPORTED_FORMS = {"8-K", "10-K", "10-Q", "20-F", "40-F", "6-K"}
-_ACCESSION_RE = re.compile(r"(?P<accession>\d{10}-\d{2}-\d{6})\.txt$")
+_ACCESSION_RE = re.compile(r"(?P<accession>\d{10}-\d{2}-\d{6})\.txt(?:$|\?)")
 _DECLARED_HEADERS = {
     "User-Agent": "QSou Investment Data qsou-contact@szlk.uk",
     "Accept-Encoding": "gzip, deflate",
@@ -31,6 +31,13 @@ class SecEdgarAdapter(SourceAdapter):
     adapter_id = "sec-edgar-filings"
     version = "1.0.0"
     document_type = "filing"
+    link_patterns = (
+        r"/Archives/edgar/data/\d+/(?:[^/]+/)?\d{10}-\d{2}-\d{6}\.txt(?:$|\?)",
+    )
+
+    def reference_id(self, url: str) -> str:
+        match = _ACCESSION_RE.search(url)
+        return match.group("accession") if match else super().reference_id(url)
 
     def initial_requests(
         self,

@@ -57,6 +57,7 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
             "raw_objects",
             "standard_documents",
             "document_evidence",
+            "evidence_replay_outbox",
             "processing_outbox",
             "adapter_runs",
             "source_cursors",
@@ -78,6 +79,8 @@ class PostgresOnlyCatalogTest(unittest.TestCase):
         rendered = output.getvalue().lower()
         self.assertIn("create table raw_objects", rendered)
         self.assertIn("create table standard_documents", rendered)
+        self.assertIn("create table evidence_replay_outbox", rendered)
+        self.assertIn("request_context_json", rendered)
         self.assertEqual(rendered.count("create table source_runtime_settings"), 1)
         self.assertEqual(rendered.count("create table source_authorizations"), 1)
         self.assertIn("insert into alembic_version", rendered)

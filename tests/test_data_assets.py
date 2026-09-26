@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from qsou_data import DataAssetError, DataAssetStore, SourceRegistry
 from qsou_data.processing import BaselineDocumentProcessor, run_processing_batch
+from qsou_data.verify import verify_storage
 
 
 _test_database_url = os.getenv("QSOU_TEST_DATABASE_URL", "").strip()
@@ -67,6 +68,54 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertNotIn("set-cookie", stored["response_headers"])
         self.assertNotIn("authorization", stored["response_headers"])
         self.assertEqual(self.store.evidence_body_path(first["raw_object_id"]).read_bytes(), "第一财经原始页面".encode("utf-8"))
+
+    def test_archived_evidence_enters_durable_replay_with_request_context(self):
+        evidence = self.store.archive_response(
+            source_id="yicai",
+            url="https://www.yicai.com/news/replay-42",
+            status_code=200,
+            response_headers={b"Content-Type": b"text/html; charset=utf-8"},
+            body="待自动回放的正文".encode("utf-8"),
+            fetched_at="2026-09-26T08:00:00Z",
+            content_type="text/html; charset=utf-8",
+            encoding="utf-8",
+            request_context={
+                "qsou_request_kind": "detail",
+                "source_document_id": "replay-42",
+                "title": "待自动回放的正文",
+            },
+        )
+
+        claimed = self.store.claim_evidence_replay(10)
+
+        self.assertEqual([item["raw_object_id"] for item in claimed], [evidence["raw_object_id"]])
+        self.assertEqual(claimed[0]["request_context"]["source_document_id"], "replay-42")
+        self.store.complete_evidence_replay(evidence["raw_object_id"], "skipped", "fixture")
+        self.assertEqual(self.store.status()["evidence_replay"], {"skipped": 1})
+        verified = verify_storage(self.store)
+        self.assertEqual(verified["table_counts"]["evidence_replay_outbox"], 1)
+
+    def test_failed_evidence_replay_is_automatically_retried(self):
+        evidence = self._archive("回放时发生瞬时读取失败")
+        claimed = self.store.claim_evidence_replay(1)
+        self.assertEqual(claimed[0]["raw_object_id"], evidence["raw_object_id"])
+        self.store.complete_evidence_replay(
+            evidence["raw_object_id"],
+            "failed",
+            "temporary object storage failure",
+        )
+
+        retried = self.store.claim_evidence_replay(1, retry_after_seconds=0)
+
+        self.assertEqual(retried[0]["raw_object_id"], evidence["raw_object_id"])
+        self.store.complete_evidence_replay(evidence["raw_object_id"], "failed", "again")
+        final_attempt = self.store.claim_evidence_replay(1, retry_after_seconds=0)
+        self.assertEqual(final_attempt[0]["raw_object_id"], evidence["raw_object_id"])
+        self.store.complete_evidence_replay(evidence["raw_object_id"], "failed", "terminal")
+        self.assertEqual(
+            self.store.claim_evidence_replay(1, retry_after_seconds=0),
+            [],
+        )
 
     def test_document_versions_keep_first_seen_and_search_the_active_version(self):
         evidence_v1 = self._archive("旧版正文")

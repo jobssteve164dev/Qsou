@@ -17,6 +17,7 @@ VERIFICATION_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("raw_objects", ("raw_object_id",)),
     ("standard_documents", ("content_version_id",)),
     ("document_evidence", ("content_version_id", "raw_object_id")),
+    ("evidence_replay_outbox", ("raw_object_id",)),
     ("processing_outbox", ("content_version_id",)),
     ("adapter_runs", ("run_id",)),
     ("source_cursors", ("source_id",)),
@@ -93,6 +94,11 @@ def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Di
                 SELECT COUNT(*) AS count FROM processing_outbox o
                 LEFT JOIN standard_documents d ON d.content_version_id = o.content_version_id
                 WHERE d.content_version_id IS NULL
+            """,
+            "replay_without_raw": """
+                SELECT COUNT(*) AS count FROM evidence_replay_outbox o
+                LEFT JOIN raw_objects r ON r.raw_object_id = o.raw_object_id
+                WHERE r.raw_object_id IS NULL
             """,
         }
         orphans = {

@@ -19,6 +19,7 @@ raw_objects = sa.Table(
     sa.Column("content_type", sa.Text, nullable=False),
     sa.Column("encoding", sa.Text),
     sa.Column("response_headers_json", sa.Text, nullable=False),
+    sa.Column("request_context_json", sa.Text, nullable=False, server_default="{}"),
     sa.Column("collector", sa.Text, nullable=False),
     sa.Column("first_fetched_at", sa.Text, nullable=False),
     sa.Column("last_fetched_at", sa.Text, nullable=False),
@@ -26,6 +27,26 @@ raw_objects = sa.Table(
     sa.Column("created_at", sa.Text, nullable=False),
 )
 sa.Index("idx_raw_source_time", raw_objects.c.source_id, raw_objects.c.first_fetched_at.desc())
+
+evidence_replay_outbox = sa.Table(
+    "evidence_replay_outbox",
+    metadata,
+    sa.Column(
+        "raw_object_id",
+        sa.Text,
+        sa.ForeignKey("raw_objects.raw_object_id"),
+        primary_key=True,
+    ),
+    sa.Column("state", sa.Text, nullable=False),
+    sa.Column("attempts", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("last_error", sa.Text),
+    sa.Column("updated_at", sa.Text, nullable=False),
+)
+sa.Index(
+    "idx_evidence_replay_state",
+    evidence_replay_outbox.c.state,
+    evidence_replay_outbox.c.updated_at,
+)
 
 standard_documents = sa.Table(
     "standard_documents",

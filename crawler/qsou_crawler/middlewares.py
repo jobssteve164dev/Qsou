@@ -7,6 +7,25 @@ from qsou_data.registry import UnknownSourceError
 from qsou_data.store import utc_now
 
 
+REPLAY_CONTEXT_KEYS = {
+	"qsou_request_kind",
+	"source_document_id",
+	"title",
+	"published_at",
+	"document_type",
+	"company_code",
+	"company_name",
+	"announcement_type",
+	"content_granularity",
+	"cik",
+	"form_type",
+	"accession_number",
+	"master_index",
+	"sec_stage",
+	"safe_stage",
+}
+
+
 class RawEvidenceDownloaderMiddleware:
 	"""在 Spider 解析前持久化来源响应。"""
 
@@ -39,6 +58,11 @@ class RawEvidenceDownloaderMiddleware:
 				content_type=content_type,
 				encoding=getattr(response, "encoding", None),
 				collector=f"scrapy:{spider.name}",
+				request_context={
+					key: request.meta[key]
+					for key in REPLAY_CONTEXT_KEYS
+					if key in request.meta
+				},
 			)
 			spider.crawler.stats.inc_value("adapter/evidence_archived")
 			# Downloader middleware runs before Scrapy attaches ``request`` to the

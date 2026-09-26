@@ -16,12 +16,17 @@ from pathlib import Path
 from qsou_data import DataAssetStore
 from qsou_data.migration_state import wait_for_migrations
 from qsou_crawler.adapters import AdapterRegistry
+from replay_evidence import replay_evidence_batch
 
 
 DATA_ROOT = Path(os.getenv("QSOU_DATA_ROOT", "/var/lib/qsou"))
 STATUS_PATH = DATA_ROOT / "collector-status.json"
 CRAWLER_ROOT = Path(__file__).resolve().parent
 POLL_SECONDS = max(30, int(os.getenv("QSOU_CRAWL_POLL_SECONDS", "60")))
+EVIDENCE_REPLAY_BATCH_SIZE = max(
+    1,
+    min(int(os.getenv("QSOU_EVIDENCE_REPLAY_BATCH_SIZE", "50")), 500),
+)
 SOURCE_IDS = [
     value.strip()
     for value in os.getenv(
@@ -237,6 +242,25 @@ def source_summary() -> dict[str, object]:
     }
 
 
+def replay_pending_evidence() -> dict[str, int]:
+    result = replay_evidence_batch(
+        STORE,
+        ADAPTERS,
+        batch_size=EVIDENCE_REPLAY_BATCH_SIZE,
+    )
+    if result["claimed"]:
+        print(
+            "QSOU_EVIDENCE_REPLAY="
+            + json.dumps(
+                {**result, "updated_at": iso(utc_now())},
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+    return result
+
+
 def run_requested_sources() -> int:
     completed_count = 0
     while not STOP_REQUESTED:
@@ -274,6 +298,7 @@ def run_requested_sources() -> int:
 
 def run_due_sources() -> None:
     started_at = utc_now()
+    evidence_replay = replay_pending_evidence()
     run_requested_sources()
     for adapter in selected_adapters():
         if STOP_REQUESTED:
@@ -288,6 +313,7 @@ def run_due_sources() -> None:
             updated_at=iso(utc_now()),
         )
         run_adapter(adapter)
+        evidence_replay = replay_pending_evidence()
         run_requested_sources()
 
     finished_at = utc_now()
@@ -314,6 +340,7 @@ def run_due_sources() -> None:
         last_started_at=last_started_at,
         last_finished_at=last_finished_at,
         next_run_at=iso(next_run_at),
+        evidence_replay=evidence_replay,
         sources=sources,
         updated_at=iso(finished_at),
     )

@@ -135,6 +135,7 @@ class DataAssetStore:
         content_type: str = "application/octet-stream",
         encoding: Optional[str] = None,
         collector: str = "qsou-crawler",
+        request_context: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         source_id = normalize_catalog_value(str(source_id))
         url = normalize_catalog_value(str(url))
@@ -143,6 +144,7 @@ class DataAssetStore:
         )
         encoding = normalize_catalog_value(encoding) if encoding is not None else None
         collector = normalize_catalog_value(str(collector))
+        request_context = dict(normalize_catalog_value(dict(request_context or {})))
         fetched_at = normalize_catalog_value(fetched_at) if fetched_at is not None else None
         self.registry.get(source_id)
         if not isinstance(body, bytes):
@@ -193,10 +195,13 @@ class DataAssetStore:
                 connection.execute(
                     """
                     UPDATE raw_objects
-                    SET last_fetched_at = %s, fetch_count = fetch_count + 1
+                    SET last_fetched_at = %s, fetch_count = fetch_count + 1,
+                        request_context_json = CASE
+                            WHEN request_context_json = '{}' AND %s <> '{}'
+                            THEN %s ELSE request_context_json END
                     WHERE raw_object_id = %s
                     """,
-                    (fetched_at, raw_object_id),
+                    (fetched_at, _json(request_context), _json(request_context), raw_object_id),
                 )
             else:
                 connection.execute(
@@ -204,8 +209,9 @@ class DataAssetStore:
                     INSERT INTO raw_objects (
                         raw_object_id, source_id, url, status_code, content_hash,
                         body_path, content_type, encoding, response_headers_json,
-                        collector, first_fetched_at, last_fetched_at, fetch_count, created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                        request_context_json, collector, first_fetched_at,
+                        last_fetched_at, fetch_count, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
                     """,
                     (
                         raw_object_id,
@@ -217,12 +223,22 @@ class DataAssetStore:
                         content_type or "application/octet-stream",
                         encoding,
                         _json(safe_headers),
+                        _json(request_context),
                         collector,
                         fetched_at,
                         fetched_at,
                         utc_now(),
                     ),
                 )
+            connection.execute(
+                """
+                INSERT INTO evidence_replay_outbox (
+                    raw_object_id, state, attempts, last_error, updated_at
+                ) VALUES (%s, 'pending', 0, NULL, %s)
+                ON CONFLICT(raw_object_id) DO NOTHING
+                """,
+                (raw_object_id, fetched_at),
+            )
 
         return self.get_evidence(raw_object_id)
 
@@ -390,6 +406,14 @@ class DataAssetStore:
                 ON CONFLICT DO NOTHING
                 """,
                 (content_version_id, raw_object_id, fetched_at),
+            )
+            connection.execute(
+                """
+                UPDATE evidence_replay_outbox
+                SET state = 'parsed', last_error = NULL, updated_at = %s
+                WHERE raw_object_id = %s
+                """,
+                (now, raw_object_id),
             )
             connection.execute(
                 """
@@ -676,6 +700,9 @@ class DataAssetStore:
             outbox_rows = connection.execute(
                 "SELECT state, COUNT(*) AS count FROM processing_outbox GROUP BY state"
             ).fetchall()
+            replay_rows = connection.execute(
+                "SELECT state, COUNT(*) AS count FROM evidence_replay_outbox GROUP BY state"
+            ).fetchall()
 
         collector = {"state": "not_started"}
         collector_status_path = self.root / "collector-status.json"
@@ -702,6 +729,7 @@ class DataAssetStore:
             "active_documents": active_count,
             "archive_size_bytes": self.object_store.size_bytes("objects/"),
             "processing": {row["state"]: row["count"] for row in outbox_rows},
+            "evidence_replay": {row["state"]: row["count"] for row in replay_rows},
             "collector": collector,
             "network": network_states,
         }
@@ -1420,6 +1448,86 @@ class DataAssetStore:
             ).fetchone()
         return row is not None
 
+    def claim_evidence_replay(
+        self,
+        limit: int = 50,
+        *,
+        stale_after_seconds: int = 900,
+        retry_after_seconds: int = 300,
+        max_attempts: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """Atomically claim archived responses that still need adapter replay."""
+        bounded = max(1, min(int(limit), 500))
+        stale_seconds = max(60, int(stale_after_seconds))
+        retry_seconds = max(0, int(retry_after_seconds))
+        attempt_limit = max(1, int(max_attempts))
+        now = utc_now()
+        stale_before = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+        ).isoformat().replace("+00:00", "Z")
+        retry_before = (
+            datetime.now(timezone.utc) - timedelta(seconds=retry_seconds)
+        ).isoformat().replace("+00:00", "Z")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                WITH claimed AS (
+                    SELECT raw_object_id
+                    FROM evidence_replay_outbox
+                    WHERE state = 'pending'
+                       OR (state = 'processing' AND updated_at < %s)
+                       OR (state = 'failed' AND attempts < %s AND updated_at < %s)
+                    ORDER BY updated_at ASC, raw_object_id ASC
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE evidence_replay_outbox o
+                SET state = 'processing', attempts = attempts + 1,
+                    last_error = NULL, updated_at = %s
+                FROM claimed
+                WHERE o.raw_object_id = claimed.raw_object_id
+                RETURNING o.raw_object_id
+                """,
+                (stale_before, attempt_limit, retry_before, bounded, now),
+            ).fetchall()
+            evidence = []
+            for row in rows:
+                raw = connection.execute(
+                    "SELECT * FROM raw_objects WHERE raw_object_id = %s",
+                    (row["raw_object_id"],),
+                ).fetchone()
+                if raw:
+                    evidence.append(self._evidence_row(raw))
+        return evidence
+
+    def complete_evidence_replay(
+        self,
+        raw_object_id: str,
+        state: str,
+        error: Optional[str] = None,
+    ) -> None:
+        """Finish one replay attempt without hiding skipped or failed evidence."""
+        if state not in {"parsed", "skipped", "failed"}:
+            raise ValueError(f"无效原始证据回放状态: {state}")
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE evidence_replay_outbox
+                SET state = %s, last_error = %s, updated_at = %s
+                WHERE raw_object_id = %s AND state = 'processing'
+                """,
+                (state, error, utc_now(), raw_object_id),
+            )
+            if updated.rowcount == 1:
+                return
+            current = connection.execute(
+                "SELECT state FROM evidence_replay_outbox WHERE raw_object_id = %s",
+                (raw_object_id,),
+            ).fetchone()
+            if current and current["state"] == state:
+                return
+            raise DataAssetError(f"原始证据不在回放处理中: {raw_object_id}")
+
     def get_document(self, content_version_id: str) -> Dict[str, Any]:
         with self._connection() as connection:
             row = connection.execute(
@@ -1641,4 +1749,7 @@ class DataAssetStore:
     def _evidence_row(self, row: Mapping[str, Any]) -> Dict[str, Any]:
         value = dict(row)
         value["response_headers"] = json.loads(value.pop("response_headers_json"))
+        value["request_context"] = json.loads(
+            value.pop("request_context_json", "{}") or "{}"
+        )
         return value

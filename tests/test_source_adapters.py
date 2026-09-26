@@ -12,9 +12,9 @@ sys.path.insert(0, str(CRAWLER_ROOT))
 from qsou_crawler.adapters import AdapterRegistry, DocumentReference, RequestSpec, ResponsePayload
 from qsou_crawler import settings as crawler_settings
 from qsou_crawler.pipelines.data_processing_pipeline import DataProcessingPipeline
-from qsou_crawler.middlewares import EvidenceLinkMiddleware
+from qsou_crawler.middlewares import EvidenceLinkMiddleware, RawEvidenceDownloaderMiddleware
 from qsou_crawler.spiders.source_adapter_spider import SourceAdapterSpider
-from qsou_data import DataAssetError, DataAssetStore, assert_automated_access
+from qsou_data import DataAssetError, DataAssetStore, SourceRegistry, assert_automated_access
 
 
 class SourceAdapterContractTest(unittest.TestCase):
@@ -228,6 +228,69 @@ class SourceAdapterContractTest(unittest.TestCase):
 
         self.assertEqual(result[0]["metadata"]["raw_object_id"], "raw-1")
         self.assertEqual(result[0]["metadata"]["kind"], "dataset")
+
+    def test_raw_evidence_persists_the_document_reference_needed_for_replay(self):
+        class Store:
+            registry = SourceRegistry(Path(__file__).resolve().parents[1] / "config" / "sources.json")
+
+            def __init__(self):
+                self.archived = None
+
+            def effective_source(self, source_id):
+                return self.registry.get(source_id)
+
+            def archive_response(self, **values):
+                self.archived = values
+                return {
+                    "raw_object_id": "raw-42",
+                    "source_id": values["source_id"],
+                    "url": values["url"],
+                }
+
+        class Request:
+            meta = {
+                "qsou_request_kind": "detail",
+                "source_document_id": "article-42",
+                "title": "Persisted title",
+                "published_at": "2026-09-26T00:00:00Z",
+                "document_type": "statistical_release",
+                "company_code": "600000",
+                "download_timeout": 900,
+            }
+
+        class Response:
+            url = "https://www.stats.gov.cn/sj/zxfb/article-42.html"
+            status = 200
+            headers = {b"Content-Type": b"text/html; charset=utf-8"}
+            body = b"archived body"
+            encoding = "utf-8"
+
+        class Stats:
+            def inc_value(self, _name):
+                return None
+
+        class Spider:
+            source_id = "nbs"
+            name = "source_adapter"
+            crawler = type("Crawler", (), {"stats": Stats()})()
+
+        store = Store()
+
+        RawEvidenceDownloaderMiddleware(store).process_response(
+            Request(), Response(), Spider()
+        )
+
+        self.assertEqual(
+            store.archived["request_context"],
+            {
+                "qsou_request_kind": "detail",
+                "source_document_id": "article-42",
+                "title": "Persisted title",
+                "published_at": "2026-09-26T00:00:00Z",
+                "document_type": "statistical_release",
+                "company_code": "600000",
+            },
+        )
 
     def test_source_adapter_exposes_requests_through_async_start(self):
         class Stats:

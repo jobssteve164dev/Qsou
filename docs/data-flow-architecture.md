@@ -32,6 +32,7 @@
 来源登记 config/sources.json
   → 持续调度器按每个来源的频率运行版本化适配器
   → Scrapy Downloader Middleware 归档原始响应
+  → PostgreSQL evidence_replay_outbox 持久化原始证据回放状态
   → Spider 解析并关联 raw_object_id
   → Scrapy Item Pipeline 登记身份、时间和内容版本
   → PostgreSQL processing_outbox
@@ -47,6 +48,7 @@
 - `qsou_data/processing.py` 执行确定性文本清洗、摘要、关键词、分类、实体和质量评估。
 - `qsou_data/indexer.py` 作为 data-worker，先把处理结果写回 PostgreSQL，再投影到 Elasticsearch，并周期性校正历史版本的可见状态。
 - `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
+- `crawler/replay_evidence.py` 小批量领取历史原始证据，使用同一个来源适配器重新解析；新采集详情同时保存解析上下文，旧证据在缺少上下文时按来源 URL 契约恢复。
 - `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 负责验证条目和登记标准文档；生产默认保留 PostgreSQL `pending` 状态，由 data-worker 领取。
 - `crawler/qsou_crawler/adapters/` 为登记来源提供一对一、可版本化的入口发现和详情解析契约。
 - `crawler/run_schedule.py` 按来源频率独立调度，并把入口、详情、文档、失败和游标写入运行账本。
@@ -105,10 +107,19 @@
 
 - 新采集文档登记后自动产生 `pending` 状态，由 `data-worker` 处理。
 - 已有标准文档通过同一个重排队入口回到 `pending`，不得调用另一套历史脚本。
-- 已归档但未生成标准文档的证据不直接进入处理器；它们需要对应来源解析器先生成标准文档。
-- 首版先用一个真实来源、一个受控批次闭环，再按来源和时间窗口逐批处理已有数据。
+- 已归档但未生成标准文档的证据由 collector 从 `evidence_replay_outbox` 分批领取，重新执行对应来源适配器；成功产出的标准文档自动进入同一个 `processing_outbox`。
+- 入口页、robots 响应、媒体附件以及适配器确认不产出文档的响应进入 `skipped`；解析异常进入 `failed`，默认间隔 5 分钟自动重试、最多 3 次，不会反复阻塞后续证据。
+- 回放使用 PostgreSQL 持久状态和 `FOR UPDATE SKIP LOCKED` 领取；进程中断后的 `processing` 任务会自动恢复，不使用进程内游标。
+- collector 每轮回放 50 条；无需 Redis、Celery 或新的常驻服务。
 
-首版闭环不等于已有 6.8 GB 已全部转化。系统必须分别展示原始证据数、标准文档数以及各处理状态数量，不能用存档体积代替处理进度。
+系统分别展示原始证据数、原始证据回放状态、标准文档数以及文档处理状态。`parsed + skipped + failed + pending + processing` 才是历史证据进度，不能用存档体积或标准文档数替代。
+
+原始证据回放状态为：
+
+```text
+pending → processing → parsed | skipped | failed
+              └──────→ pending（进程中断后自动恢复）
+```
 
 ## 4. 首版运行状态
 
@@ -149,7 +160,7 @@ worker 重启后必须能够继续领取未完成任务。状态更新和任务�
 
 1. 采集器成功保存响应正文，并登记 `raw_object_id`、来源、时间和内容哈希。
 2. 解析器生成标准文档，文档能够追溯到原始证据。
-3. 文档自动进入 `pending`，无需人工复制文件或调用临时脚本。
+3. 新采集或历史回放生成的文档自动进入 `pending`，无需人工复制文件或调用临时脚本。
 4. worker 完成清洗、特征提取、去重和质量评估，完整结果可以从 PostgreSQL 重新读取。
 5. 合格文档进入唯一的 `qsou_documents` 索引；过滤和失败文档不伪装成成功。
 6. 用户在现有搜索页面输入真实查询能够命中文档，并能打开对应原始证据。
@@ -175,7 +186,7 @@ worker 重启后必须能够继续领取未完成任务。状态更新和任务�
 - LLM 首先消费 Elasticsearch 返回的正文和证据引用，不要求 Qdrant。
 - 只有固定研究问题证明关键词召回不足时，才评估 Elasticsearch 向量字段或独立向量库。
 - Qdrant、嵌入模型和混合检索是可选语义召回能力，不得成为采集和基础处理链的依赖。
-- 全量原始证据回放、主备对象存储、覆盖证明和灾难恢复继续作为后续完整性能力推进。
+- 主备对象存储、来源覆盖证明和跨环境灾难恢复演练继续作为后续完整性能力推进。
 - 实体事件层、订阅和用户知识资产在基础文档稳定可用后接入。
 
 长期“自主可控”的验收仍遵守[自主数据资产设计指导](./data-sovereignty-design-guidelines.md)；本文件的首版完成标准只用于确认采集和数据处理主链已经真实产生可用结果。
