@@ -7,7 +7,7 @@ import json
 import os
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Sequence
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
@@ -326,6 +326,21 @@ class DataAssetStore:
             )
             connection.execute(
                 """
+                UPDATE processing_outbox o
+                SET state = 'filtered',
+                    last_error = 'superseded before processing',
+                    updated_at = %s
+                FROM standard_documents d
+                WHERE o.content_version_id = d.content_version_id
+                  AND d.canonical_document_id = %s
+                  AND d.content_version_id <> %s
+                  AND d.active = 0
+                  AND o.state IN ('pending', 'processing')
+                """,
+                (now, canonical_document_id, content_version_id),
+            )
+            connection.execute(
+                """
                 INSERT INTO standard_documents (
                     content_version_id, canonical_document_id, source_document_id,
                     raw_object_id, source_id, document_type, title, content, url,
@@ -338,7 +353,10 @@ class DataAssetStore:
                     source_published_at = excluded.source_published_at,
                     fetched_at = excluded.fetched_at,
                     parser_version = excluded.parser_version,
-                    document_json = excluded.document_json,
+                    document_json = (
+                        standard_documents.document_json::jsonb
+                        || excluded.document_json::jsonb
+                    )::text,
                     active = 1,
                     superseded_at = NULL,
                     indexed_at = NULL
@@ -378,7 +396,10 @@ class DataAssetStore:
                 INSERT INTO processing_outbox (
                     content_version_id, state, attempts, task_id, last_error, updated_at
                 ) VALUES (%s, 'pending', 0, NULL, NULL, %s)
-                ON CONFLICT DO NOTHING
+                ON CONFLICT(content_version_id) DO UPDATE SET
+                    state = 'pending', last_error = NULL, updated_at = excluded.updated_at
+                WHERE processing_outbox.state = 'filtered'
+                  AND processing_outbox.last_error = 'superseded before processing'
                 """,
                 (content_version_id, now),
             )
@@ -401,13 +422,122 @@ class DataAssetStore:
             ).fetchall()
         return [json.loads(row["document_json"]) for row in rows]
 
+    def claim_processing_documents(
+        self,
+        limit: int = 100,
+        *,
+        stale_after_seconds: int = 900,
+    ) -> List[Dict[str, Any]]:
+        """Atomically claim new work and recover work abandoned by a stopped worker."""
+        bounded = max(1, min(int(limit), 1000))
+        stale_seconds = max(60, int(stale_after_seconds))
+        now = utc_now()
+        stale_before = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+        ).isoformat().replace("+00:00", "Z")
+        with self._connection() as connection:
+            claimed = connection.execute(
+                """
+                WITH claimed AS (
+                    SELECT o.content_version_id
+                    FROM processing_outbox o
+                    JOIN standard_documents d USING(content_version_id)
+                    WHERE d.active = 1
+                      AND (
+                        o.state = 'pending'
+                        OR (o.state = 'processing' AND o.updated_at < %s)
+                      )
+                    ORDER BY o.updated_at ASC
+                    LIMIT %s
+                    FOR UPDATE OF o SKIP LOCKED
+                )
+                UPDATE processing_outbox o
+                SET state = 'processing', attempts = o.attempts + 1,
+                    task_id = NULL, last_error = NULL, updated_at = %s
+                FROM claimed
+                WHERE o.content_version_id = claimed.content_version_id
+                RETURNING o.content_version_id
+                """,
+                (stale_before, bounded, now),
+            ).fetchall()
+            documents = []
+            for row in claimed:
+                document_row = connection.execute(
+                    "SELECT document_json FROM standard_documents WHERE content_version_id = %s",
+                    (row["content_version_id"],),
+                ).fetchone()
+                if document_row:
+                    documents.append(json.loads(document_row["document_json"]))
+        return documents
+
+    def save_processing_result(
+        self,
+        content_version_id: str,
+        processing: Mapping[str, Any],
+        *,
+        state: str = "processed",
+    ) -> bool:
+        """Persist derived processing data before the document can be indexed."""
+        if state not in {"processed", "filtered"}:
+            raise ValueError(f"无效处理结果状态: {state}")
+        normalized = normalize_catalog_value(dict(processing))
+        processed_at = str(normalized.get("processed_at") or utc_now())
+        now = utc_now()
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT document_json, active FROM standard_documents
+                WHERE content_version_id = %s
+                FOR UPDATE
+                """,
+                (content_version_id,),
+            ).fetchone()
+            if not row:
+                raise DataAssetError(f"标准文档不存在: {content_version_id}")
+            if not bool(row["active"]):
+                connection.execute(
+                    """
+                    UPDATE processing_outbox
+                    SET state = 'filtered',
+                        last_error = 'superseded before processing completed',
+                        updated_at = %s
+                    WHERE content_version_id = %s
+                      AND state IN ('pending', 'processing')
+                    """,
+                    (now, content_version_id),
+                )
+                return False
+            document = json.loads(row["document_json"])
+            document["processing"] = normalized
+            document["processed_at"] = processed_at
+            connection.execute(
+                """
+                UPDATE standard_documents
+                SET processed_at = %s, document_json = %s, indexed_at = NULL
+                WHERE content_version_id = %s
+                """,
+                (processed_at, _json(document), content_version_id),
+            )
+            connection.execute(
+                """
+                UPDATE processing_outbox
+                SET state = %s, last_error = NULL, updated_at = %s
+                WHERE content_version_id = %s
+                """,
+                (state, now, content_version_id),
+            )
+        return True
+
     def documents_for_index(self) -> Iterable[Dict[str, Any]]:
         """Yield every document version with its current visibility state."""
         with self._connection() as connection:
             cursor = connection.execute(
                 """
-                SELECT document_json, active FROM standard_documents
-                ORDER BY first_seen_at ASC
+                SELECT d.document_json, d.active
+                FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
+                WHERE o.state IN ('processed', 'indexed')
+                ORDER BY d.first_seen_at ASC
                 """
             )
             while True:
@@ -424,9 +554,12 @@ class DataAssetStore:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT document_json, active FROM standard_documents
-                WHERE indexed_at IS NULL
-                ORDER BY first_seen_at ASC
+                SELECT d.document_json, d.active
+                FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
+                WHERE d.indexed_at IS NULL
+                  AND o.state IN ('processed', 'indexed')
+                ORDER BY d.first_seen_at ASC
                 LIMIT %s
                 """,
                 (bounded,),
@@ -442,6 +575,18 @@ class DataAssetStore:
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT COUNT(*) AS count FROM standard_documents WHERE active = 1"
+            ).fetchone()
+        return int(row["count"])
+
+    def projectable_active_document_count(self) -> int:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
+                WHERE d.active = 1 AND o.state IN ('processed', 'indexed')
+                """
             ).fetchone()
         return int(row["count"])
 
@@ -467,14 +612,31 @@ class DataAssetStore:
     def mark_failed(self, content_version_ids: Sequence[str], error: str) -> None:
         self._set_outbox_state(content_version_ids, "failed", error=error)
 
+    def record_index_failure(self, content_version_ids: Sequence[str], error: str) -> None:
+        ids = [item for item in content_version_ids if item]
+        if not ids:
+            return
+        now = utc_now()
+        with self._connection() as connection:
+            connection.executemany(
+                """
+                UPDATE processing_outbox
+                SET last_error = %s, updated_at = %s
+                WHERE content_version_id = %s AND state = 'processed'
+                """,
+                [(error[:1000], now, item) for item in ids],
+            )
+
     def requeue(self, source_id: Optional[str] = None, limit: int = 1000) -> int:
         bounded = max(1, min(int(limit), 10000))
         parameters: List[Any] = []
         where = ""
         if source_id:
             self.registry.get(source_id)
-            where = "WHERE d.source_id = %s"
+            where = "WHERE d.source_id = %s AND d.active = 1"
             parameters.append(source_id)
+        else:
+            where = "WHERE d.active = 1"
         parameters.append(bounded)
 
         with self._connection() as connection:
@@ -482,8 +644,10 @@ class DataAssetStore:
                 f"""
                 SELECT d.content_version_id
                 FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
                 {where}
-                ORDER BY d.first_seen_at ASC
+                ORDER BY CASE WHEN o.state = 'failed' THEN 0 ELSE 1 END,
+                         d.first_seen_at ASC
                 LIMIT %s
                 """,
                 parameters,
@@ -1295,7 +1459,10 @@ class DataAssetStore:
             clauses.append("(LOWER(title) LIKE %s OR LOWER(content) LIKE %s)")
             wildcard = f"%{term}%"
             parameters.extend([wildcard, wildcard])
-        where = "active = 1 AND " + " AND ".join(clauses)
+        where = (
+            "d.active = 1 AND o.state IN ('processed', 'indexed') AND "
+            + " AND ".join(clauses)
+        )
         if source_id:
             self.registry.get(source_id)
             where += " AND source_id = %s"
@@ -1303,16 +1470,22 @@ class DataAssetStore:
 
         with self._connection() as connection:
             total = connection.execute(
-                f"SELECT COUNT(*) AS count FROM standard_documents WHERE {where}",
+                f"""
+                SELECT COUNT(*) AS count
+                FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
+                WHERE {where}
+                """,
                 parameters,
             ).fetchone()["count"]
             rows = connection.execute(
                 f"""
-                SELECT content_version_id, title, content, source_id, url,
-                       source_published_at, fetched_at, document_json
-                FROM standard_documents
+                SELECT d.content_version_id, d.title, d.content, d.source_id, d.url,
+                       d.source_published_at, d.fetched_at, d.document_json
+                FROM standard_documents d
+                JOIN processing_outbox o USING(content_version_id)
                 WHERE {where}
-                ORDER BY COALESCE(source_published_at, fetched_at) DESC
+                ORDER BY COALESCE(d.source_published_at, d.fetched_at) DESC
                 LIMIT %s OFFSET %s
                 """,
                 parameters + [page_size, (page - 1) * page_size],
@@ -1416,7 +1589,7 @@ class DataAssetStore:
         if not ids:
             return
         now = utc_now()
-        attempt_delta = 1 if state in {"dispatched", "failed"} else 0
+        attempt_delta = 1 if state == "dispatched" else 0
         with self._connection() as connection:
             connection.executemany(
                 """

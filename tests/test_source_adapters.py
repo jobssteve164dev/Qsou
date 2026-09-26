@@ -1,5 +1,6 @@
 import json
 import io
+import asyncio
 import sys
 import unittest
 from pathlib import Path
@@ -8,8 +9,11 @@ from pathlib import Path
 CRAWLER_ROOT = Path(__file__).resolve().parents[1] / "crawler"
 sys.path.insert(0, str(CRAWLER_ROOT))
 
-from qsou_crawler.adapters import AdapterRegistry, DocumentReference, ResponsePayload
+from qsou_crawler.adapters import AdapterRegistry, DocumentReference, RequestSpec, ResponsePayload
 from qsou_crawler import settings as crawler_settings
+from qsou_crawler.pipelines.data_processing_pipeline import DataProcessingPipeline
+from qsou_crawler.middlewares import EvidenceLinkMiddleware
+from qsou_crawler.spiders.source_adapter_spider import SourceAdapterSpider
 from qsou_data import DataAssetError, DataAssetStore, assert_automated_access
 
 
@@ -178,6 +182,92 @@ class SourceAdapterContractTest(unittest.TestCase):
         self.assertGreaterEqual(crawler_settings.DOWNLOAD_TIMEOUT, 900)
         self.assertEqual(crawler_settings.MEMUSAGE_LIMIT_MB, 3584)
         self.assertNotIn(429, crawler_settings.RETRY_HTTP_CODES)
+
+    def test_local_pipeline_leaves_collected_documents_pending_for_worker(self):
+        class Store:
+            def __init__(self):
+                self.indexed = []
+
+            def mark_indexed(self, ids):
+                self.indexed.extend(ids)
+
+        store = Store()
+        pipeline = DataProcessingPipeline(
+            asset_store=store,
+            batch_size=10,
+            dispatch_enabled=False,
+        )
+        pipeline.batch_items = [{"content_version_id": "version-1"}]
+
+        pipeline.send_batch_to_processor()
+
+        self.assertEqual(store.indexed, [])
+        self.assertEqual(pipeline.batch_items, [])
+
+    def test_evidence_link_middleware_supports_async_spider_output(self):
+        class Response:
+            meta = {
+                "qsou_evidence": {
+                    "raw_object_id": "raw-1",
+                    "source_id": "world-bank",
+                }
+            }
+
+        async def outputs():
+            yield {"title": "official dataset", "metadata": {"kind": "dataset"}}
+
+        async def collect():
+            return [
+                item
+                async for item in EvidenceLinkMiddleware().process_spider_output_async(
+                    Response(), outputs(), None
+                )
+            ]
+
+        result = asyncio.run(collect())
+
+        self.assertEqual(result[0]["metadata"]["raw_object_id"], "raw-1")
+        self.assertEqual(result[0]["metadata"]["kind"], "dataset")
+
+    def test_source_adapter_exposes_requests_through_async_start(self):
+        class Stats:
+            values = {}
+
+            @classmethod
+            def set_value(cls, key, value):
+                cls.values[key] = value
+
+        spider = SourceAdapterSpider.__new__(SourceAdapterSpider)
+        spider.source_id = "world-bank"
+        spider.asset_store = type(
+            "Store",
+            (),
+            {"get_source_cursor": staticmethod(lambda _source_id: {})},
+        )()
+        spider.adapter = type(
+            "Adapter",
+            (),
+            {
+                "initial_requests": staticmethod(
+                    lambda _cursor: [
+                        RequestSpec(
+                            url="https://api.worldbank.org/v2/country/CHN/indicator/test",
+                            kind="listing",
+                        )
+                    ]
+                )
+            },
+        )()
+        spider.crawler = type("Crawler", (), {"stats": Stats()})()
+
+        async def collect():
+            return [request async for request in spider.start()]
+
+        requests = asyncio.run(collect())
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].url, "https://api.worldbank.org/v2/country/CHN/indicator/test")
+        self.assertEqual(Stats.values["adapter/entrypoints_total"], 1)
 
     def test_nbs_release_preserves_html_tables_as_versioned_structured_data(self):
         adapter = self.registry.create("nbs")

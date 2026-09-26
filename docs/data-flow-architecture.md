@@ -1,6 +1,6 @@
 # Qsou 数据流架构
 
-> 文档定位：描述自主数据资产的目标数据流，并标明当前代码与目标之间的差距。
+> 文档定位：描述自主数据资产的当前数据主链、运行状态与验收边界。
 >
 > 设计权威：[自主数据资产设计指导](./data-sovereignty-design-guidelines.md)。
 
@@ -35,7 +35,8 @@
   → Spider 解析并关联 raw_object_id
   → Scrapy Item Pipeline 登记身份、时间和内容版本
   → PostgreSQL processing_outbox
-  → 独立 indexer 将标准文档投影到 Elasticsearch
+  → data-worker 领取、清洗、特征提取、质量评估并写回 PostgreSQL
+  → 同一 data-worker 将已处理文档投影到 Elasticsearch
   → FastAPI 认证后的自有数据搜索、证据查看、导出与回放
   → Next.js 同域会话代理
   → 搜索与数据资产界面
@@ -43,9 +44,10 @@
 
 - `qsou_data/registry.py` 负责版本化来源登记与 URL 归属校验。
 - `qsou_data/store.py` 负责原始证据、PostgreSQL 目录、身份版本、可靠待处理状态、降级检索、导出和回放。
-- `qsou_data/indexer.py` 持续把 PostgreSQL 标准文档投影到 Elasticsearch，并周期性校正历史版本的可见状态。
+- `qsou_data/processing.py` 执行确定性文本清洗、摘要、关键词、分类、实体和质量评估。
+- `qsou_data/indexer.py` 作为 data-worker，先把处理结果写回 PostgreSQL，再投影到 Elasticsearch，并周期性校正历史版本的可见状态。
 - `crawler/qsou_crawler/middlewares.py` 在 Spider 解析前保存响应，并把证据身份传给产出条目。
-- `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 当前负责验证条目和登记标准文档；生产配置没有启用 Celery 派生处理。
+- `crawler/qsou_crawler/pipelines/data_processing_pipeline.py` 负责验证条目和登记标准文档；生产默认保留 PostgreSQL `pending` 状态，由 data-worker 领取。
 - `crawler/qsou_crawler/adapters/` 为登记来源提供一对一、可版本化的入口发现和详情解析契约。
 - `crawler/run_schedule.py` 按来源频率独立调度，并把入口、详情、文档、失败和游标写入运行账本。
 - `adapter_run_requests` 为逐源“立即采集”提供持久队列、去重、原子认领和重启恢复，不另建第二套调度心智。
@@ -55,7 +57,7 @@
 - `api-gateway/app/api/v1/endpoints/data_assets.py` 提供来源、证据、版本、导出与回放入口。
 - `web-frontend/src/pages/api/` 在服务端持有 HttpOnly 会话并代理内部 API；浏览器不保存令牌，API 不发布宿主机端口。
 
-生产基线常驻 Elasticsearch，全文搜索不可用或索引同步失联时健康检查失败；PostgreSQL 标准文档仍是可重建索引的事实来源。当前实际缺口是标准文档登记后没有经过基础处理便进入索引。
+生产基线常驻 Elasticsearch，全文搜索不可用或索引同步失联时健康检查失败；PostgreSQL 标准文档仍是可重建索引的事实来源。活动文档只有在处理成功后才能进入索引投影。
 
 ## 3. 首版闭环设计
 
@@ -80,12 +82,12 @@
 
 `data-worker` 按小批次循环执行：
 
-1. 从 `processing_outbox` 原子领取 `pending` 或可重试的 `failed` 文档，并标记为 `processing`。
+1. 从 `processing_outbox` 原子领取 `pending` 文档或超时的 `processing` 文档，并标记为 `processing`。
 2. 从 `standard_documents.document_json` 读取标准文档。
-3. 顺序执行清洗、特征提取、批内去重和质量评估。
+3. 顺序执行清洗、特征提取和质量评估；去重复用登记阶段的稳定身份与内容哈希。
 4. 合格文档把完整处理结果写回同一条标准文档；被过滤文档保留原因和证据关系。
 5. 由现有统一 Elasticsearch 投影代码写入 `qsou_documents`。
-6. 成功后标记为 `indexed`；处理失败或索引失败标记为 `failed` 并记录阶段、次数和具体错误。
+6. 索引成功后标记为 `indexed`；处理失败或 Elasticsearch 明确拒绝的异常文档标记为 `failed`，显式重排后重试；瞬时索引异常保留 `processed` 并自动重试。
 
 处理结果至少写回 `document_json.processing`：
 
@@ -95,7 +97,7 @@
 - 质量评分、质量判断与过滤原因
 - 原始 `raw_object_id`、文档身份和内容版本保持不变
 
-首版只做稳定身份、内容哈希和批内规则去重；需要模型或全库向量相似度的近似去重属于后续能力。
+首版只做登记阶段的稳定身份与内容哈希去重；需要模型或全库向量相似度的近似去重属于后续能力。
 
 处理代码不得另写 `qsou_news`、`qsou_announcements` 等平行索引，也不得直接把内存中的处理结果当成已持久化结果。PostgreSQL 成功保存处理结果后，Elasticsearch 才能消费该版本。
 
@@ -137,7 +139,7 @@ worker 重启后必须能够继续领取未完成任务。状态更新和任务�
 | 采集连接器 | 访问来源并生成采集上下文 | 决定事实真伪或覆盖失败 |
 | 原始归档 | 保存响应、文件、响应头、时间、哈希和采集器版本 | 承担用户检索体验 |
 | 规范化处理 | 提取字段、生成稳定身份、识别内容版本 | 覆盖或删除原始证据 |
-| 基础处理 | 清洗、特征提取、批内去重、质量评估并持久化结果 | 自建第二套目录、队列或索引真相 |
+| 基础处理 | 清洗、特征提取、质量评估并持久化结果 | 自建第二套目录、队列或索引真相 |
 | Elasticsearch | 全文搜索、过滤、聚合与排序 | 作为不可替代的唯一事实源 |
 | 用户资产存储 | 收藏、订阅、标签、纠错和研究笔记 | 与可重建索引混存后被重建清除 |
 

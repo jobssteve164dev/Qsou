@@ -61,6 +61,10 @@ class SourceAdapterSpider(scrapy.Spider):
         for specification in specifications:
             yield self._request(specification, self.parse_listing)
 
+    async def start(self):
+        for request in self.start_requests():
+            yield request
+
     def parse_listing(self, response: scrapy.http.Response):
         if not 200 <= response.status < 300:
             self._record_error(f"入口响应失败: {response.status} {response.url}")

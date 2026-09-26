@@ -18,6 +18,10 @@ INDEX_MAPPINGS = {
         "title": {"type": "text", "analyzer": "standard"},
         "content": {"type": "text", "analyzer": "standard"},
         "summary": {"type": "text", "analyzer": "standard"},
+        "keywords": {"type": "keyword"},
+        "categories": {"type": "keyword"},
+        "quality_score": {"type": "float"},
+        "processing_version": {"type": "keyword"},
         "source": {"type": "keyword"},
         "source_id": {"type": "keyword"},
         "url": {"type": "keyword"},
@@ -31,6 +35,21 @@ INDEX_MAPPINGS = {
     }
 }
 INDEX_SETTINGS = {"number_of_shards": 1, "number_of_replicas": 0}
+
+
+class IndexBatchError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        indexed_ids: list[str],
+        failed_ids: list[str],
+        retryable_ids: list[str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.indexed_ids = indexed_ids
+        self.failed_ids = failed_ids
+        self.retryable_ids = retryable_ids or []
 
 
 def normalize_index_text(value: Any) -> str:
@@ -117,6 +136,9 @@ class ElasticsearchIndex:
             actions,
             raise_on_error=False,
             refresh=False,
+            max_retries=2,
+            initial_backoff=1,
+            max_backoff=4,
         ):
             operation = next(iter(result.values()))
             if succeeded:
@@ -130,9 +152,21 @@ class ElasticsearchIndex:
                 }
             )
         if failures:
-            raise RuntimeError(
+            retryable_statuses = {408, 429, 500, 502, 503, 504}
+            raise IndexBatchError(
                 f"Elasticsearch 拒绝 {len(failures)} 个文档: "
-                + json.dumps(failures[:5], ensure_ascii=False, default=str)
+                + json.dumps(failures[:5], ensure_ascii=False, default=str),
+                indexed_ids=indexed,
+                failed_ids=[
+                    failure["id"]
+                    for failure in failures
+                    if failure["id"] and failure["status"] not in retryable_statuses
+                ],
+                retryable_ids=[
+                    failure["id"]
+                    for failure in failures
+                    if failure["id"] and failure["status"] in retryable_statuses
+                ],
             )
         return indexed
 
@@ -175,7 +209,12 @@ class ElasticsearchIndex:
         )
         if not content_version_id:
             raise RuntimeError("标准文档缺少 content_version_id")
-        content = normalize_index_text(document.get("content"))
+        processing = document.get("processing") or {}
+        if not isinstance(processing, Mapping):
+            processing = {}
+        content = normalize_index_text(
+            processing.get("processed_content") or document.get("content")
+        )
         source_id = normalize_index_text(document.get("source_id"))
         raw_tags = document.get("tags") or []
         if isinstance(raw_tags, str):
@@ -188,7 +227,14 @@ class ElasticsearchIndex:
             or None,
             "title": normalize_index_text(document.get("title")),
             "content": content,
-            "summary": content[:300],
+            "summary": normalize_index_text(processing.get("summary")) or content[:300],
+            "keywords": list(processing.get("keywords") or []),
+            "categories": list(processing.get("categories") or []),
+            "quality_score": (processing.get("quality") or {}).get("score"),
+            "processing_version": normalize_index_text(
+                processing.get("processing_version")
+            )
+            or None,
             "source": normalize_index_text(document.get("source") or source_id),
             "source_id": source_id,
             "url": normalize_index_text(document.get("url")) or None,

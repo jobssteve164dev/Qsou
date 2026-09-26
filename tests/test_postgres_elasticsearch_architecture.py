@@ -25,6 +25,7 @@ from qsou_data.migration_state import (
 from qsou_data.schema import metadata
 from qsou_data.search_index import (
     ElasticsearchIndex,
+    IndexBatchError,
     INDEX_MAPPINGS,
     normalize_index_date,
 )
@@ -360,6 +361,53 @@ class ElasticsearchProjectionTest(unittest.TestCase):
             "version-1.*published_at",
         ):
             index.index_documents([{"content_version_id": "version-1"}])
+
+    def test_bulk_failure_exposes_successful_and_rejected_document_ids(self):
+        index = ElasticsearchIndex.__new__(ElasticsearchIndex)
+        index.alias = "qsou_documents"
+        index.client = object()
+        results = iter(
+            [
+                (True, {"index": {"_id": "ok", "status": 201}}),
+                (False, {"index": {"_id": "poison", "status": 400, "error": "bad"}}),
+            ]
+        )
+
+        with patch(
+            "qsou_data.search_index.helpers.streaming_bulk",
+            return_value=results,
+        ), self.assertRaises(IndexBatchError) as raised:
+            index.index_documents(
+                [
+                    {"content_version_id": "ok"},
+                    {"content_version_id": "poison"},
+                ]
+            )
+
+        self.assertEqual(raised.exception.indexed_ids, ["ok"])
+        self.assertEqual(raised.exception.failed_ids, ["poison"])
+
+    def test_bulk_backpressure_remains_retryable_after_local_retries(self):
+        index = ElasticsearchIndex.__new__(ElasticsearchIndex)
+        index.alias = "qsou_documents"
+        index.client = object()
+        rejected = {
+            "index": {
+                "_id": "busy",
+                "status": 429,
+                "error": {"type": "es_rejected_execution_exception"},
+            }
+        }
+
+        with patch(
+            "qsou_data.search_index.helpers.streaming_bulk",
+            return_value=iter([(False, rejected)]),
+        ) as streaming, self.assertRaises(IndexBatchError) as raised:
+            index.index_documents([{"content_version_id": "busy"}])
+
+        self.assertEqual(raised.exception.failed_ids, [])
+        self.assertEqual(raised.exception.retryable_ids, ["busy"])
+        self.assertEqual(streaming.call_args.kwargs["max_retries"], 2)
 
     def test_cycle_reconciles_all_versions_without_rewriting_outbox_state(self):
         class Store:

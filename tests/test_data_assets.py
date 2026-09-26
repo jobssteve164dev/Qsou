@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from qsou_data import DataAssetError, DataAssetStore, SourceRegistry
+from qsou_data.processing import BaselineDocumentProcessor, run_processing_batch
 
 
 _test_database_url = os.getenv("QSOU_TEST_DATABASE_URL", "").strip()
@@ -80,6 +81,21 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertEqual(version_v1["canonical_document_id"], version_v2["canonical_document_id"])
         self.assertNotEqual(version_v1["content_version_id"], version_v2["content_version_id"])
         self.assertEqual(version_v1["first_seen_at"], version_v2["first_seen_at"])
+        self.assertEqual(list(self.store.documents_for_index()), [])
+        with self.store._connection() as connection:
+            superseded_state = connection.execute(
+                "SELECT state FROM processing_outbox WHERE content_version_id = %s",
+                (version_v1["content_version_id"],),
+            ).fetchone()["state"]
+        self.assertEqual(superseded_state, "filtered")
+
+        processed = run_processing_batch(
+            self.store,
+            BaselineDocumentProcessor(),
+            batch_size=10,
+        )
+        self.assertEqual(processed["processed"], 1)
+        self.store.mark_indexed([version_v2["content_version_id"]])
 
         result = self.store.search_documents("提高分红")
         self.assertEqual(result["total_count"], 1)
@@ -99,6 +115,13 @@ class DataAssetStoreTest(unittest.TestCase):
         restored_v1 = self.store.register_document(
             self._document(evidence_v1, "公司发布年度报告", "旧版正文，营业收入增长。")
         )
+        restored_processing = run_processing_batch(
+            self.store,
+            BaselineDocumentProcessor(),
+            batch_size=10,
+        )
+        self.assertEqual(restored_processing["processed"], 1)
+        self.store.mark_indexed([restored_v1["content_version_id"]])
         self.assertEqual(restored_v1["content_version_id"], version_v1["content_version_id"])
         self.assertEqual(self.store.search_documents("旧版正文")["total_count"], 1)
         self.assertEqual(self.store.status()["active_documents"], 1)
@@ -131,6 +154,49 @@ class DataAssetStoreTest(unittest.TestCase):
         self.assertIsNotNone(exported[0]["indexed_at"])
         json.dumps(exported, ensure_ascii=False)
 
+    def test_registered_document_must_be_processed_before_search_projection(self):
+        evidence = self._archive("处理链路原始正文")
+        document = self.store.register_document(
+            self._document(
+                evidence,
+                "示例股份发布2026年度经营数据",
+                "证券代码600001，公司2026年营业收入增长20%，净利润达到3亿元，经营现金流继续改善。",
+            )
+        )
+
+        self.assertEqual(self.store.search_documents("经营数据")["total_count"], 0)
+        self.assertEqual(self.store.pending_documents_for_index(), [])
+        result = run_processing_batch(
+            self.store,
+            BaselineDocumentProcessor(),
+            batch_size=10,
+        )
+
+        self.assertEqual(result["processed"], 1)
+        projected = self.store.pending_documents_for_index()
+        self.assertEqual(
+            [item["content_version_id"] for item in projected],
+            [document["content_version_id"]],
+        )
+        stored = self.store.get_document(document["content_version_id"])
+        self.assertEqual(
+            stored["processing"]["processing_version"],
+            "qsou-baseline/1",
+        )
+        self.assertEqual(stored["content"], document["content"])
+
+        repeated = self.store.register_document(
+            self._document(
+                evidence,
+                "示例股份发布2026年度经营数据",
+                "证券代码600001，公司2026年营业收入增长20%，净利润达到3亿元，经营现金流继续改善。",
+            )
+        )
+        self.assertEqual(
+            repeated["processing"]["processing_version"],
+            "qsou-baseline/1",
+        )
+
     def test_same_standard_version_keeps_all_raw_evidence_links(self):
         first_evidence = self._archive("带页面装饰的原始响应 A")
         second_evidence = self._archive("带页面装饰的原始响应 B")
@@ -148,6 +214,46 @@ class DataAssetStoreTest(unittest.TestCase):
             {first_evidence["raw_object_id"], second_evidence["raw_object_id"]},
         )
 
+    def test_superseded_claim_is_finalized_and_requeue_only_targets_active_version(self):
+        first_evidence = self._archive("待处理旧版")
+        first = self.store.register_document(
+            self._document(first_evidence, "公司发布年度报告", "旧版正文，尚在处理队列中。")
+        )
+        claimed = self.store.claim_processing_documents(1)
+        self.assertEqual(claimed[0]["content_version_id"], first["content_version_id"])
+
+        second_evidence = self._archive("待处理新版")
+        second = self.store.register_document(
+            self._document(second_evidence, "公司发布年度报告", "新版正文，已经替代旧版内容。")
+        )
+
+        saved = self.store.save_processing_result(
+            first["content_version_id"],
+            {
+                "processing_version": "qsou-baseline/1",
+                "processed_at": "2026-09-26T02:00:00Z",
+                "quality": {"accepted": True, "score": 1.0},
+            },
+        )
+        self.assertFalse(saved)
+        with self.store._connection() as connection:
+            states = {
+                row["content_version_id"]: row["state"]
+                for row in connection.execute(
+                    "SELECT content_version_id, state FROM processing_outbox"
+                ).fetchall()
+            }
+        self.assertEqual(states[first["content_version_id"]], "filtered")
+        self.assertEqual(states[second["content_version_id"]], "pending")
+
+        self.assertEqual(self.store.requeue(source_id="yicai"), 1)
+        with self.store._connection() as connection:
+            old_state = connection.execute(
+                "SELECT state FROM processing_outbox WHERE content_version_id = %s",
+                (first["content_version_id"],),
+            ).fetchone()["state"]
+        self.assertEqual(old_state, "filtered")
+
     def test_document_without_archived_evidence_is_rejected(self):
         with self.assertRaises(DataAssetError):
             self.store.register_document(
@@ -159,6 +265,15 @@ class DataAssetStoreTest(unittest.TestCase):
                     "source_id": "yicai",
                 }
             )
+
+    def test_filtered_document_is_not_returned_by_local_search_fallback(self):
+        evidence = self._archive("低质量正文")
+        document = self.store.register_document(
+            self._document(evidence, "低质量文档", "该文档已被质量门禁过滤。")
+        )
+        self.store.mark_filtered([document["content_version_id"]], "quality rejected")
+
+        self.assertEqual(self.store.search_documents("低质量")["total_count"], 0)
 
     def test_status_reports_observed_collector_state(self):
         status_path = self.root / "data" / "collector-status.json"

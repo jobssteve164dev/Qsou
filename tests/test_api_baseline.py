@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app, readiness_check
 from qsou_data import DataAssetStore
+from qsou_data.processing import BaselineDocumentProcessor, run_processing_batch
 
 
 class ApiReadinessTest(unittest.TestCase):
@@ -101,7 +102,6 @@ class BaselineApiTest(unittest.TestCase):
                 "parser_version": "api-integration-test/1",
             }
         )
-
         with TestClient(app) as client:
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
@@ -163,6 +163,13 @@ class BaselineApiTest(unittest.TestCase):
                 headers=headers,
             )
             self.assertEqual(rejected_trigger.status_code, 400)
+
+            processing = run_processing_batch(
+                store,
+                BaselineDocumentProcessor(),
+                batch_size=10,
+            )
+            self.assertEqual(processing["processed"], 1)
 
             search = client.post(
                 "/api/v1/search",

@@ -129,10 +129,7 @@ class DataProcessingPipeline:
             batch_data = list(self.batch_items)
 
             if not self.dispatch_enabled:
-                self.asset_store.mark_indexed(
-                    [document['content_version_id'] for document in batch_data]
-                )
-                self.logger.info("文档已写入本地检索目录")
+                self.logger.info("文档已入库，等待数据处理器")
                 return
 
             import uuid

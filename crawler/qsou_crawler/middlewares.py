@@ -78,8 +78,17 @@ class EvidenceLinkMiddleware:
 	def process_spider_output(self, response, result, spider):
 		evidence = response.meta.get("qsou_evidence")
 		for output in result:
-			if evidence and isinstance(output, (Item, dict)):
-				metadata = dict(output.get("metadata") or {})
-				metadata.update(evidence)
-				output["metadata"] = metadata
-			yield output
+			yield self._link(output, evidence)
+
+	async def process_spider_output_async(self, response, result, spider):
+		evidence = response.meta.get("qsou_evidence")
+		async for output in result:
+			yield self._link(output, evidence)
+
+	@staticmethod
+	def _link(output, evidence):
+		if evidence and isinstance(output, (Item, dict)):
+			metadata = dict(output.get("metadata") or {})
+			metadata.update(evidence)
+			output["metadata"] = metadata
+		return output
