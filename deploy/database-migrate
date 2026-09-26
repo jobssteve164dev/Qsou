@@ -6,7 +6,7 @@ alembic -c /app/alembic.ini upgrade head
 
 if [ "${QSOU_OBJECT_STORAGE_BACKEND:-file}" = "s3" ]; then
     python /app/scripts/migrate_file_objects_to_s3.py --data-root /var/lib/qsou
-    python -m qsou_data.verify --require-backup
+    python -m qsou_data.verify --catalog-only --require-backup
 else
-    python -m qsou_data.verify
+    python -m qsou_data.verify --catalog-only
 fi

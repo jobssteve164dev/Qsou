@@ -267,6 +267,9 @@ class ProductionComposeContractTest(unittest.TestCase):
         ):
             self.assertNotIn("sqlite", path.read_text().lower())
 
+        migration_entrypoint = (PROJECT_ROOT / "deploy/database-migrate").read_text()
+        self.assertIn("--catalog-only", migration_entrypoint)
+
     def test_api_image_contains_indexer_runtime_dependencies(self):
         def package_names(path):
             return {

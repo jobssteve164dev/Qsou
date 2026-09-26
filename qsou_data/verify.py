@@ -57,7 +57,12 @@ def _cursor_digest(cursor, columns: Sequence[str]) -> tuple[int, str]:
     return count, digest.hexdigest()
 
 
-def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Dict[str, Any]:
+def verify_storage(
+    store: DataAssetStore,
+    *,
+    require_backup: bool = False,
+    verify_objects: bool = True,
+) -> Dict[str, Any]:
     table_counts: Dict[str, int] = {}
     table_digests: Dict[str, str] = {}
     has_backup = bool(getattr(store.object_store, "backup_bucket", None))
@@ -108,35 +113,38 @@ def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Di
         if any(orphans.values()):
             raise DataAssetError(f"目录库存在孤儿关系: {orphans}")
 
-        raw_cursor = connection.execute(
-            """
-            SELECT raw_object_id, body_path, content_hash
-            FROM raw_objects ORDER BY raw_object_id
-            """
-        )
         migrations = [
             row["version"]
             for row in connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
         ]
-        object_count = 0
-        object_bytes = 0
-        while True:
-            raw_rows = raw_cursor.fetchmany(BATCH_SIZE)
-            if not raw_rows:
-                break
-            for row in raw_rows:
-                payload = store.object_store.get_primary_bytes(row["body_path"])
-                checksum = hashlib.sha256(payload).hexdigest()
-                if checksum != row["content_hash"]:
-                    raise DataAssetError(f"主对象哈希不一致: {row['raw_object_id']}")
-                if has_backup:
-                    backup = store.object_store.get_backup_bytes(row["body_path"])
-                    if hashlib.sha256(backup).hexdigest() != checksum:
-                        raise DataAssetError(f"备份对象哈希不一致: {row['raw_object_id']}")
-                object_count += 1
-                object_bytes += len(payload)
+        object_count = None
+        object_bytes = None
+        if verify_objects:
+            raw_cursor = connection.execute(
+                """
+                SELECT raw_object_id, body_path, content_hash
+                FROM raw_objects ORDER BY raw_object_id
+                """
+            )
+            object_count = 0
+            object_bytes = 0
+            while True:
+                raw_rows = raw_cursor.fetchmany(BATCH_SIZE)
+                if not raw_rows:
+                    break
+                for row in raw_rows:
+                    payload = store.object_store.get_primary_bytes(row["body_path"])
+                    checksum = hashlib.sha256(payload).hexdigest()
+                    if checksum != row["content_hash"]:
+                        raise DataAssetError(f"主对象哈希不一致: {row['raw_object_id']}")
+                    if has_backup:
+                        backup = store.object_store.get_backup_bytes(row["body_path"])
+                        if hashlib.sha256(backup).hexdigest() != checksum:
+                            raise DataAssetError(f"备份对象哈希不一致: {row['raw_object_id']}")
+                    object_count += 1
+                    object_bytes += len(payload)
 
     catalog_digest = hashlib.sha256(
         json.dumps(
@@ -150,10 +158,12 @@ def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Di
         "status": "verified",
         "catalog_backend": store.catalog.backend,
         "object_backend": store.object_store.backend,
-        "backup_verified": has_backup,
+        "backup_configured": has_backup,
+        "backup_verified": has_backup and verify_objects,
         "table_counts": table_counts,
         "catalog_digest": catalog_digest,
         "orphans": orphans,
+        "objects_verified": verify_objects,
         "object_count": object_count,
         "object_bytes": object_bytes,
         "schema_migrations": migrations,
@@ -163,8 +173,13 @@ def verify_storage(store: DataAssetStore, *, require_backup: bool = False) -> Di
 def main() -> int:
     parser = argparse.ArgumentParser(description="QSou 目录库与对象存储一致性验收")
     parser.add_argument("--require-backup", action="store_true")
+    parser.add_argument("--catalog-only", action="store_true")
     args = parser.parse_args()
-    result = verify_storage(DataAssetStore(), require_backup=args.require_backup)
+    result = verify_storage(
+        DataAssetStore(),
+        require_backup=args.require_backup,
+        verify_objects=not args.catalog_only,
+    )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0
 

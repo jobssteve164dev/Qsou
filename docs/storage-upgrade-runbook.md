@@ -40,11 +40,11 @@ QSOU_OBJECT_STORAGE_SECRET_KEY=...
 2. 从终态成功的 API 制品运行受治理的 `/app/deploy/database-migrate`，不得把迁移塞进 API 启动命令。
 3. 入口执行 `alembic upgrade head`，保证 PostgreSQL schema 到达当前版本。
 4. 对象后端为 S3 时，入口随后执行 `migrate_file_objects_to_s3.py`，逐个核对本地源、主桶、备份桶三方哈希；已完成的迁移根据 PostgreSQL 迁移标记直接跳过。
-5. 运行 `python -m qsou_data.verify --require-backup`，核对外键孤儿、主备对象哈希、目录摘要和迁移版本。
+5. 运行 `python -m qsou_data.verify --catalog-only --require-backup`，核对目录摘要、外键孤儿和迁移版本；日常发布不重复下载并哈希全部历史证据。
 
 ## 4. 切换与回滚
 
-只有迁移与统一验收都得到 `status=verified` 后，才允许恢复 API、采集器和索引器写入。Elasticsearch 首次同步完成前，API 健康检查保持不就绪。
+只有迁移与目录验收都得到 `status=verified` 后，才允许恢复 API、采集器和索引器写入。Elasticsearch 首次同步完成前，API 健康检查保持不就绪。主备对象全量哈希继续作为备份恢复和专项深度验收执行。
 
 采集器和索引器在制品内核对 Alembic 版本，以及 S3 模式下的对象迁移标记；标记不齐时只报告等待状态，不发起采集、目录写入或索引重建。该门禁不执行迁移，迁移仍由独立的受治理入口完成。
 

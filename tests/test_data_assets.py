@@ -95,6 +95,26 @@ class DataAssetStoreTest(unittest.TestCase):
         verified = verify_storage(self.store)
         self.assertEqual(verified["table_counts"]["evidence_replay_outbox"], 1)
 
+    def test_catalog_only_verification_does_not_read_the_evidence_archive(self):
+        self._archive("部署迁移只检查目录关系")
+        self.store.object_store.backup_bucket = "configured-backup"
+
+        with patch.object(
+            self.store.object_store,
+            "get_primary_bytes",
+            side_effect=AssertionError("routine migration must not scan evidence bodies"),
+        ):
+            verified = verify_storage(
+                self.store,
+                require_backup=True,
+                verify_objects=False,
+            )
+
+        self.assertFalse(verified["objects_verified"])
+        self.assertTrue(verified["backup_configured"])
+        self.assertFalse(verified["backup_verified"])
+        self.assertIsNone(verified["object_count"])
+
     def test_failed_evidence_replay_is_automatically_retried(self):
         evidence = self._archive("回放时发生瞬时读取失败")
         claimed = self.store.claim_evidence_replay(1)
