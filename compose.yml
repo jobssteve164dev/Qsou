@@ -90,6 +90,7 @@ services:
     build:
       context: .
       dockerfile: deploy/crawler.Dockerfile
+    command: ["python", "/app/crawler/run_schedule.py"]
     environment:
       QSOU_STANDALONE_CRAWLER: "true"
       QSOU_OUTBOX_DISPATCH_ENABLED: "false"

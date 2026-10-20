@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:security": "node --test tests/dependency-security.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",
@@ -23,7 +24,7 @@
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",
     "lucide-react": "1.44.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "postcss": "^8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -34,6 +35,11 @@
     "@tailwindcss/forms": "^0.5.7",
     "@tailwindcss/typography": "^0.5.10",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.4"
+    "eslint-config-next": "16.3.8"
+  },
+  "overrides": {
+    "braces": "npm:@dieub/braces-depth-guard@3.0.3-pn.3",
+    "postcss-selector-parser": "7.1.6",
+    "sharp": "0.35.5"
   }
 }

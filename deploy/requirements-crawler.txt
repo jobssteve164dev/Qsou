@@ -1,5 +1,6 @@
 scrapy==2.19.0
-pypdf==6.18.0
+Twisted @ https://github.com/twisted/twisted/archive/2f8a3c29246f4eb324690e06a9767a11dc4aec9f.tar.gz#sha256=0bc954948ff67a3b09f008e48a6dfa1907b47f61cd25a7c3dbbfbba93015efe3
+pypdf==6.21.1
 psycopg[binary]==3.3.4
 SQLAlchemy==2.0.43
 boto3==1.43.53

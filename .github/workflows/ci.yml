@@ -68,8 +68,33 @@ jobs:
           cache: npm
           cache-dependency-path: web-frontend/package-lock.json
       - run: npm ci
+      - run: npm run test:security
       - run: npm run lint
       - run: npm run build
+
+  collector-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the final collector image and patched parser
+        run: |
+          docker build --platform linux/amd64 -f deploy/crawler.Dockerfile -t qsou-collector-security .
+          docker image inspect qsou-collector-security | jq -e '
+            .[0].Config.Cmd == ["python", "/app/crawler/run_schedule.py"]
+            and ((.[0].Config.Entrypoint // []) | length) == 0
+          '
+          docker run --rm --entrypoint python qsou-collector-security -c '
+          import importlib.metadata
+          from twisted.mail.imap4 import wildcardToRegexp
+          from scrapy.crawler import CrawlerProcess
+          import qsou_crawler.settings
+          assert importlib.metadata.version("Twisted") == "26.4.0.post0"
+          assert wildcardToRegexp("(a+)+z", "/").match("aaaaaaaaaaaaaaaz") is None
+          assert wildcardToRegexp("mail/%", "/").fullmatch("mail/team")
+          assert not wildcardToRegexp("mail/%", "/").fullmatch("mail/team/2026")
+          assert importlib.metadata.version("pypdf") == "6.21.1"
+          print("collector image: patched Twisted, pypdf, Scrapy imports and process command verified")
+          '
 
   web-image-cross-architecture:
     runs-on: ubuntu-24.04-arm
