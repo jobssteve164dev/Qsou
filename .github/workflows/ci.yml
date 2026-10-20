@@ -52,7 +52,7 @@ jobs:
           jq -e '
             (.services | keys | sort) == ["api", "collector", "elasticsearch", "indexer", "web"]
             and all(.services[]; .platform == "linux/amd64")
-            and .services.elasticsearch.image == "docker.elastic.co/elasticsearch/elasticsearch:8.11.0@sha256:b0effe89b1ac5a73e116ccdc897e807d3546ea06afb93d8873a7c707d3016186"
+            and all(.services[]; .build != null and .restart == "unless-stopped")
           ' /tmp/qsou-compose.json
 
   frontend:
@@ -94,6 +94,17 @@ jobs:
           assert not wildcardToRegexp("mail/%", "/").fullmatch("mail/team/2026")
           assert importlib.metadata.version("pypdf") == "6.21.1"
           print("collector image: patched Twisted, pypdf, Scrapy imports and process command verified")
+          '
+      - name: Verify the packaged Elasticsearch image preserves the approved upstream
+        run: |
+          upstream=docker.elastic.co/elasticsearch/elasticsearch:8.11.0@sha256:b0effe89b1ac5a73e116ccdc897e807d3546ea06afb93d8873a7c707d3016186
+          docker pull --platform linux/amd64 "$upstream"
+          docker build --platform linux/amd64 -f deploy/elasticsearch.Dockerfile -t qsou-elasticsearch-release .
+          docker image inspect qsou-elasticsearch-release "$upstream" | jq -e '
+            .[0].Architecture == "amd64"
+            and .[0].Os == "linux"
+            and .[0].Config == .[1].Config
+            and .[0].RootFS == .[1].RootFS
           '
 
   web-image-cross-architecture:
