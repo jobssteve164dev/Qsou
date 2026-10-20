@@ -91,3 +91,13 @@ and existing services without the new criterion keep their accepted behavior.
 Register the collector and indexer only after the target Agent supports the new
 contract, then publish the tested Qsou candidate through its existing release
 path and read back the exact service versions and public product entry.
+
+### Complete whole-project release bundles
+
+The existing release producer selects Compose services with build definitions.
+Elasticsearch therefore uses the repository's existing single-FROM Dockerfile,
+now pinned to the same approved upstream digest previously declared in Compose.
+This preserves the runtime image while carrying all five services in the signed
+bundle. The Compose regression renders the real configuration and requires all
+five runtime services to enter the producer's build selector. Keep
+`deploy/elasticsearch.Dockerfile` in Elasticsearch's governed release watch paths.
