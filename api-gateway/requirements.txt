@@ -27,7 +27,7 @@ jieba==0.42.1
 
 # HTTP & Networking  
 httpx==0.25.2
-aiohttp==3.14.3
+aiohttp==3.14.4
 requests==2.34.2
 
 # Authentication & Security
