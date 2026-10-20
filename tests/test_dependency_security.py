@@ -40,3 +40,18 @@ def test_pdf_page_labels_do_not_expand_untrusted_alphabetical_start_values():
     output.seek(0)
 
     assert PdfReader(output).page_labels == ["1"]
+
+
+def test_twisted_imap_does_not_interpret_mailbox_names_as_regular_expressions():
+    from twisted.mail.imap4 import wildcardToRegexp
+
+    assert wildcardToRegexp("(a+)+z", "/").match("aaaaaaaaaaaaaaaz") is None
+    assert wildcardToRegexp("inbox[1]+(draft)", "/").fullmatch("inbox[1]+(draft)")
+
+
+def test_twisted_imap_preserves_wildcard_and_mailbox_delimiter_semantics():
+    from twisted.mail.imap4 import wildcardToRegexp
+
+    assert wildcardToRegexp("mail/*", "/").fullmatch("mail/team/2026")
+    assert wildcardToRegexp("mail/%", "/").fullmatch("mail/team")
+    assert wildcardToRegexp("mail/%", "/").fullmatch("mail/team/2026") is None

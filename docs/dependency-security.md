@@ -56,15 +56,38 @@ before releasing the web service; verify the final amd64 image through the
 existing cross-architecture CI job.
 
 Do not equate a clean dependency manifest with a deployed fix or a closed GitHub
-alert. Main-branch pushes match `web`, `collector` and `api` (the legacy API
-manifest falls under the API watch path even though its production dependency
-file is unchanged). The database and other services are unchanged. The currently
-published service-registration contract has no worker readiness field and the
-collector has no registered health criterion. Resolve that release prerequisite
-through the governed project contract before triggering production.
+alert. The explicit collector command preserves its image default and makes the
+final Compose process identity visible to release preflight. A root Compose
+change releases the entire project through the existing build chain. Register
+the collector and indexer process criteria through the governed service contract
+before triggering production; do not add worker HTTP ports for this purpose.
 
-Python audit also reports the unpatched medium-severity
-[Twisted IMAP advisory](https://github.com/advisories/GHSA-8pqf-f4m5-798g).
-Scrapy brings in Twisted; repository code uses its reactor but does not import
-the affected IMAP module or serve IMAP. The audit is deliberately left failing
-for this finding; no advisory is ignored and no feature is disabled.
+### Twisted upstream fix and release follow-up
+
+Twisted has not published a patched PyPI release for its
+[IMAP advisory](https://github.com/advisories/GHSA-8pqf-f4m5-798g), but the
+[upstream fix](https://github.com/twisted/twisted/commit/2f8a3c29246f4eb324690e06a9767a11dc4aec9f)
+is available. All three Scrapy installation paths pin that exact source archive
+and its SHA-256. Its upstream version is 26.4.0.post0. Regression tests prove
+mailbox text cannot become regex syntax while preserving IMAP wildcard rules.
+
+Audits retain pip-audit's PyPI service for published releases. For a release
+absent from PyPI, the audit queries OSV with the resolver's actual package name
+and version. Every resolved dependency must be audited; unresolved dependencies,
+service failures and findings from either source fail the job. No advisory is
+ignored and no feature is disabled. This keeps the existing advisory source
+while covering the official Twisted post-release source build. OSV's older
+PYSEC-2017-83 record has an open-ended Scrapy range; the reviewed
+[GitHub advisory](https://github.com/advisories/GHSA-h7wm-ph43-c39p) bounds it at
+2.15.2. The existing PyPI source reports no finding for the installed 2.19.0.
+Return to a compatible official wheel after a patched release and the same
+regressions have been verified.
+
+The release prerequisite adds an optional expected main-process identity to
+the existing GitOps service and frozen release contract. It compares the
+registered command with the inspected running container, using the existing
+Compose preflight, release producer and signed Agent upgrade. HTTP contracts
+and existing services without the new criterion keep their accepted behavior.
+Register the collector and indexer only after the target Agent supports the new
+contract, then publish the tested Qsou candidate through its existing release
+path and read back the exact service versions and public product entry.
